@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "web2.5",
+  "description": "Hide suspicious low-quality Chinese replies in X thread pages, locally and conservatively.",
+  "version": "0.1.0",
+  "icons": {
+    "16": "content/icon16.png",
+    "32": "content/icon32.png",
+    "48": "content/icon48.png",
+    "64": "content/icon64.png",
+    "128": "content/icon128.png"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "http://127.0.0.1:8787/*",
+    "http://localhost:8787/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "content/icon16.png",
+      "32": "content/icon32.png",
+      "48": "content/icon48.png",
+      "64": "content/icon64.png",
+      "128": "content/icon128.png"
+    },
+    "default_title": "web2.5",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "content/rules.js",
+        "content/content.js"
+      ],
+      "css": [
+        "content/styles.css"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}

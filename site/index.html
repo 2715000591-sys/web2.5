@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>web2.5 控制台</title>
+    <meta
+      name="description"
+      content="web2.5 是你的个人内容整理控制台。你可以在这里查看整理记录、恢复误标内容、绑定同步数据。"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="site-shell">
+      <header class="hero">
+        <nav class="topbar">
+          <div class="brand">
+            <div class="brand-mark" aria-hidden="true">
+              <span></span>
+            </div>
+            <div>
+              <p class="eyebrow">web2.5</p>
+              <h1>你的内容主场，不是平台的。</h1>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <button id="loginEntry" class="ghost-button" type="button">登录</button>
+            <a class="primary-button" href="#download">下载扩展</a>
+          </div>
+        </nav>
+
+        <div class="hero-grid">
+          <section class="hero-copy">
+            <p class="hero-kicker">先把世界收干净，再谈你想看什么。</p>
+            <p class="hero-text">
+              web2.5 是你的个人内容整理层。刷帖时尽量不打扰你，真正需要你确认的误标、记录和设置，都放回这个控制台里。
+            </p>
+            <div class="hero-stats">
+              <article class="stat-card">
+                <span>当前正在下沉</span>
+                <strong id="heroHideCount">0</strong>
+                <small>仍在当前记录中的内容</small>
+              </article>
+              <article class="stat-card">
+                <span>高频风险话术</span>
+                <strong id="heroPhraseCount">0</strong>
+                <small>最常被整理的说法</small>
+              </article>
+              <article class="stat-card">
+                <span>累计恢复</span>
+                <strong id="heroAllowCount">0</strong>
+                <small>你手动撤销过的内容</small>
+              </article>
+            </div>
+          </section>
+
+          <aside class="hero-panel" id="download">
+            <div class="panel-label">下载与安装</div>
+            <h2>把 web2.5 带到你的 Safari</h2>
+            <p>
+              这里会放 web2.5 的正式下载、版本说明和更新记录。装好以后，你的整理记录可以继续回到这个控制台查看。
+            </p>
+            <div class="download-stack">
+              <button class="primary-button disabled-button" type="button">
+                Safari 版本准备中
+              </button>
+              <button class="ghost-button" type="button">
+                查看更新记录
+              </button>
+            </div>
+            <ul class="bullet-points">
+              <li>网页负责查看记录、恢复误标、管理同步。</li>
+              <li>扩展负责在 X 里整理内容，不打断你的刷帖体验。</li>
+              <li>后续会补上版本号、兼容平台和登录同步。</li>
+            </ul>
+          </aside>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <section class="section-grid" id="console">
+          <div class="section-copy">
+            <p class="eyebrow">控制台</p>
+            <h2>把整理记录放到网页里，不放回帖流里打扰你</h2>
+            <p>
+              这里负责给你看真实记录、恢复误标、检查常见风险话术。刷 X 的时候尽量保持安静，真正需要你判断的内容再回到这里处理。
+            </p>
+          </div>
+          <div class="console-card">
+            <div class="console-header">
+              <div>
+                <span class="eyebrow">数据概览</span>
+                <h3>真实同步记录</h3>
+              </div>
+              <span class="status-pill">同一把同步密钥可共用</span>
+            </div>
+            <div class="sync-strip">
+              <label class="sync-stack">
+                <span>同步密钥</span>
+                <input id="syncKeyInput" type="text" placeholder="从插件里复制同步密钥" />
+              </label>
+              <div class="sync-actions">
+                <button id="saveSyncKey" class="primary-button small-button" type="button">绑定我的数据</button>
+                <button id="refreshDashboard" class="ghost-button small-button" type="button">刷新</button>
+              </div>
+            </div>
+            <p id="dashboardStatus" class="console-hint">
+              先绑定同步密钥，网页才会显示你的真实整理记录。
+            </p>
+            <div class="console-grid">
+              <article class="metric-block">
+                <span>当前仍在下沉</span>
+                <strong id="activeHiddenCount">0</strong>
+                <small>这是当前仍然生效的记录</small>
+              </article>
+              <article class="metric-block">
+                <span>你累计手动标记</span>
+                <strong id="manualHideCount">0</strong>
+                <small>每次点“标记可疑”都会计入这里</small>
+              </article>
+              <article class="metric-block">
+                <span>系统累计自动整理</span>
+                <strong id="autoHideCount">0</strong>
+                <small>只统计真实已上报的自动下沉</small>
+              </article>
+              <article class="metric-block">
+                <span>你累计恢复</span>
+                <strong id="manualAllowCount">0</strong>
+                <small>误标撤销会记在这里</small>
+              </article>
+              <article class="metric-block">
+                <span>高风险账号</span>
+                <strong id="distinctHandleCount">0</strong>
+                <small>至少被你标记过一次的账号</small>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="surface-card">
+            <div class="surface-head">
+              <div>
+                <p class="eyebrow">高频词语</p>
+                <h3>常见被整理的话术</h3>
+              </div>
+              <span class="surface-note">只看话术，不暴露帖子来源</span>
+            </div>
+            <div class="token-cloud" id="token-cloud"></div>
+          </article>
+
+          <article class="surface-card">
+            <div class="surface-head">
+              <div>
+                <p class="eyebrow">回复审查</p>
+                <h3>当前仍在下沉的内容</h3>
+              </div>
+              <span id="reviewCountPill" class="surface-note">默认收起</span>
+            </div>
+            <div class="review-toolbar">
+              <label class="review-search">
+                <span>搜索</span>
+                <input id="reviewSearchInput" type="text" placeholder="搜账号、句子或关键词" />
+              </label>
+              <button id="reviewToggleButton" class="ghost-button small-button" type="button">展开列表</button>
+            </div>
+            <p class="review-hint">默认不把这些内容摊开。只有你想审查误标时，再展开或搜索。</p>
+            <div class="review-list review-list-collapsed" id="review-list"></div>
+          </article>
+        </section>
+
+        <section class="section-grid narrow-gap">
+          <div class="surface-card">
+            <div class="surface-head">
+              <div>
+                <p class="eyebrow">账户与同步</p>
+                <h3>以后可以把你的记录真正跟着你走</h3>
+              </div>
+              <span class="status-pill mellow">准备中</span>
+            </div>
+            <div class="stacked-rows">
+              <div class="stacked-row">
+                <strong>右上角登录入口</strong>
+                <p>登录开放后，你的控制台、同步记录和未来的 API 设置都会放在这里管理。</p>
+              </div>
+              <div class="stacked-row">
+                <strong>多设备同步</strong>
+                <p>同一套记录可以跟着你在不同设备之间同步，不需要每台设备重新整理。</p>
+              </div>
+              <div class="stacked-row">
+                <strong>API 设置入口</strong>
+                <p>等 AI 接进来后，模型、额度与缓存策略也会从这里管理。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="surface-card">
+            <div class="surface-head">
+              <div>
+                <p class="eyebrow">接下来</p>
+                <h3>下一步会继续补强的能力</h3>
+              </div>
+              <span class="status-pill muted">逐步上线</span>
+            </div>
+            <ul class="bullet-points">
+              <li>系统自动整理会单独统计，和你的手动标记分开显示。</li>
+              <li>网站里的误标恢复会继续同步回扩展，不会停留在网页假动作。</li>
+              <li>更聪明的语义判断会在前端稳定后，再接入 AI。</li>
+              <li>后续会补上真正的账户系统，而不是只靠同步密钥。</li>
+            </ul>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

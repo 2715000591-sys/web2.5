@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>web2.5</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="panel">
+      <p class="eyebrow">web2.5 MVP</p>
+      <h1>回复区清理</h1>
+      <label class="toggle">
+        <input id="enabled" type="checkbox">
+        <span>开启 X 回复区清理</span>
+      </label>
+      <label class="toggle">
+        <input id="markingEnabled" type="checkbox">
+        <span>开启“标记可疑”模式</span>
+      </label>
+      <p class="hint">
+        只在单条帖子详情页生效。关闭标记模式时，页面里不会出现“标记可疑”按钮。
+      </p>
+      <p class="hint">
+        开启标记模式后，“标记可疑”会出现在回复下方，不再挡住 X 原生按钮。
+      </p>
+      <div class="sync-card">
+        <p class="sync-title">真实数据同步</p>
+        <label class="field">
+          <span>同步服务地址</span>
+          <input id="backendBaseUrl" type="text" placeholder="http://127.0.0.1:8787">
+        </label>
+        <div class="sync-key-row">
+          <span>同步密钥</span>
+          <code id="syncKeyValue">生成中...</code>
+        </div>
+        <div class="action-row">
+          <button id="copySyncKey" class="action-button" type="button">复制密钥</button>
+          <a id="openConsole" class="action-link" href="http://127.0.0.1:8787" target="_blank" rel="noreferrer">打开控制台</a>
+        </div>
+        <p id="syncStatus" class="hint compact-hint">
+          先不做登录，先用同步密钥把扩展和网页绑定起来，避免不同人的数据混在一起。
+        </p>
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

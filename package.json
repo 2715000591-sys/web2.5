@@ -1,0 +1,9 @@
+{
+  "name": "web2.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node backend/server.mjs",
+    "backend": "node backend/server.mjs"
+  }
+}
