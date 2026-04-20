@@ -349,6 +349,9 @@ function buildDashboard(syncKey) {
 
   return {
     stats: {
+      activeHiddenCount: derivedState.activeHiddenItems.length,
+      activeAutoHidden: Number(derivedState.activeCounts.auto || 0),
+      activeManualHidden: Number(derivedState.activeCounts.manual || 0),
       autoHideEvents: Number(statsRow.auto_hide_events || 0),
       manualHideEvents: Number(statsRow.manual_hide_events || 0),
       manualAllowEvents: Number(statsRow.manual_allow_events || 0),
@@ -361,6 +364,34 @@ function buildDashboard(syncKey) {
     manualHideKeys: derivedState.manualHideKeys,
     manualAllowKeys: derivedState.manualAllowKeys
   };
+}
+
+function matchesActiveItemForAllow(activeItem, keys) {
+  if (!activeItem || !keys) {
+    return false;
+  }
+
+  if (keys.statusKey && activeItem.statusKey === keys.statusKey) {
+    return true;
+  }
+
+  if (keys.textKey && activeItem.textKey === keys.textKey) {
+    return true;
+  }
+
+  if (keys.compactKey && activeItem.compactKey === keys.compactKey) {
+    return true;
+  }
+
+  if (keys.patternKey && activeItem.patternKey === keys.patternKey) {
+    return true;
+  }
+
+  if (keys.primaryKey && !String(keys.primaryKey).startsWith("account:") && activeItem.primaryKey === keys.primaryKey) {
+    return true;
+  }
+
+  return false;
 }
 
 function buildRowKeys(row) {
@@ -520,9 +551,12 @@ function buildDerivedState(syncKey) {
     const keys = buildRowKeys(row);
     const itemKey = keys.itemKey;
 
-    if (row.event_type === "manual_hide") {
-      addDecisionKeys(hideKeys, keys);
-      removeDecisionKeys(allowKeys, keys);
+    if (row.event_type === "manual_hide" || row.event_type === "auto_hide") {
+      if (row.event_type === "manual_hide") {
+        addDecisionKeys(hideKeys, keys);
+        removeDecisionKeys(allowKeys, keys);
+      }
+
       activeItems.set(itemKey, {
         id: row.id,
         itemKey,
@@ -536,7 +570,12 @@ function buildDerivedState(syncKey) {
         replyDisplayName: row.reply_display_name,
         accountProtected: Number(row.account_protected || 0) === 1,
         createdAt: row.created_at,
-        source: "manual_hide"
+        source: row.event_type,
+        primaryKey: keys.primaryKey,
+        statusKey: keys.statusKey,
+        textKey: keys.textKey,
+        compactKey: keys.compactKey,
+        patternKey: keys.patternKey
       });
       return;
     }
@@ -548,14 +587,30 @@ function buildDerivedState(syncKey) {
       } else {
         removeHideDecisionKeysForAllow(hideKeys, keys);
       }
-      activeItems.delete(itemKey);
+
+      for (const [activeItemKey, activeItem] of activeItems.entries()) {
+        if (matchesActiveItemForAllow(activeItem, keys)) {
+          activeItems.delete(activeItemKey);
+        }
+      }
     }
   });
+
+  const activeHiddenItems = Array.from(activeItems.values()).sort((left, right) => right.id - left.id);
+  const activeCounts = activeHiddenItems.reduce((result, item) => {
+    if (item.source === "auto_hide") {
+      result.auto += 1;
+    } else {
+      result.manual += 1;
+    }
+    return result;
+  }, { auto: 0, manual: 0 });
 
   return {
     manualHideKeys: Array.from(hideKeys),
     manualAllowKeys: Array.from(allowKeys),
-    activeHiddenItems: Array.from(activeItems.values()).sort((left, right) => right.id - left.id)
+    activeHiddenItems,
+    activeCounts
   };
 }
 
