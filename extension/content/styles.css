@@ -20,6 +20,10 @@ html[data-web25-detail="1"] main {
   overflow-anchor: none;
 }
 
+.web25-bottom-host[data-web25-owned="1"] ~ .web25-bottom-host[data-web25-owned="1"] {
+  display: none !important;
+}
+
 .web25-bottom-host-hidden {
   display: none;
 }
@@ -32,6 +36,11 @@ html[data-web25-detail="1"] main {
 .web25-bottom-host .web25-revealed-list {
   width: 100%;
   max-width: none;
+}
+
+.web25-hidden-summary[data-web25-owned="1"] ~ .web25-hidden-summary[data-web25-owned="1"],
+.web25-revealed-list[data-web25-owned="1"] ~ .web25-revealed-list[data-web25-owned="1"] {
+  display: none !important;
 }
 
 .web25-hidden-summary {
@@ -183,6 +192,13 @@ html[data-web25-detail="1"] main {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.web25-hidden-summary-toggle:disabled,
+.web25-hidden-summary-toggle.web25-hidden-summary-toggle-disabled {
+  background: rgba(15, 20, 25, 0.08);
+  color: rgba(15, 20, 25, 0.45);
+  cursor: default;
 }
 
 .web25-status-dock,

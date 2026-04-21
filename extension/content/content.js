@@ -1,8 +1,10 @@
 (function () {
-  const BUILD_ID = "2026-04-20-1428";
+  const BUILD_ID = "2026-04-21-2132";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
+  const PAGE_CONTROLLER_KEY = "__web25PageController__";
+  const INSTANCE_ID = BUILD_ID + ":" + Date.now().toString(36) + ":" + Math.random().toString(36).slice(2, 8);
   const FAST_SCAN_DELAY_MS = 70;
   const NORMAL_SCAN_DELAY_MS = 180;
   const SIMILARITY_TERMS = [
@@ -68,6 +70,7 @@
     scanTimer: null,
     manualRescanTimer: null,
     manualPersistTimer: null,
+    bottomUiDedupeTimer: null,
     stabilizeTimers: [],
     currentUrl: location.href,
     bottomHostEl: null,
@@ -83,11 +86,176 @@
     remoteSyncInFlight: false,
     lastRemoteSyncAt: 0,
     skipNextStorageSyncScan: false,
-    suppressObserver: false
+    suppressObserver: false,
+    storageChangeListener: null,
+    runtimeMessageListener: null,
+    popstateListener: null,
+    focusListener: null,
+    visibilityListener: null,
+    domReadyListener: null,
+    bootStarted: false,
+    booted: false,
+    destroyed: false
   };
+
+  function isCurrentPageController() {
+    return Boolean(window[PAGE_CONTROLLER_KEY] && window[PAGE_CONTROLLER_KEY].instanceId === INSTANCE_ID);
+  }
+
+  function clearScheduledWork() {
+    clearTimeout(state.scanTimer);
+    clearTimeout(state.manualRescanTimer);
+    clearTimeout(state.manualPersistTimer);
+    clearTimeout(state.bottomUiDedupeTimer);
+    state.scanTimer = null;
+    state.manualRescanTimer = null;
+    state.manualPersistTimer = null;
+    state.bottomUiDedupeTimer = null;
+    state.stabilizeTimers.forEach(function (timerId) {
+      clearTimeout(timerId);
+    });
+    state.stabilizeTimers = [];
+  }
+
+  function clearStalePageArtifacts() {
+    Array.from(document.querySelectorAll("[data-web25-hidden='1']")).forEach(function (node) {
+      node.style.display = "";
+      node.removeAttribute("data-web25-hidden");
+    });
+    Array.from(document.querySelectorAll("[data-web25-pending='1']")).forEach(function (node) {
+      node.removeAttribute("data-web25-pending");
+    });
+    Array.from(document.querySelectorAll("[data-web25-manual-pinned='1']")).forEach(function (node) {
+      node.removeAttribute("data-web25-manual-pinned");
+    });
+    Array.from(document.querySelectorAll("[data-web25-reply-cell='1']")).forEach(function (node) {
+      node.removeAttribute("data-web25-reply-cell");
+    });
+    Array.from(document.querySelectorAll(".web25-reply-actions-host, .web25-bottom-host, .web25-hidden-summary, .web25-revealed-list, .web25-status-dock")).forEach(function (node) {
+      node.remove();
+    });
+
+    const anchorStyleTag = document.getElementById("web25-anchor-style");
+    if (anchorStyleTag && anchorStyleTag.getAttribute("data-web25-owned") === "1") {
+      anchorStyleTag.remove();
+    }
+
+    delete root.dataset.web25Booted;
+    delete root.dataset.web25Instance;
+  }
+
+  function destroyPageController(reason) {
+    if (state.destroyed) {
+      if (isCurrentPageController()) {
+        delete window[PAGE_CONTROLLER_KEY];
+      }
+      return;
+    }
+
+    state.destroyed = true;
+    clearScheduledWork();
+
+    if (state.observer) {
+      state.observer.disconnect();
+      state.observer = null;
+    }
+
+    if (state.storageChangeListener && api.storage && api.storage.onChanged && typeof api.storage.onChanged.removeListener === "function") {
+      api.storage.onChanged.removeListener(state.storageChangeListener);
+      state.storageChangeListener = null;
+    }
+
+    if (state.runtimeMessageListener && api.runtime && api.runtime.onMessage && typeof api.runtime.onMessage.removeListener === "function") {
+      api.runtime.onMessage.removeListener(state.runtimeMessageListener);
+      state.runtimeMessageListener = null;
+    }
+
+    if (state.popstateListener) {
+      window.removeEventListener("popstate", state.popstateListener);
+      state.popstateListener = null;
+    }
+
+    if (state.focusListener) {
+      window.removeEventListener("focus", state.focusListener);
+      state.focusListener = null;
+    }
+
+    if (state.visibilityListener) {
+      document.removeEventListener("visibilitychange", state.visibilityListener);
+      state.visibilityListener = null;
+    }
+
+    if (state.domReadyListener) {
+      document.removeEventListener("DOMContentLoaded", state.domReadyListener);
+      state.domReadyListener = null;
+    }
+
+    resetManagedReplyState();
+    removeAllHiding();
+
+    const anchorStyleTag = document.getElementById("web25-anchor-style");
+    if (anchorStyleTag && anchorStyleTag.getAttribute("data-web25-owned") === "1") {
+      anchorStyleTag.remove();
+    }
+
+    delete root.dataset.web25Booted;
+    delete root.dataset.web25Instance;
+    root.dataset.web25Stage = reason ? "destroy:" + reason : "destroyed";
+
+    if (isCurrentPageController()) {
+      delete window[PAGE_CONTROLLER_KEY];
+    }
+  }
+
+  function claimPageController() {
+    const existingController = window[PAGE_CONTROLLER_KEY];
+
+    if (!existingController && root.dataset.web25Booted === "1") {
+      clearStalePageArtifacts();
+    }
+
+    if (!existingController) {
+      window[PAGE_CONTROLLER_KEY] = {
+        instanceId: INSTANCE_ID,
+        buildId: BUILD_ID,
+        destroy: destroyPageController
+      };
+      return true;
+    }
+
+    if (existingController.instanceId === INSTANCE_ID) {
+      return true;
+    }
+
+    if (typeof existingController.destroy === "function") {
+      try {
+        existingController.destroy("replaced");
+      } catch (error) {
+        // If cleanup fails we still prefer to avoid a second active controller.
+      }
+    }
+
+    if (window[PAGE_CONTROLLER_KEY] && window[PAGE_CONTROLLER_KEY].instanceId !== INSTANCE_ID) {
+      return false;
+    }
+
+    window[PAGE_CONTROLLER_KEY] = {
+      instanceId: INSTANCE_ID,
+      buildId: BUILD_ID,
+      destroy: destroyPageController
+    };
+    return true;
+  }
+
+  if (!claimPageController()) {
+    root.dataset.web25Build = BUILD_ID;
+    root.dataset.web25Stage = "boot:duplicate-skip";
+    return;
+  }
 
   root.dataset.web25Build = BUILD_ID;
   root.dataset.web25Booted = "1";
+  root.dataset.web25Instance = INSTANCE_ID;
   root.dataset.web25Detail = isDetailPage() ? "1" : "0";
   root.dataset.web25Replies = "0";
   root.dataset.web25Articles = "0";
@@ -167,8 +335,17 @@
     setScrollAnchoringDisabled(true);
   }
 
-  function buildSummaryText(autoCount, historyCount, manualCount) {
+  function buildSummaryText(autoCount, historyCount, manualCount, scannedCount) {
     const parts = [];
+    const totalCount = autoCount + historyCount + manualCount;
+
+    if (totalCount === 0) {
+      if (scannedCount > 0) {
+        return "刚刚看了 " + scannedCount + " 条回复。";
+      }
+
+      return "还在等回复区加载出来。";
+    }
 
     if (autoCount > 0) {
       parts.push("web2.5 自动下沉 " + autoCount + " 条");
@@ -180,10 +357,6 @@
 
     if (manualCount > 0) {
       parts.push("你刚标记下沉 " + manualCount + " 条");
-    }
-
-    if (parts.length === 0) {
-      parts.push("当前没有下沉回复");
     }
 
     return parts.join("，");
@@ -489,6 +662,13 @@
   }
 
   function syncRemoteManualState(force, callback) {
+    if (state.destroyed) {
+      if (typeof callback === "function") {
+        callback(false);
+      }
+      return;
+    }
+
     if (!state.backendBaseUrl || !state.syncKey) {
       if (typeof callback === "function") {
         callback(false);
@@ -517,6 +697,13 @@
     requestBackendJson("GET", endpoint, null, function (payload) {
       state.remoteSyncInFlight = false;
 
+      if (state.destroyed) {
+        if (typeof callback === "function") {
+          callback(false);
+        }
+        return;
+      }
+
       if (!payload || !payload.ok) {
         if (typeof callback === "function") {
           callback(false);
@@ -537,8 +724,20 @@
   function readSetting(callback) {
     const localState = readLocalManualState();
     readIndexedManualState(function (indexedState) {
+      if (state.destroyed) {
+        return;
+      }
+
       api.storage.local.get(storageDefaults, function (result) {
+        if (state.destroyed) {
+          return;
+        }
+
         ensureSyncIdentity(result, function (resolvedResult) {
+          if (state.destroyed) {
+            return;
+          }
+
           state.enabled = Boolean(resolvedResult.enabled);
           state.markingEnabled = Boolean(resolvedResult.markingEnabled);
           state.backendBaseUrl = normalizeBackendBaseUrl(resolvedResult.backendBaseUrl || storageDefaults.backendBaseUrl);
@@ -580,11 +779,15 @@
   }
 
   function watchSettingChanges() {
-    if (!api.storage || !api.storage.onChanged) {
+    if (!api.storage || !api.storage.onChanged || state.storageChangeListener) {
       return;
     }
 
-    api.storage.onChanged.addListener(function (changes, areaName) {
+    state.storageChangeListener = function (changes, areaName) {
+      if (state.destroyed) {
+        return;
+      }
+
       if (areaName !== "local") {
         return;
       }
@@ -637,7 +840,9 @@
       }
 
       scanPage();
-    });
+    };
+
+    api.storage.onChanged.addListener(state.storageChangeListener);
   }
 
   function scheduleScan() {
@@ -645,7 +850,7 @@
   }
 
   function scheduleScanWithDelay(delayMs) {
-    if (state.suppressObserver) {
+    if (state.destroyed || state.suppressObserver) {
       return;
     }
 
@@ -654,36 +859,66 @@
   }
 
   function scheduleManualRescan(delayMs) {
+    if (state.destroyed) {
+      return;
+    }
+
     clearTimeout(state.manualRescanTimer);
     state.manualRescanTimer = setTimeout(function () {
+      if (state.destroyed) {
+        return;
+      }
       state.manualRescanTimer = null;
       scanPage();
     }, typeof delayMs === "number" ? delayMs : 120);
   }
 
   function scheduleManualPersist(delayMs) {
+    if (state.destroyed) {
+      return;
+    }
+
     clearTimeout(state.manualPersistTimer);
     state.manualPersistTimer = setTimeout(function () {
+      if (state.destroyed) {
+        return;
+      }
       state.manualPersistTimer = null;
       persistManualState();
     }, typeof delayMs === "number" ? delayMs : 180);
   }
 
   function suppressObserverBriefly() {
+    if (state.destroyed) {
+      return;
+    }
+
     state.suppressObserver = true;
     setTimeout(function () {
+      if (state.destroyed) {
+        return;
+      }
       state.suppressObserver = false;
     }, 120);
   }
 
   function queueStabilizationScans(delays) {
+    if (state.destroyed) {
+      return;
+    }
+
     state.stabilizeTimers.forEach(function (timerId) {
       clearTimeout(timerId);
     });
     state.stabilizeTimers = [];
 
     (delays || []).forEach(function (delayMs) {
-      const timerId = setTimeout(scanPage, delayMs);
+      const timerId = setTimeout(function () {
+        if (state.destroyed) {
+          return;
+        }
+        scanPage();
+      }, delayMs);
       state.stabilizeTimers.push(timerId);
     });
   }
@@ -708,6 +943,18 @@
 
   function isManagedNode(node) {
     return Boolean(node && node.nodeType === 1 && node.closest && node.closest('[data-web25-owned="1"]'));
+  }
+
+  function containsBottomUiNode(node) {
+    if (!node || node.nodeType !== 1) {
+      return false;
+    }
+
+    if (node.matches && node.matches(".web25-bottom-host, .web25-hidden-summary, .web25-revealed-list")) {
+      return true;
+    }
+
+    return Boolean(node.querySelector && node.querySelector(".web25-bottom-host, .web25-hidden-summary, .web25-revealed-list"));
   }
 
   function getTweetText(article) {
@@ -1132,6 +1379,151 @@
     state.dockEl = null;
   }
 
+  function removeDuplicateOwnedNodes(selector, keepNode) {
+    Array.from(document.querySelectorAll(selector)).forEach(function (node) {
+      if (keepNode && node === keepNode) {
+        return;
+      }
+      node.remove();
+    });
+  }
+
+  function syncBottomStateFromHost(host) {
+    state.bottomHostEl = host || null;
+    if (!host) {
+      state.summaryEl = null;
+      state.revealedListEl = null;
+      state.revealedListItemsEl = null;
+      return;
+    }
+
+    const summaries = Array.from(host.children).filter(function (child) {
+      return child.classList && child.classList.contains("web25-hidden-summary");
+    });
+    const lists = Array.from(host.children).filter(function (child) {
+      return child.classList && child.classList.contains("web25-revealed-list");
+    });
+
+    const summaryToKeep = summaries[0] || null;
+    summaries.slice(1).forEach(function (node) {
+      node.remove();
+    });
+
+    let listToKeep = null;
+    if (lists.length > 0) {
+      listToKeep = lists.reduce(function (best, node) {
+        if (!best) {
+          return node;
+        }
+
+        const bestCards = best.querySelectorAll(".web25-bottom-card").length;
+        const nodeCards = node.querySelectorAll(".web25-bottom-card").length;
+        if (nodeCards > bestCards) {
+          return node;
+        }
+
+        if (nodeCards === bestCards && node.classList.contains("web25-revealed-list-compact") !== best.classList.contains("web25-revealed-list-compact")) {
+          return node.classList.contains("web25-revealed-list-compact") ? best : node;
+        }
+
+        return best;
+      }, null);
+      lists.forEach(function (node) {
+        if (node !== listToKeep) {
+          node.remove();
+        }
+      });
+    }
+
+    if (summaryToKeep && host.firstElementChild !== summaryToKeep) {
+      host.insertBefore(summaryToKeep, host.firstChild);
+    }
+
+    if (listToKeep && host.lastElementChild !== listToKeep) {
+      host.appendChild(listToKeep);
+    }
+
+    state.summaryEl = summaryToKeep;
+    state.revealedListEl = listToKeep;
+    state.revealedListItemsEl = listToKeep ? listToKeep.querySelector(".web25-revealed-list-items") : null;
+  }
+
+  function dedupeBottomUi() {
+    const hosts = Array.from(document.querySelectorAll(".web25-bottom-host"));
+    if (hosts.length === 0) {
+      Array.from(document.querySelectorAll(".web25-hidden-summary, .web25-revealed-list")).forEach(function (node) {
+        node.remove();
+      });
+      syncBottomStateFromHost(null);
+      return;
+    }
+
+    const keeper = hosts.reduce(function (best, node) {
+      if (!best) {
+        return node;
+      }
+
+      const bestCards = best.querySelectorAll(".web25-bottom-card").length;
+      const nodeCards = node.querySelectorAll(".web25-bottom-card").length;
+      const bestOpen = best.classList.contains("web25-bottom-host-open") ? 1 : 0;
+      const nodeOpen = node.classList.contains("web25-bottom-host-open") ? 1 : 0;
+
+      if (nodeCards !== bestCards) {
+        return nodeCards > bestCards ? node : best;
+      }
+
+      if (nodeOpen !== bestOpen) {
+        return nodeOpen > bestOpen ? node : best;
+      }
+
+      return node;
+    }, null);
+
+    hosts.forEach(function (node) {
+      if (node !== keeper) {
+        node.remove();
+      }
+    });
+
+    Array.from(document.querySelectorAll(".web25-hidden-summary, .web25-revealed-list")).forEach(function (node) {
+      if (!keeper.contains(node)) {
+        node.remove();
+      }
+    });
+
+    syncBottomStateFromHost(keeper);
+  }
+
+  function scheduleBottomUiDedupe() {
+    clearTimeout(state.bottomUiDedupeTimer);
+    state.bottomUiDedupeTimer = setTimeout(function () {
+      state.bottomUiDedupeTimer = null;
+      if (state.destroyed) {
+        return;
+      }
+
+      dedupeBottomUi();
+    }, 0);
+  }
+
+  function pruneDuplicateBottomUi() {
+    if (state.bottomHostEl && !document.contains(state.bottomHostEl)) {
+      state.bottomHostEl = null;
+    }
+    if (state.summaryEl && !document.contains(state.summaryEl)) {
+      state.summaryEl = null;
+    }
+    if (state.revealedListEl && !document.contains(state.revealedListEl)) {
+      state.revealedListEl = null;
+      state.revealedListItemsEl = null;
+    }
+
+    removeDuplicateOwnedNodes(".web25-bottom-host", state.bottomHostEl);
+    removeDuplicateOwnedNodes(".web25-hidden-summary", state.summaryEl);
+    removeDuplicateOwnedNodes(".web25-revealed-list", state.revealedListEl);
+    dedupeBottomUi();
+  }
+
   function resetManagedReplyState() {
     Array.from(document.querySelectorAll("[data-web25-reply-cell='1']")).forEach(function (node) {
       node.removeAttribute("data-web25-reply-cell");
@@ -1170,6 +1562,8 @@
   }
 
   function ensureBottomHost(anchorCell) {
+    pruneDuplicateBottomUi();
+
     if (!state.bottomHostEl) {
       state.bottomHostEl = document.createElement("div");
       state.bottomHostEl.className = "web25-bottom-host";
@@ -1225,9 +1619,10 @@
     }
 
     const host = state.bottomHostEl;
-    const hasHidden = totalHidden > 0;
-    host.classList.toggle("web25-bottom-host-hidden", !hasHidden);
-    if (!hasHidden) {
+    const hasSummary = Boolean(state.summaryEl && document.contains(state.summaryEl));
+    const shouldShow = totalHidden > 0 || hasSummary;
+    host.classList.toggle("web25-bottom-host-hidden", !shouldShow);
+    if (totalHidden <= 0) {
       setBottomTrayOpen(false);
     } else {
       setBottomTrayOpen(state.bottomTrayOpen);
@@ -1251,6 +1646,8 @@
   }
 
   function ensureSummary(counts) {
+    pruneDuplicateBottomUi();
+
     if (!state.summaryEl) {
       state.summaryEl = document.createElement("div");
       state.summaryEl.className = "web25-hidden-summary";
@@ -1283,9 +1680,21 @@
     const meta = state.summaryEl.querySelector(".web25-hidden-summary-meta");
     const toggleButton = state.summaryEl.querySelector(".web25-hidden-summary-toggle");
 
-    title.textContent = "web2.5 已整理 " + totalCount + " 条回复";
-    meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual);
-    toggleButton.textContent = state.bottomTrayOpen ? "收起列表" : "查看列表";
+    if (totalCount === 0) {
+      title.textContent = "无下沉";
+      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0);
+      toggleButton.textContent = "查看列表";
+      toggleButton.disabled = true;
+      toggleButton.classList.add("web25-hidden-summary-toggle-disabled");
+      toggleButton.setAttribute("aria-disabled", "true");
+    } else {
+      title.textContent = "web2.5 已整理 " + totalCount + " 条回复";
+      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0);
+      toggleButton.textContent = state.bottomTrayOpen ? "收起列表" : "查看列表";
+      toggleButton.disabled = false;
+      toggleButton.classList.remove("web25-hidden-summary-toggle-disabled");
+      toggleButton.removeAttribute("aria-disabled");
+    }
 
     const host = state.bottomHostEl;
     if (!host) {
@@ -1299,6 +1708,8 @@
   }
 
   function ensureRevealedList(counts) {
+    pruneDuplicateBottomUi();
+
     if (!state.revealedListEl) {
       state.revealedListEl = document.createElement("div");
       state.revealedListEl.className = "web25-revealed-list";
@@ -1738,6 +2149,10 @@
   }
 
   function scanPage() {
+    if (state.destroyed) {
+      return;
+    }
+
     root.dataset.web25LastScan = String(Date.now());
     root.dataset.web25Detail = isDetailPage() ? "1" : "0";
     root.dataset.web25MarkingEnabled = state.markingEnabled ? "1" : "0";
@@ -1938,7 +2353,8 @@
       const counts = {
         auto: autoHiddenCount,
         history: historyHiddenCount,
-        manual: manualHiddenCount
+        manual: manualHiddenCount,
+        scanned: replies.length
       };
 
       root.dataset.web25ReplyCells = String(document.querySelectorAll("[data-web25-reply-cell='1']").length);
@@ -1948,21 +2364,18 @@
       root.dataset.web25Stage = "scan:summary-ready";
 
       if (hiddenCount === 0) {
-        if (state.summaryEl) {
-          state.summaryEl.remove();
-          state.summaryEl = null;
-        }
+        ensureBottomHost(lastReplyCell || getReplyCell(mainArticle));
         if (state.revealedListEl) {
           state.revealedListEl.remove();
           state.revealedListEl = null;
         }
         state.revealedListItemsEl = null;
         state.revealedSignature = "";
-        if (state.bottomHostEl) {
-          state.bottomHostEl.remove();
-          state.bottomHostEl = null;
-        }
-        removeBottomHostIfEmpty();
+        ensureSummary(counts);
+        syncBottomHostVisibility(0);
+        dedupeBottomUi();
+        scheduleBottomUiDedupe();
+        root.dataset.web25Stage = "scan:done";
         return;
       }
 
@@ -1973,6 +2386,8 @@
         updateBottomCards(revealedReplies);
       }
       syncBottomHostVisibility(hiddenCount);
+      dedupeBottomUi();
+      scheduleBottomUiDedupe();
       root.dataset.web25Stage = "scan:done";
     } catch (error) {
       root.dataset.web25Error = String(error && error.message ? error.message : error);
@@ -1986,22 +2401,42 @@
   }
 
   function boot() {
+    if (state.destroyed || state.bootStarted) {
+      return;
+    }
+
+    state.bootStarted = true;
     quarantineExistingReplies();
     readSetting(function () {
+      if (state.destroyed) {
+        return;
+      }
+
       watchSettingChanges();
       if (api.runtime && api.runtime.onMessage) {
-        api.runtime.onMessage.addListener(function (message) {
-          if (!message || message.type !== "web25-admin") {
-            return;
-          }
+        if (!state.runtimeMessageListener) {
+          state.runtimeMessageListener = function (message) {
+            if (state.destroyed || !message || message.type !== "web25-admin") {
+              return;
+            }
 
-          if (message.command === "clear-manual") {
-            clearManualDecisions();
-          }
-        });
+            if (message.command === "clear-manual") {
+              clearManualDecisions();
+            }
+          };
+          api.runtime.onMessage.addListener(state.runtimeMessageListener);
+        }
       }
       scanPage();
+      if (state.destroyed || !document.body) {
+        return;
+      }
+
       state.observer = new MutationObserver(function (records) {
+        if (state.destroyed) {
+          return;
+        }
+
         if (location.href !== state.currentUrl) {
           quarantineExistingReplies();
           scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
@@ -2009,14 +2444,29 @@
         }
 
         let relevant = false;
+        let duplicateBottomUiDetected = false;
 
         records.forEach(function (record) {
+          if (containsBottomUiNode(record.target)) {
+            duplicateBottomUiDetected = true;
+            return;
+          }
+
           if (isManagedNode(record.target)) {
             return;
           }
 
           Array.from(record.addedNodes || []).forEach(function (node) {
-            if (!node || node.nodeType !== 1 || isManagedNode(node)) {
+            if (!node || node.nodeType !== 1) {
+              return;
+            }
+
+            if (containsBottomUiNode(node)) {
+              duplicateBottomUiDetected = true;
+              return;
+            }
+
+            if (isManagedNode(node)) {
               return;
             }
 
@@ -2033,6 +2483,11 @@
           });
         });
 
+        if (duplicateBottomUiDetected) {
+          dedupeBottomUi();
+          scheduleBottomUiDedupe();
+        }
+
         if (relevant) {
           scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
         }
@@ -2041,28 +2496,58 @@
         childList: true,
         subtree: true
       });
-      window.addEventListener("popstate", function () {
-        quarantineExistingReplies();
-        scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
-      });
-      window.addEventListener("focus", function () {
-        syncRemoteManualState(false, function (changed) {
-          if (changed) {
-            scanPage();
-          }
-        });
-      });
-      document.addEventListener("visibilitychange", function () {
-        if (document.visibilityState !== "visible") {
-          return;
-        }
 
-        syncRemoteManualState(false, function (changed) {
-          if (changed) {
-            scanPage();
+      if (!state.popstateListener) {
+        state.popstateListener = function () {
+          if (state.destroyed) {
+            return;
           }
-        });
-      });
+          quarantineExistingReplies();
+          scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
+        };
+        window.addEventListener("popstate", state.popstateListener);
+      }
+
+      if (!state.focusListener) {
+        state.focusListener = function () {
+          if (state.destroyed) {
+            return;
+          }
+          syncRemoteManualState(false, function (changed) {
+            if (state.destroyed) {
+              return;
+            }
+            if (changed) {
+              scanPage();
+            }
+          });
+        };
+        window.addEventListener("focus", state.focusListener);
+      }
+
+      if (!state.visibilityListener) {
+        state.visibilityListener = function () {
+          if (state.destroyed) {
+            return;
+          }
+
+          if (document.visibilityState !== "visible") {
+            return;
+          }
+
+          syncRemoteManualState(false, function (changed) {
+            if (state.destroyed) {
+              return;
+            }
+            if (changed) {
+              scanPage();
+            }
+          });
+        };
+        document.addEventListener("visibilitychange", state.visibilityListener);
+      }
+
+      state.booted = true;
     });
   }
 
@@ -2070,17 +2555,19 @@
     if (document.body) {
       boot();
     } else {
-      const startWhenReady = function () {
-        if (!document.body) {
+      state.domReadyListener = function startWhenReady() {
+        if (state.destroyed || !document.body) {
           return;
         }
-        document.removeEventListener("DOMContentLoaded", startWhenReady);
+        document.removeEventListener("DOMContentLoaded", state.domReadyListener);
+        state.domReadyListener = null;
         boot();
       };
-      document.addEventListener("DOMContentLoaded", startWhenReady);
+      document.addEventListener("DOMContentLoaded", state.domReadyListener);
     }
   } catch (error) {
     root.dataset.web25Error = String(error && error.message ? error.message : error);
+    destroyPageController("boot-error");
     throw error;
   }
 })();
