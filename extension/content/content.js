@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-22-2255";
+  const BUILD_ID = "2026-04-22-2305";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -651,14 +651,24 @@
 
     const seen = new Set();
     const modules = [];
+    const titleCandidates = Array.from(
+      sidebarColumn.querySelectorAll('span, div, h1, h2, [role="heading"]')
+    );
 
-    Array.from(sidebarColumn.querySelectorAll("*")).forEach(function (node) {
-      if (!node || node.children.length > 0) {
+    titleCandidates.forEach(function (node) {
+      if (!node) {
         return;
       }
 
       const kind = getSidebarModuleKindByTitle(node.textContent || "");
       if (!kind) {
+        return;
+      }
+
+      const hasNestedMatch = Array.from(node.querySelectorAll ? node.querySelectorAll('span, div, h1, h2, [role="heading"]') : []).some(function (child) {
+        return child !== node && getSidebarModuleKindByTitle(child.textContent || "") === kind;
+      });
+      if (hasNestedMatch) {
         return;
       }
 
