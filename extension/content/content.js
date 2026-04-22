@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-22-2250";
+  const BUILD_ID = "2026-04-22-2255";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -603,13 +603,27 @@
   }
 
   function resolveSidebarModuleContainer(titleNode, sidebarColumn) {
-    if (!titleNode || !sidebarColumn) {
+    if (!titleNode || !sidebarColumn || !sidebarColumn.contains(titleNode)) {
       return null;
+    }
+
+    const cellContainer = titleNode.closest('[data-testid="cellInnerDiv"]');
+    if (cellContainer && sidebarColumn.contains(cellContainer)) {
+      return cellContainer;
     }
 
     const semanticContainer = titleNode.closest("section, aside, [role='region']");
     if (semanticContainer && sidebarColumn.contains(semanticContainer)) {
-      return semanticContainer;
+      let current = semanticContainer;
+      let highestInsideSidebar = semanticContainer;
+      while (current && current !== sidebarColumn) {
+        highestInsideSidebar = current;
+        if (current.parentElement === sidebarColumn) {
+          return current;
+        }
+        current = current.parentElement;
+      }
+      return highestInsideSidebar;
     }
 
     let node = titleNode;
@@ -708,9 +722,15 @@
     button.setAttribute("aria-label", label);
     button.title = label;
     button.textContent = "×";
-    button.onclick = function (event) {
+
+    const stopInteraction = function (event) {
       event.preventDefault();
       event.stopPropagation();
+    };
+
+    button.onpointerdown = stopInteraction;
+    button.onclick = function (event) {
+      stopInteraction(event);
       dismissSidebarModule(kind);
     };
   }
