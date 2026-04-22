@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>web2.5 控制台</title>
+    <title>web2.5</title>
     <meta
       name="description"
-      content="web2.5 是你的个人内容整理控制台。你可以在这里查看整理记录、恢复误标内容、绑定同步数据。"
+      content="web2.5 是你的个人内容控制层。当前最成熟的场景从 X / Safari 开始。"
     />
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
-  <body>
+  <body class="marketing-body">
     <div class="site-shell">
-      <header class="hero">
+      <header class="hero marketing-hero">
         <nav class="topbar">
           <div class="brand">
             <div class="brand-mark" aria-hidden="true">
@@ -20,68 +20,41 @@
             </div>
             <div>
               <p class="eyebrow">web2.5</p>
-              <h1>让网页安静一点，让选择权回到你手里。</h1>
+              <h1>你决定看什么，不看什么。</h1>
             </div>
           </div>
           <div class="topbar-actions">
             <a class="ghost-button" href="https://github.com/2715000591-sys/web2.5" target="_blank" rel="noreferrer">GitHub 备份</a>
-            <a class="primary-button" href="#console">打开控制台</a>
-            <span id="accountChip" class="status-pill mellow">账户系统后续开放</span>
+            <a class="ghost-button" href="#updates">更新记录</a>
           </div>
         </nav>
 
-        <div class="hero-grid">
+        <div class="marketing-hero-grid">
           <section class="hero-copy">
-            <p class="hero-kicker">刷帖尽量不被打扰，真正要审查的内容再回到这里。</p>
+            <p class="hero-kicker">个人内容控制层</p>
             <p class="hero-text">
-              web2.5 不是再造一个平台，而是把你的整理记录、误标恢复和同步入口收回到一个安静的网页里。X 里尽量少打扰，控制权放回你自己手上。
+              web2.5 让你把内容选择权拿回自己手里。当前最成熟的落地场景先从 X / Safari 开始，控制台继续负责累计成果、审查和恢复。
             </p>
-            <div class="hero-stats hero-stats-wide">
-              <article class="stat-card">
-                <span>当前仍在下沉</span>
-                <strong id="heroHideCount">0</strong>
-                <small>这是现在还在生效的内容</small>
-              </article>
-              <article class="stat-card">
-                <span>当前自动整理</span>
-                <strong id="heroAutoActiveCount">0</strong>
-                <small>由 web2.5 直接判断并处理</small>
-              </article>
-              <article class="stat-card">
-                <span>当前手动下沉</span>
-                <strong id="heroManualActiveCount">0</strong>
-                <small>由你自己确认后留下的记录</small>
-              </article>
-              <article class="stat-card">
-                <span>累计恢复</span>
-                <strong id="heroAllowCount">0</strong>
-                <small>误标撤销会记在这里</small>
-              </article>
+            <div class="hero-action-row">
+              <a class="primary-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">当前先体验 X / Safari</a>
+              <a class="ghost-button" href="/console/">打开控制台</a>
             </div>
           </section>
 
-          <aside class="hero-panel" id="download">
-            <div class="panel-label">安装与备份</div>
-            <h2>先把记录跑通，再慢慢把分发做漂亮。</h2>
-            <p>
-              现在最重要的是三件事：Safari 里能稳定使用、网站能看到真实数据、代码已经有 GitHub 备份。下载页和正式发布会在这之后继续收。
-            </p>
-            <div class="download-stack">
-              <a class="primary-button" href="https://github.com/2715000591-sys/web2.5" target="_blank" rel="noreferrer">查看 GitHub 备份</a>
-              <a class="ghost-button" href="#releaseNotes">查看更新记录</a>
-            </div>
+          <aside class="hero-panel launch-panel">
+            <div class="panel-label">当前进展</div>
             <div class="stacked-rows compact-rows">
               <div class="stacked-row">
-                <strong>Safari 扩展</strong>
-                <p>当前主用形态。你在 X 里实际使用的就是这套版本。</p>
+                <strong>品牌是 web2.5</strong>
+                <p>首页讲产品，控制台讲结果，不再把网站写成单一平台专题页。</p>
               </div>
               <div class="stacked-row">
-                <strong>数据后台</strong>
-                <p id="backendStatusValue">正在检测连接状态…</p>
+                <strong>当前先从 X / Safari 开始</strong>
+                <p>现在最成熟的入口是 Safari 插件这一条，但它只是当前第一站，不是整个产品的全部。</p>
               </div>
               <div class="stacked-row">
-                <strong>代码备份</strong>
-                <p>整份项目已经同步到 GitHub，不再只躺在这台电脑里。</p>
+                <strong>控制台只看累计成果</strong>
+                <p>自动动作、手动动作、恢复记录和最近动作，都继续留在控制台里看。</p>
               </div>
             </div>
           </aside>
@@ -89,181 +62,48 @@
       </header>
 
       <main class="page-content">
-        <section class="section-grid" id="console">
-          <div class="section-copy">
-            <p class="eyebrow">控制台</p>
-            <h2>把真实数据讲清楚，不再把开发口吻摆在用户面前</h2>
-            <p>
-              这里现在只做三件事：告诉你系统做了什么、告诉你你自己做了什么、在你怀疑误标时给你一条干净的回查路径。别的都先不吵你。
-            </p>
-          </div>
-          <div class="console-card">
-            <div class="console-header">
-              <div>
-                <span class="eyebrow">数据概览</span>
-                <h3>真实同步记录</h3>
+        <section class="marketing-section entry-section">
+          <div class="entry-grid">
+            <article class="entry-card">
+              <p class="eyebrow">当前可用</p>
+              <h3>先体验 X / Safari</h3>
+              <p>当前已经成熟的体验先从这一条开始。装好 Safari 扩展，就能在 X 里直接用起来。</p>
+              <div class="entry-actions">
+                <a class="primary-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">安装说明</a>
               </div>
-              <span id="syncModePill" class="status-pill">同一把同步密钥可共用</span>
-            </div>
-            <div class="sync-strip">
-              <label class="sync-stack">
-                <span>同步密钥</span>
-                <input id="syncKeyInput" type="text" placeholder="从插件里复制同步密钥" />
-              </label>
-              <div class="sync-actions">
-                <button id="saveSyncKey" class="primary-button small-button" type="button">绑定我的数据</button>
-                <button id="refreshDashboard" class="ghost-button small-button" type="button">刷新</button>
+            </article>
+            <article class="entry-card">
+              <p class="eyebrow">控制台</p>
+              <h3>登录控制台</h3>
+              <p>全局共享过滤成果和你自己的累计成果，会在登录后分层展开，不再混成一块。</p>
+              <div class="entry-actions">
+                <a class="ghost-button" href="/console/">进入控制台</a>
               </div>
-            </div>
-            <p id="dashboardStatus" class="console-hint">
-              先绑定同步密钥，网页才会显示你的真实整理记录。
-            </p>
-            <div class="console-grid">
-              <article class="metric-block">
-                <span>当前仍在下沉</span>
-                <strong id="activeHiddenCount">0</strong>
-                <small>这是当前仍然生效的记录</small>
-              </article>
-              <article class="metric-block">
-                <span>当前自动下沉</span>
-                <strong id="activeAutoHiddenCount">0</strong>
-                <small>现在还在生效的系统自动整理</small>
-              </article>
-              <article class="metric-block">
-                <span>当前手动下沉</span>
-                <strong id="activeManualHiddenCount">0</strong>
-                <small>现在还在生效的手动记录</small>
-              </article>
-              <article class="metric-block">
-                <span>系统累计自动整理</span>
-                <strong id="autoHideCount">0</strong>
-                <small>只统计真实已上报的自动整理</small>
-              </article>
-              <article class="metric-block">
-                <span>你累计手动标记</span>
-                <strong id="manualHideCount">0</strong>
-                <small>你亲手点过的标记次数</small>
-              </article>
-              <article class="metric-block">
-                <span>你累计恢复</span>
-                <strong id="manualAllowCount">0</strong>
-                <small>误标撤销会记在这里</small>
-              </article>
-              <article class="metric-block">
-                <span>命中过的高风险账号</span>
-                <strong id="distinctHandleCount">0</strong>
-                <small>至少被整理过一次的账号</small>
-              </article>
-              <article class="metric-block">
-                <span>高频风险话术</span>
-                <strong id="heroPhraseCount">0</strong>
-                <small>已进入后台统计的不同说法</small>
-              </article>
-            </div>
+            </article>
           </div>
         </section>
 
-        <section class="dashboard-grid">
-          <article class="surface-card">
-            <div class="surface-head">
-              <div>
-                <p class="eyebrow">高频词语</p>
-                <h3>常见被整理的话术</h3>
-              </div>
-              <span class="surface-note">只看话术，不暴露帖子来源</span>
-            </div>
-            <div class="token-cloud" id="token-cloud"></div>
-          </article>
-
-          <article class="surface-card">
-            <div class="surface-head">
-              <div>
-                <p class="eyebrow">最近动作</p>
-                <h3>最近发生了什么</h3>
-              </div>
-              <span id="recentCountPill" class="surface-note">最近 20 条</span>
-            </div>
-            <p class="review-hint">这里不做判断，只忠实告诉你最近是系统动手了，还是你自己动手了。</p>
-            <div class="recent-list" id="recent-list"></div>
-          </article>
-        </section>
-
-        <section class="surface-card review-section">
-          <div class="surface-head">
-            <div>
-              <p class="eyebrow">回复审查</p>
-              <h3>当前仍在下沉的内容</h3>
-            </div>
-            <span id="reviewCountPill" class="surface-note">默认收起</span>
+        <section class="marketing-section updates-section" id="updates">
+          <div class="section-heading">
+            <p class="eyebrow">当前进展</p>
+            <h2>现在这版已经稳定下来的部分。</h2>
           </div>
-          <div class="review-toolbar">
-            <label class="review-search">
-              <span>搜索</span>
-              <input id="reviewSearchInput" type="text" placeholder="搜账号、句子或关键词" />
-            </label>
-            <div class="review-filter-group" id="reviewFilterGroup">
-              <button class="filter-chip active" data-filter="all" type="button">全部</button>
-              <button class="filter-chip" data-filter="auto" type="button">自动</button>
-              <button class="filter-chip" data-filter="manual" type="button">手动</button>
-            </div>
-            <button id="reviewToggleButton" class="ghost-button small-button" type="button">展开列表</button>
-          </div>
-          <p class="review-hint">默认不把这些内容摊开。只有你想审查误标时，再展开或搜索。展开后也先看摘要，不会一股脑把内容堆满整页。</p>
-          <div class="review-list review-list-collapsed" id="review-list"></div>
-        </section>
-
-        <section class="section-grid narrow-gap">
-          <div class="surface-card">
-            <div class="surface-head">
-              <div>
-                <p class="eyebrow">账户与同步</p>
-                <h3>先用同步密钥稳住你的个人数据空间</h3>
-              </div>
-              <span class="status-pill mellow">准备中</span>
-            </div>
-            <div class="stacked-rows">
-              <div class="stacked-row">
-                <strong>现在是谁在看这份数据</strong>
-                <p id="ownershipHint">当前先按同步密钥隔离，不会默认和所有人混在一起。</p>
-              </div>
-              <div class="stacked-row">
-                <strong>多设备同步</strong>
-                <p>同一把密钥可以把网页和扩展绑在一起。以后补上账户系统后，这条链路会换成真正的登录同步。</p>
-              </div>
-              <div class="stacked-row">
-                <strong>API 设置入口</strong>
-                <p>等 AI 接进来后，模型、额度与缓存策略会单独放在这里，不会混进当前的基础控制台。</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="surface-card" id="releaseNotes">
-            <div class="surface-head">
-              <div>
-                <p class="eyebrow">更新记录</p>
-                <h3>当前这版已经做成什么样了</h3>
-              </div>
-              <span class="status-pill muted">逐步上线</span>
-            </div>
-            <div class="release-list">
-              <article class="release-item">
-                <strong>第 1 个完整 GitHub 备份</strong>
-                <p>整份项目代码已经上云，不再只在这一台电脑里。</p>
-              </article>
-              <article class="release-item">
-                <strong>网页控制台改成真实数据视图</strong>
-                <p>手动标记、恢复、系统自动整理都会继续收口到这里，不再用假数字顶着看。</p>
-              </article>
-              <article class="release-item">
-                <strong>下一步优先级</strong>
-                <p>继续把网站交互收顺，再把下载页和账户系统接上，最后再谈 AI 语义判断。</p>
-              </article>
-            </div>
+          <div class="updates-list">
+            <article class="update-item">
+              <strong>Safari 插件已经跑通</strong>
+              <p>标记、自动整理、手动下沉和恢复这条链路已经稳定工作。</p>
+            </article>
+            <article class="update-item">
+              <strong>控制台已经只看真实数据</strong>
+              <p>接下来会继续升级成公网登录控制台，把全局共享层和你的个人累计分开展示。</p>
+            </article>
+            <article class="update-item">
+              <strong>GitHub 备份已经就位</strong>
+              <p>当前稳定版本已经上云，后续继续优化网站不会把它弄丢。</p>
+            </article>
           </div>
         </section>
       </main>
     </div>
-
-    <script src="./app.js"></script>
   </body>
 </html>

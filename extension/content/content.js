@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-21-2132";
+  const BUILD_ID = "2026-04-23-0052";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -7,6 +7,12 @@
   const INSTANCE_ID = BUILD_ID + ":" + Date.now().toString(36) + ":" + Math.random().toString(36).slice(2, 8);
   const FAST_SCAN_DELAY_MS = 70;
   const NORMAL_SCAN_DELAY_MS = 180;
+  const OFFICIAL_AD_LABELS = ["广告", "Promoted", "推广"];
+  const OFFICIAL_AD_LINK_PATTERNS = [
+    /ad\.doubleclick\.net/i,
+    /doubleclick/i,
+    /\/i\/ads\//i
+  ];
   const SIMILARITY_TERMS = [
     "线下",
     "附近",
@@ -38,6 +44,28 @@
     "破处",
     "看上我",
     "联系方式",
+    "看主页",
+    "点主页",
+    "主页置顶",
+    "主页id",
+    "置顶id",
+    "看简介",
+    "简介id",
+    "看资料",
+    "资料id",
+    "签名id",
+    "自介id",
+    "搜id",
+    "小号",
+    "纸飞机",
+    "飞机号",
+    "扣扣",
+    "企鹅",
+    "群号",
+    "频道号",
+    "vx",
+    "wx",
+    "tg",
     "在线等你",
     "取精",
     "固炮",
@@ -47,12 +75,19 @@
   const IDB_NAME = "web25-manual-memory";
   const IDB_STORE = "state";
   const IDB_KEY = "manual-state";
+  const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://web25-public.web25-boris.workers.dev";
+  const LEGACY_BACKEND_BASE_URLS = new Set([
+    "",
+    "http://127.0.0.1:8787",
+    "http://localhost:8787",
+    "https://web25-public-pages.pages.dev"
+  ]);
   const api = typeof browser !== "undefined" ? browser : chrome;
   const root = document.documentElement;
   const storageDefaults = {
     enabled: true,
     markingEnabled: false,
-    backendBaseUrl: "http://127.0.0.1:8787",
+    backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
     syncKey: "",
     deviceId: "",
     autoHideSyncedKeys: [],
@@ -63,7 +98,7 @@
   const state = {
     enabled: true,
     markingEnabled: false,
-    backendBaseUrl: "http://127.0.0.1:8787",
+    backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
     syncKey: "",
     deviceId: "",
     observer: null,
@@ -82,9 +117,18 @@
     dockEl: null,
     manualHideTexts: new Set(),
     manualAllowTexts: new Set(),
+    globalTemplateRules: new Set(),
+    repeatSuspiciousHandles: new Set(),
     autoHideSyncedKeys: new Set(),
+    adHideSyncedKeys: new Set(),
+    adHidePendingKeys: new Set(),
     remoteSyncInFlight: false,
     lastRemoteSyncAt: 0,
+    accountBindingInFlight: false,
+    lastAccountBindAttemptAt: 0,
+    lastAccountBindSignature: "",
+    lastSuccessfulAccountBindSignature: "",
+    lastSuccessfulAccountBindAt: 0,
     skipNextStorageSyncScan: false,
     suppressObserver: false,
     storageChangeListener: null,
@@ -122,6 +166,10 @@
       node.style.display = "";
       node.removeAttribute("data-web25-hidden");
     });
+    Array.from(document.querySelectorAll("[data-web25-ad-hidden='1']")).forEach(function (node) {
+      node.style.display = "";
+      node.removeAttribute("data-web25-ad-hidden");
+    });
     Array.from(document.querySelectorAll("[data-web25-pending='1']")).forEach(function (node) {
       node.removeAttribute("data-web25-pending");
     });
@@ -130,6 +178,9 @@
     });
     Array.from(document.querySelectorAll("[data-web25-reply-cell='1']")).forEach(function (node) {
       node.removeAttribute("data-web25-reply-cell");
+    });
+    Array.from(document.querySelectorAll("[data-web25-ad-cell='1']")).forEach(function (node) {
+      node.removeAttribute("data-web25-ad-cell");
     });
     Array.from(document.querySelectorAll(".web25-reply-actions-host, .web25-bottom-host, .web25-hidden-summary, .web25-revealed-list, .web25-status-dock")).forEach(function (node) {
       node.remove();
@@ -184,7 +235,6 @@
       document.removeEventListener("visibilitychange", state.visibilityListener);
       state.visibilityListener = null;
     }
-
     if (state.domReadyListener) {
       document.removeEventListener("DOMContentLoaded", state.domReadyListener);
       state.domReadyListener = null;
@@ -257,8 +307,12 @@
   root.dataset.web25Booted = "1";
   root.dataset.web25Instance = INSTANCE_ID;
   root.dataset.web25Detail = isDetailPage() ? "1" : "0";
+  root.dataset.web25Home = "0";
   root.dataset.web25Replies = "0";
   root.dataset.web25Articles = "0";
+  root.dataset.web25Ads = "0";
+  root.dataset.web25AdSync = "";
+  root.dataset.web25AdSyncDetail = "";
   root.dataset.web25ReplyCells = "0";
   root.dataset.web25ManualButtons = "0";
   root.dataset.web25MarkingEnabled = "0";
@@ -366,6 +420,10 @@
     return String(value || "").trim().replace(/\/+$/, "");
   }
 
+  function shouldAutoUpgradeBackendBaseUrl(value) {
+    return LEGACY_BACKEND_BASE_URLS.has(normalizeBackendBaseUrl(value));
+  }
+
   function buildAutoHideSyncKey(keys) {
     if (!keys) {
       return "";
@@ -424,6 +482,10 @@
       patch.deviceId = generateSyncId("device_");
     }
 
+    if (shouldAutoUpgradeBackendBaseUrl(result.backendBaseUrl)) {
+      patch.backendBaseUrl = DEFAULT_PUBLIC_BACKEND_BASE_URL;
+    }
+
     if (Object.keys(patch).length === 0) {
       callback(result);
       return;
@@ -450,6 +512,169 @@
 
   function isDetailPage() {
     return /\/status\/\d+/.test(location.pathname);
+  }
+
+  function isHomeTimelinePage() {
+    return /^\/home\/?$/.test(location.pathname);
+  }
+
+  function getArticleCell(article) {
+    return article && article.closest ? (article.closest('[data-testid="cellInnerDiv"]') || article) : article;
+  }
+
+  function getArticleStatusId(article) {
+    if (!article) {
+      return "";
+    }
+
+    const timeLink = article.querySelector('a[href*="/status/"] time');
+    if (timeLink) {
+      const link = timeLink.closest("a");
+      const statusId = extractStatusId(link && link.getAttribute("href"));
+      if (statusId) {
+        return statusId;
+      }
+    }
+
+    const fallbackLink = Array.from(article.querySelectorAll('a[href*="/status/"]'))
+      .map(function (node) {
+        return node.getAttribute("href") || "";
+      })
+      .find(function (href) {
+        return /\/status\/\d+/.test(href);
+      });
+    return extractStatusId(fallbackLink);
+  }
+
+  function getArticleUrl(article) {
+    if (!article) {
+      return "";
+    }
+
+    const timeLink = article.querySelector('a[href*="/status/"] time');
+    if (timeLink) {
+      const link = timeLink.closest("a");
+      const href = String(link && link.getAttribute("href") || "").trim();
+      if (href) {
+        return href.startsWith("http") ? href : "https://x.com" + href;
+      }
+    }
+
+    const fallbackLink = Array.from(article.querySelectorAll('a[href*="/status/"]'))
+      .map(function (node) {
+        return String(node.getAttribute("href") || "").trim();
+      })
+      .find(function (href) {
+        return /\/status\/\d+/.test(href);
+      });
+
+    if (!fallbackLink) {
+      return "";
+    }
+
+    return fallbackLink.startsWith("http") ? fallbackLink : "https://x.com" + fallbackLink;
+  }
+
+  function getOfficialAdLabel(article) {
+    if (!article) {
+      return "";
+    }
+
+    const exactLabel = Array.from(article.querySelectorAll("span, div, a"))
+      .map(function (node) {
+        return String(node.innerText || node.textContent || "").trim();
+      })
+      .find(function (text) {
+        return OFFICIAL_AD_LABELS.includes(text);
+      });
+
+    if (exactLabel) {
+      return exactLabel;
+    }
+
+    const adLinkHit = Array.from(article.querySelectorAll("a[href]")).some(function (node) {
+      const href = String(node.getAttribute("href") || "").trim();
+      return OFFICIAL_AD_LINK_PATTERNS.some(function (pattern) {
+        return pattern.test(href);
+      });
+    });
+
+    return adLinkHit ? "广告" : "";
+  }
+
+  function getOfficialAdSnapshot(article) {
+    const label = getOfficialAdLabel(article);
+    if (!label) {
+      return null;
+    }
+
+    const authorMeta = getReplyAuthorMeta(article);
+    const text = getTweetText(article);
+    const normalizedText = window.Web25Rules && typeof window.Web25Rules.normalizeText === "function"
+      ? window.Web25Rules.normalizeText(text)
+      : String(text || "").replace(/\s+/g, " ").trim();
+    const statusId = getArticleStatusId(article);
+    const url = getArticleUrl(article);
+
+    return {
+      label: label,
+      displayName: authorMeta.displayName,
+      handle: authorMeta.handle,
+      text: text,
+      normalizedText: normalizedText,
+      statusId: statusId,
+      url: url
+    };
+  }
+
+  function buildAdHideSyncKey(scope, snapshot) {
+    const normalizedScope = scope === "reply" ? "reply" : "home";
+    if (!snapshot) {
+      return "";
+    }
+
+    if (snapshot.statusId) {
+      return "ad:" + normalizedScope + ":status:" + snapshot.statusId;
+    }
+
+    if (snapshot.handle && snapshot.normalizedText) {
+      return "ad:" + normalizedScope + ":text:" + snapshot.handle.toLowerCase() + ":" + snapshot.normalizedText;
+    }
+
+    if (snapshot.normalizedText) {
+      return "ad:" + normalizedScope + ":text:" + snapshot.normalizedText;
+    }
+
+    return "";
+  }
+
+  function rememberAdHideSyncKey(syncKey) {
+    if (!syncKey) {
+      return;
+    }
+
+    state.adHidePendingKeys.delete(syncKey);
+    if (state.adHideSyncedKeys.has(syncKey)) {
+      return;
+    }
+
+    state.adHideSyncedKeys.add(syncKey);
+  }
+
+  function rememberPendingAdHideSyncKey(syncKey) {
+    if (!syncKey || state.adHideSyncedKeys.has(syncKey)) {
+      return;
+    }
+
+    state.adHidePendingKeys.add(syncKey);
+  }
+
+  function clearPendingAdHideSyncKey(syncKey) {
+    if (!syncKey) {
+      return;
+    }
+
+    state.adHidePendingKeys.delete(syncKey);
   }
 
   function readLocalManualState() {
@@ -617,13 +842,14 @@
     writeIndexedManualState(payload, callback);
   }
 
-  function requestBackendJson(method, endpoint, payload, callback) {
+  function requestBackendJson(method, endpoint, payload, callback, withCredentials) {
     if (api.runtime && typeof api.runtime.sendMessage === "function") {
       api.runtime.sendMessage({
         type: "web25-http-request",
         endpoint: endpoint,
         method: method,
-        payload: payload || {}
+        payload: payload || {},
+        credentials: withCredentials ? "include" : "omit"
       }, function (response) {
         if (api.runtime && api.runtime.lastError) {
           callback(null);
@@ -643,6 +869,7 @@
     fetch(endpoint, {
       method: method,
       mode: "cors",
+      credentials: withCredentials ? "include" : "omit",
       headers: {
         "Content-Type": "application/json"
       },
@@ -659,6 +886,53 @@
     }).catch(function () {
       callback(null);
     });
+  }
+
+  function attemptAutoBindSyncKey(force) {
+    if (state.destroyed || !state.backendBaseUrl || !state.syncKey) {
+      return;
+    }
+
+    const now = Date.now();
+    const syncSignature = `${state.backendBaseUrl}|${state.syncKey}`;
+    if (!force && state.accountBindingInFlight) {
+      return;
+    }
+    if (!force && state.lastAccountBindSignature === syncSignature && now - state.lastAccountBindAttemptAt < 10 * 60 * 1000) {
+      return;
+    }
+
+    state.accountBindingInFlight = true;
+    state.lastAccountBindAttemptAt = now;
+    state.lastAccountBindSignature = syncSignature;
+
+    requestBackendJson("GET", state.backendBaseUrl + "/api/me", null, function (payload) {
+      if (!payload || !payload.ok || !payload.loggedIn || !payload.viewer || !payload.viewer.email) {
+        state.accountBindingInFlight = false;
+        return;
+      }
+
+      const viewerSignature = `${syncSignature}|${String(payload.viewer.email || "").trim().toLowerCase()}`;
+      if (!force && state.lastSuccessfulAccountBindSignature === viewerSignature && Date.now() - state.lastSuccessfulAccountBindAt < 6 * 60 * 60 * 1000) {
+        state.accountBindingInFlight = false;
+        return;
+      }
+
+      requestBackendJson(
+        "POST",
+        state.backendBaseUrl + "/api/account/bind-sync-key",
+        { syncKey: state.syncKey },
+        function (bindPayload) {
+          state.accountBindingInFlight = false;
+          if (!bindPayload || !bindPayload.ok) {
+            return;
+          }
+          state.lastSuccessfulAccountBindSignature = viewerSignature;
+          state.lastSuccessfulAccountBindAt = Date.now();
+        },
+        true
+      );
+    }, true);
   }
 
   function syncRemoteManualState(force, callback) {
@@ -713,7 +987,12 @@
 
       const remoteHideTexts = Array.isArray(payload.manualHideKeys) ? payload.manualHideKeys : [];
       const remoteAllowTexts = Array.isArray(payload.manualAllowKeys) ? payload.manualAllowKeys : [];
+      const remoteTemplateRules = Array.isArray(payload.templateRules) ? payload.templateRules : [];
+      const remoteRepeatSuspiciousHandles = Array.isArray(payload.repeatSuspiciousHandles) ? payload.repeatSuspiciousHandles : [];
+      state.globalTemplateRules = new Set(remoteTemplateRules);
+      state.repeatSuspiciousHandles = new Set(remoteRepeatSuspiciousHandles);
       applyResolvedManualState(remoteHideTexts, remoteAllowTexts, function () {
+        scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
         if (typeof callback === "function") {
           callback(true);
         }
@@ -744,6 +1023,10 @@
           state.syncKey = String(resolvedResult.syncKey || "").trim();
           state.deviceId = String(resolvedResult.deviceId || "").trim();
           state.autoHideSyncedKeys = new Set(resolvedResult.autoHideSyncedKeys || []);
+          state.adHideSyncedKeys = new Set();
+          state.adHidePendingKeys = new Set();
+          state.globalTemplateRules = new Set();
+          state.repeatSuspiciousHandles = new Set();
           root.dataset.web25MarkingEnabled = state.markingEnabled ? "1" : "0";
           root.dataset.web25SyncReady = state.syncKey && state.backendBaseUrl ? "1" : "0";
 
@@ -770,6 +1053,7 @@
 
           applyResolvedManualState(manualHideTexts, manualAllowTexts, function () {
             syncRemoteManualState(true, function () {
+              attemptAutoBindSyncKey(false);
               callback();
             });
           });
@@ -793,7 +1077,10 @@
       }
 
       const hasManualChanges = Boolean(changes.manualHideTexts || changes.manualAllowTexts);
-      const hasOnlyAutoSyncKeys = Boolean(changes.autoHideSyncedKeys) && Object.keys(changes).length === 1;
+      const changedKeys = Object.keys(changes);
+      const hasOnlySyncDedupeKeys = changedKeys.length > 0 && changedKeys.every(function (key) {
+        return key === "autoHideSyncedKeys";
+      });
 
       if (changes.enabled) {
         state.enabled = Boolean(changes.enabled.newValue);
@@ -835,7 +1122,7 @@
         return;
       }
 
-      if (hasOnlyAutoSyncKeys) {
+      if (hasOnlySyncDedupeKeys) {
         return;
       }
 
@@ -1007,14 +1294,86 @@
         return text.startsWith("@");
       });
 
-    if (!handleNode) {
-      return "";
+    if (handleNode) {
+      return "account:" + handleNode.toLowerCase();
     }
 
-    return "account:" + handleNode.toLowerCase();
+    const authorMeta = getReplyAuthorMeta(replyArticle);
+    return authorMeta.handle ? "account:" + authorMeta.handle.toLowerCase() : "";
   }
 
-  function buildCompactTextKey(normalized) {
+  function collectInlineTextParts(node, parts) {
+    if (!node) {
+      return;
+    }
+
+    if (node.nodeType === 3) {
+      const text = String(node.textContent || "").replace(/\s+/g, " ").trim();
+      if (text) {
+        parts.push(text);
+      }
+      return;
+    }
+
+    if (node.nodeType !== 1) {
+      return;
+    }
+
+    if (node.tagName === "IMG") {
+      const alt = String(node.getAttribute("alt") || "").trim();
+      if (alt) {
+        parts.push(alt);
+      }
+      return;
+    }
+
+    Array.from(node.childNodes).forEach(function (child) {
+      collectInlineTextParts(child, parts);
+    });
+  }
+
+  function isUserNameMetaText(text) {
+    const value = String(text || "").trim();
+    if (!value) {
+      return true;
+    }
+
+    if (value === "·" || value === "•") {
+      return true;
+    }
+
+    if (/^\d+[smhdwy]$/i.test(value.toLowerCase())) {
+      return true;
+    }
+
+    return /^\d+\s*(秒|分钟|分|小时|天|周|月|年)$/.test(value);
+  }
+
+  function joinDisplayNameParts(parts) {
+    return (Array.isArray(parts) ? parts : []).reduce(function (result, part) {
+      const value = String(part || "").trim();
+      if (!value) {
+        return result;
+      }
+
+      if (!result) {
+        return value;
+      }
+
+      if (/[A-Za-z0-9]$/.test(result) && /^[A-Za-z0-9]/.test(value)) {
+        return result + " " + value;
+      }
+
+      return result + value;
+    }, "");
+  }
+
+  function buildCompactTextKey(normalized, compactOverride) {
+    const compactSource = String(compactOverride || "").trim();
+    if (compactSource) {
+      return compactSource.length >= 4 ? "compact:" + compactSource : "";
+    }
+
     if (!normalized) {
       return "";
     }
@@ -1031,9 +1390,34 @@
     return "compact:" + compact;
   }
 
-  function buildPatternTextKey(normalized) {
+  function buildPatternTextKey(normalized, analysis, authorMeta) {
     if (!normalized) {
       return "";
+    }
+
+    const displayNameRisk = Boolean(
+      authorMeta
+      && window.Web25Rules
+      && typeof window.Web25Rules.buildDisplayNameRiskKey === "function"
+      && window.Web25Rules.buildDisplayNameRiskKey(authorMeta.displayName || "")
+    );
+    const suspiciousHandle = Boolean(
+      authorMeta
+      && window.Web25Rules
+      && typeof window.Web25Rules.handleLooksSuspicious === "function"
+      && window.Web25Rules.handleLooksSuspicious(authorMeta.handle || "")
+    );
+
+    if (analysis && analysis.hasGeoMeetupBait) {
+      return "pattern:geo-meetup-bait";
+    }
+
+    if (analysis && analysis.hasBaitQuestionShape) {
+      return "pattern:bait-question-shape";
+    }
+
+    if (analysis && analysis.hasLowInformationBadge && displayNameRisk && suspiciousHandle) {
+      return "pattern:low-information-lure-account";
     }
 
     const matchedTerms = Array.from(new Set(SIMILARITY_TERMS.filter(function (term) {
@@ -1056,19 +1440,33 @@
   }
 
   function getReplyManualKeys(replyArticle, replyText) {
-    const normalized = window.Web25Rules.normalizeText(replyText);
+    const analysis = window.Web25Rules && typeof window.Web25Rules.analyzeReplyText === "function"
+      ? window.Web25Rules.analyzeReplyText(replyText)
+      : null;
+    const authorMeta = getReplyAuthorMeta(replyArticle);
+    const normalized = analysis && analysis.normalized
+      ? analysis.normalized
+      : window.Web25Rules.normalizeText(replyText);
     const textKey = normalized ? "text:" + normalized : "";
     const statusKey = getReplyStatusKey(replyArticle);
     const accountKey = getReplyAccountKey(replyArticle);
-    const compactTextKey = buildCompactTextKey(normalized);
-    const patternTextKey = buildPatternTextKey(normalized);
+    const displayNameKey = window.Web25Rules && typeof window.Web25Rules.buildDisplayNameRiskKey === "function"
+      ? window.Web25Rules.buildDisplayNameRiskKey(authorMeta.displayName || "")
+      : (window.Web25Rules && typeof window.Web25Rules.buildHighRiskDisplayNameKey === "function"
+        ? window.Web25Rules.buildHighRiskDisplayNameKey(authorMeta.displayName || "")
+        : "");
+    const compactTextKey = buildCompactTextKey(normalized, analysis && analysis.compact ? analysis.compact : "");
+    const patternTextKey = buildPatternTextKey(normalized, analysis, authorMeta);
+    const templateKeys = analysis && analysis.templateKey ? [analysis.templateKey] : [];
     return {
       normalized: normalized,
       textKey: textKey,
       statusKey: statusKey,
       accountKey: accountKey,
+      displayNameKey: displayNameKey,
       compactTextKey: compactTextKey,
       patternTextKey: patternTextKey,
+      templateKeys: templateKeys,
       primaryKey: statusKey || accountKey || textKey || compactTextKey || patternTextKey || normalized
     };
   }
@@ -1083,10 +1481,22 @@
       textKey: keys.textKey || "",
       statusKey: keys.statusKey || "",
       accountKey: keys.accountKey || "",
+      displayNameKey: keys.displayNameKey || "",
       compactTextKey: keys.compactTextKey || "",
       patternTextKey: keys.patternTextKey || "",
+      templateKeys: Array.isArray(keys.templateKeys) ? keys.templateKeys.slice() : [],
       primaryKey: keys.primaryKey || ""
     };
+  }
+
+  function hasTemplateRuleMatch(set, keys) {
+    if (!set || !keys || !Array.isArray(keys.templateKeys) || !keys.templateKeys.length) {
+      return false;
+    }
+
+    return keys.templateKeys.some(function (templateKey) {
+      return Boolean(templateKey) && set.has(templateKey);
+    });
   }
 
   function hasDecisionKey(set, keys) {
@@ -1098,6 +1508,7 @@
       (keys.primaryKey && set.has(keys.primaryKey)) ||
       (keys.statusKey && set.has(keys.statusKey)) ||
       (keys.accountKey && set.has(keys.accountKey)) ||
+      (keys.displayNameKey && set.has(keys.displayNameKey)) ||
       (keys.textKey && set.has(keys.textKey)) ||
       (keys.compactTextKey && set.has(keys.compactTextKey)) ||
       (keys.patternTextKey && set.has(keys.patternTextKey)) ||
@@ -1135,6 +1546,10 @@
 
     if (keys.accountKey) {
       set.add(keys.accountKey);
+    }
+
+    if (keys.displayNameKey) {
+      set.add(keys.displayNameKey);
     }
 
     if (keys.textKey) {
@@ -1185,6 +1600,10 @@
 
     if (keys.accountKey) {
       set.delete(keys.accountKey);
+    }
+
+    if (keys.displayNameKey) {
+      set.delete(keys.displayNameKey);
     }
 
     if (keys.textKey) {
@@ -1260,7 +1679,11 @@
       const replyCell = getReplyCell(article);
       const replyText = getTweetText(article);
       const manualKeys = getReplyManualKeys(article, replyText);
-      const storedKeys = getStoredManualKeys(manualKeys, isProtectedAccount(article, getReplyAuthorMeta(article)));
+      const storedKeys = getStoredManualKeys(
+        manualKeys,
+        isProtectedAccount(article, getReplyAuthorMeta(article)),
+        replyText
+      );
 
       if (hasAllowDecisionKey(state.manualAllowTexts, storedKeys)) {
         replyCell.style.display = "";
@@ -1315,8 +1738,20 @@
     return false;
   }
 
-  function getStoredManualKeys(manualKeys, protectedAccount) {
-    if (!protectedAccount) {
+  function shouldBypassProtectedManualGuard(replyText, manualKeys) {
+    if (manualKeys && manualKeys.displayNameKey) {
+      return true;
+    }
+
+    return Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.looksLikeShareLinkScam === "function"
+      && window.Web25Rules.looksLikeShareLinkScam(replyText || "")
+    );
+  }
+
+  function getStoredManualKeys(manualKeys, protectedAccount, replyText) {
+    if (!protectedAccount || shouldBypassProtectedManualGuard(replyText, manualKeys)) {
       return manualKeys;
     }
 
@@ -1325,6 +1760,7 @@
       textKey: "",
       statusKey: manualKeys.statusKey || "",
       accountKey: "",
+      displayNameKey: "",
       compactTextKey: "",
       patternTextKey: "",
       primaryKey: manualKeys.statusKey || ""
@@ -1377,6 +1813,161 @@
       node.remove();
     });
     state.dockEl = null;
+  }
+
+  function removeAllAdHiding() {
+    Array.from(document.querySelectorAll("[data-web25-ad-hidden='1']")).forEach(function (node) {
+      node.style.display = "";
+      node.removeAttribute("data-web25-ad-hidden");
+    });
+
+    Array.from(document.querySelectorAll("[data-web25-ad-cell='1']")).forEach(function (node) {
+      node.removeAttribute("data-web25-ad-cell");
+    });
+    root.dataset.web25Ads = "0";
+    root.dataset.web25HomeAds = "0";
+    root.dataset.web25ReplyAds = "0";
+  }
+
+  function applyAdArticleVisibility(article, hidden) {
+    const articleCell = getArticleCell(article);
+    if (!articleCell) {
+      return;
+    }
+
+    if (hidden) {
+      articleCell.setAttribute("data-web25-ad-cell", "1");
+      articleCell.setAttribute("data-web25-ad-hidden", "1");
+      articleCell.style.display = "none";
+      return;
+    }
+
+    articleCell.style.display = "";
+    articleCell.removeAttribute("data-web25-ad-hidden");
+    articleCell.removeAttribute("data-web25-ad-cell");
+  }
+
+  function getCurrentThreadStatusId() {
+    return extractStatusId(location.pathname) || extractStatusId(location.href);
+  }
+
+  function buildAdSyncPayload(scope, snapshot) {
+    const normalizedScope = scope === "reply" ? "reply" : "home";
+    return {
+      syncKey: state.syncKey,
+      deviceId: state.deviceId,
+      source: "extension",
+      eventType: normalizedScope === "reply" ? "ad_reply_hide" : "ad_home_hide",
+      threadUrl: normalizedScope === "reply" ? location.href : (snapshot.url || location.href),
+      threadStatusId: normalizedScope === "reply" ? getCurrentThreadStatusId() : (snapshot.statusId || ""),
+      replyStatusId: normalizedScope === "reply" ? (snapshot.statusId || "") : "",
+      replyHandle: snapshot.handle || "",
+      replyDisplayName: snapshot.displayName || "",
+      replyText: String(snapshot.text || "").slice(0, 240),
+      normalizedText: String(snapshot.normalizedText || "").slice(0, 240),
+      compactText: ""
+    };
+  }
+
+  function postAdHideEvent(scope, snapshot) {
+    const adHideSyncKey = buildAdHideSyncKey(scope, snapshot);
+    if (!adHideSyncKey || state.adHideSyncedKeys.has(adHideSyncKey) || state.adHidePendingKeys.has(adHideSyncKey)) {
+      return;
+    }
+
+    if (!state.backendBaseUrl || !state.syncKey || !snapshot || !api.runtime || typeof api.runtime.sendMessage !== "function") {
+      root.dataset.web25AdSync = "fail";
+      root.dataset.web25AdSyncDetail = "missing-sync-config";
+      return;
+    }
+
+    rememberPendingAdHideSyncKey(adHideSyncKey);
+    root.dataset.web25AdSync = "pending";
+    root.dataset.web25AdSyncDetail = scope === "reply" ? "reply" : "home";
+
+    api.runtime.sendMessage({
+      type: "web25-sync-ad-event",
+      endpoint: state.backendBaseUrl + "/api/events",
+      eventType: scope === "reply" ? "ad_reply_hide" : "ad_home_hide",
+      dedupeKey: adHideSyncKey,
+      payload: buildAdSyncPayload(scope, snapshot)
+    }, function (response) {
+      if (api.runtime && api.runtime.lastError) {
+        clearPendingAdHideSyncKey(adHideSyncKey);
+        root.dataset.web25AdSync = "fail";
+        root.dataset.web25AdSyncDetail = "runtime-error";
+        return;
+      }
+
+      if (!response || !response.ok) {
+        clearPendingAdHideSyncKey(adHideSyncKey);
+        root.dataset.web25AdSync = "fail";
+        root.dataset.web25AdSyncDetail = response && response.error ? String(response.error) : "queue-error";
+        return;
+      }
+
+      if (response.synced) {
+        rememberAdHideSyncKey(adHideSyncKey);
+        root.dataset.web25AdSync = "ok";
+        root.dataset.web25AdSyncDetail = response.detail || "synced";
+        return;
+      }
+
+      root.dataset.web25AdSync = "queued";
+      root.dataset.web25AdSyncDetail = response.detail || "queued";
+    });
+  }
+
+  function scanThreadReplyAds(replyArticles) {
+    const visibleReplies = [];
+    let hiddenAds = 0;
+
+    (Array.isArray(replyArticles) ? replyArticles : []).forEach(function (article) {
+      const snapshot = getOfficialAdSnapshot(article);
+      if (!snapshot) {
+        applyAdArticleVisibility(article, false);
+        visibleReplies.push(article);
+        return;
+      }
+
+      hiddenAds += 1;
+      applyAdArticleVisibility(article, true);
+      postAdHideEvent("reply", snapshot);
+    });
+
+    root.dataset.web25ReplyAds = String(hiddenAds);
+    return visibleReplies;
+  }
+
+  function scanHomeTimelineAds() {
+    root.dataset.web25Stage = "ads:start";
+
+    if (!state.enabled || !isHomeTimelinePage()) {
+      removeAllAdHiding();
+      root.dataset.web25Stage = "ads:inactive";
+      return;
+    }
+
+    const articles = getArticles();
+    root.dataset.web25Articles = String(articles.length);
+
+    let hiddenAds = 0;
+    articles.forEach(function (article) {
+      const snapshot = getOfficialAdSnapshot(article);
+      if (!snapshot) {
+        applyAdArticleVisibility(article, false);
+        return;
+      }
+
+      applyAdArticleVisibility(article, true);
+      hiddenAds += 1;
+
+      postAdHideEvent("home", snapshot);
+    });
+
+    root.dataset.web25Ads = String(hiddenAds);
+    root.dataset.web25HomeAds = String(hiddenAds);
+    root.dataset.web25Stage = "ads:done";
   }
 
   function removeDuplicateOwnedNodes(selector, keepNode) {
@@ -1830,6 +2421,15 @@
       return;
     }
 
+    if (isDetailPage()) {
+      const adSnapshot = getOfficialAdSnapshot(replyArticle);
+      if (adSnapshot) {
+        applyAdArticleVisibility(replyArticle, true);
+        postAdHideEvent("reply", adSnapshot);
+        return;
+      }
+    }
+
     setReplyCellPending(replyArticle, true);
   }
 
@@ -1952,7 +2552,7 @@
 
     const authorMeta = getReplyAuthorMeta(replyArticle);
     const protectedAccount = isProtectedAccount(replyArticle, authorMeta);
-    const storedKeys = getStoredManualKeys(keys, protectedAccount);
+    const storedKeys = getStoredManualKeys(keys, protectedAccount, replyText);
 
     if (kind === "hide") {
       addDecisionKeys(state.manualHideTexts, storedKeys);
@@ -2047,17 +2647,20 @@
       };
     }
 
-    const spans = Array.from(replyArticle.querySelectorAll('[data-testid="User-Name"] span'))
-      .map(function (node) {
-        return node.textContent.trim();
-      })
-      .filter(Boolean);
-    const handle = spans.find(function (text) {
+    const userNameNode = replyArticle.querySelector('[data-testid="User-Name"]');
+    const parts = [];
+    collectInlineTextParts(userNameNode, parts);
+
+    const normalizedParts = parts.filter(Boolean);
+    const handleIndex = normalizedParts.findIndex(function (text) {
       return text.startsWith("@");
-    }) || "";
-    const displayName = spans.find(function (text) {
-      return !text.startsWith("@") && !/^\d+[smhdwy]$/.test(text.toLowerCase());
-    }) || "X 用户";
+    });
+    const handle = handleIndex === -1 ? "" : normalizedParts[handleIndex];
+    const displayParts = (handleIndex === -1 ? normalizedParts : normalizedParts.slice(0, handleIndex))
+      .filter(function (text) {
+        return !isUserNameMetaText(text);
+      });
+    const displayName = joinDisplayNameParts(displayParts) || "X 用户";
 
     return {
       displayName: displayName,
@@ -2080,7 +2683,8 @@
         || (keys.textKey && candidateKeys.textKey === keys.textKey)
         || (keys.compactTextKey && candidateKeys.compactTextKey === keys.compactTextKey)
         || (keys.patternTextKey && candidateKeys.patternTextKey === keys.patternTextKey)
-        || (keys.accountKey && candidateKeys.accountKey === keys.accountKey)) {
+        || (keys.accountKey && candidateKeys.accountKey === keys.accountKey)
+        || (keys.displayNameKey && candidateKeys.displayNameKey === keys.displayNameKey)) {
         return replyArticle;
       }
     }
@@ -2155,6 +2759,7 @@
 
     root.dataset.web25LastScan = String(Date.now());
     root.dataset.web25Detail = isDetailPage() ? "1" : "0";
+    root.dataset.web25Home = isHomeTimelinePage() ? "1" : "0";
     root.dataset.web25MarkingEnabled = state.markingEnabled ? "1" : "0";
     root.dataset.web25Stage = "scan:start";
     delete root.dataset.web25Error;
@@ -2163,7 +2768,22 @@
       state.currentUrl = location.href;
     }
 
-    if (!state.enabled || !isDetailPage()) {
+    if (!state.enabled) {
+      root.dataset.web25Stage = "scan:inactive";
+      removeAllHiding();
+      removeAllAdHiding();
+      return;
+    }
+
+    if (isHomeTimelinePage()) {
+      removeAllHiding();
+      scanHomeTimelineAds();
+      return;
+    }
+
+    removeAllAdHiding();
+
+    if (!isDetailPage()) {
       root.dataset.web25Stage = "scan:inactive";
       removeAllHiding();
       return;
@@ -2186,12 +2806,11 @@
       resetManagedReplyState();
 
       const mainArticle = articles[0];
-      const replies = articles.slice(1);
+      const replies = scanThreadReplyAds(articles.slice(1));
       let lastReplyCell = null;
       root.dataset.web25Replies = String(replies.length);
       root.dataset.web25Stage = "scan:replies-ready";
       const mainText = getTweetText(mainArticle);
-      const accountEvidenceCounts = new Map();
       let hiddenCount = 0;
       let autoHiddenCount = 0;
       let historyHiddenCount = 0;
@@ -2205,8 +2824,12 @@
         const manualKeys = getReplyManualKeys(replyArticle, replyText);
         const authorMeta = getReplyAuthorMeta(replyArticle);
         const protectedAccount = isProtectedAccount(replyArticle, authorMeta);
-        const riskyAccount = accountLooksRisky(authorMeta);
-        const storedManualKeys = getStoredManualKeys(manualKeys, protectedAccount);
+        const storedManualKeys = getStoredManualKeys(manualKeys, protectedAccount, replyText);
+        const templateRuleMatched = hasTemplateRuleMatch(state.globalTemplateRules, manualKeys);
+        const repeatSuspiciousHandle = Boolean(
+          manualKeys.accountKey
+          && state.repeatSuspiciousHandles.has(manualKeys.accountKey)
+        );
         let decision;
         let hiddenSource = null;
         const isAllowed = hasAllowDecisionKey(state.manualAllowTexts, storedManualKeys);
@@ -2239,7 +2862,9 @@
             isVerified: protectedAccount && isVerifiedAccount(replyArticle),
             isFollowed: protectedAccount && isFollowedAccount(replyArticle),
             handle: authorMeta.handle,
-            displayName: authorMeta.displayName
+            displayName: authorMeta.displayName,
+            isRepeatSuspiciousHandle: repeatSuspiciousHandle,
+            templateRuleMatched: templateRuleMatched
           });
           if (decision.hide) {
             hiddenSource = "auto";
@@ -2260,10 +2885,6 @@
           };
         }
 
-        if (!isAllowed && !protectedAccount && riskyAccount && manualKeys.accountKey && !hiddenSource && decision && decision.score >= 4) {
-          accountEvidenceCounts.set(manualKeys.accountKey, (accountEvidenceCounts.get(manualKeys.accountKey) || 0) + 1);
-        }
-
         return {
           replyArticle: replyArticle,
           replyCell: replyCell,
@@ -2272,7 +2893,6 @@
           storedManualKeys: storedManualKeys,
           authorMeta: authorMeta,
           protectedAccount: protectedAccount,
-          riskyAccount: riskyAccount,
           isAllowed: isAllowed,
           decision: decision,
           hiddenSource: hiddenSource,
@@ -2286,27 +2906,9 @@
         const replyText = entry.replyText;
         const manualKeys = entry.manualKeys;
         const authorMeta = entry.authorMeta;
-        const protectedAccount = entry.protectedAccount;
-        const riskyAccount = entry.riskyAccount;
         let decision = entry.decision;
         let hiddenSource = entry.hiddenSource;
         const isManuallyHidden = entry.isManuallyHidden;
-
-        if (!entry.isAllowed
-          && !hiddenSource
-          && !protectedAccount
-          && riskyAccount
-          && manualKeys.accountKey
-          && (accountEvidenceCounts.get(manualKeys.accountKey) || 0) >= 2
-          && decision
-          && decision.score >= 3) {
-          decision = {
-            hide: true,
-            score: Math.max(decision.score, 6),
-            reasons: (decision.reasons || []).concat(["repeat-suspicious-account"])
-          };
-          hiddenSource = "auto";
-        }
 
         if (decision.hide) {
           replyCell.setAttribute("data-web25-hidden", "1");
@@ -2406,7 +3008,9 @@
     }
 
     state.bootStarted = true;
-    quarantineExistingReplies();
+    if (isDetailPage()) {
+      quarantineExistingReplies();
+    }
     readSetting(function () {
       if (state.destroyed) {
         return;
@@ -2416,12 +3020,31 @@
       if (api.runtime && api.runtime.onMessage) {
         if (!state.runtimeMessageListener) {
           state.runtimeMessageListener = function (message) {
-            if (state.destroyed || !message || message.type !== "web25-admin") {
+            if (state.destroyed || !message) {
               return;
             }
 
-            if (message.command === "clear-manual") {
+            if (message.type === "web25-admin" && message.command === "clear-manual") {
               clearManualDecisions();
+              return;
+            }
+
+            if (message.type === "web25-ad-sync-result") {
+              const dedupeKey = String(message.dedupeKey || "").trim();
+              if (!dedupeKey) {
+                return;
+              }
+
+              if (message.ok) {
+                rememberAdHideSyncKey(dedupeKey);
+                root.dataset.web25AdSync = "ok";
+                root.dataset.web25AdSyncDetail = String(message.detail || "synced");
+                return;
+              }
+
+              clearPendingAdHideSyncKey(dedupeKey);
+              root.dataset.web25AdSync = "fail";
+              root.dataset.web25AdSyncDetail = String(message.detail || "sync-failed");
             }
           };
           api.runtime.onMessage.addListener(state.runtimeMessageListener);
@@ -2438,7 +3061,9 @@
         }
 
         if (location.href !== state.currentUrl) {
-          quarantineExistingReplies();
+          if (isDetailPage()) {
+            quarantineExistingReplies();
+          }
           scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
           return;
         }
@@ -2472,13 +3097,17 @@
 
             if (node.matches && (node.matches('article[data-testid="tweet"]') || node.matches('[data-testid="cellInnerDiv"]'))) {
               relevant = true;
-              quarantineTree(node);
+              if (isDetailPage()) {
+                quarantineTree(node);
+              }
               return;
             }
 
             if (Boolean(node.querySelector && node.querySelector('article[data-testid="tweet"], [data-testid="cellInnerDiv"]'))) {
               relevant = true;
-              quarantineTree(node);
+              if (isDetailPage()) {
+                quarantineTree(node);
+              }
             }
           });
         });
@@ -2502,7 +3131,9 @@
           if (state.destroyed) {
             return;
           }
-          quarantineExistingReplies();
+          if (isDetailPage()) {
+            quarantineExistingReplies();
+          }
           scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
         };
         window.addEventListener("popstate", state.popstateListener);
@@ -2513,6 +3144,7 @@
           if (state.destroyed) {
             return;
           }
+          attemptAutoBindSyncKey(false);
           syncRemoteManualState(false, function (changed) {
             if (state.destroyed) {
               return;
@@ -2535,6 +3167,7 @@
             return;
           }
 
+          attemptAutoBindSyncKey(false);
           syncRemoteManualState(false, function (changed) {
             if (state.destroyed) {
               return;

@@ -25,21 +25,20 @@
         开启标记模式后，“标记可疑”会出现在回复下方，不再挡住 X 原生按钮。
       </p>
       <div class="sync-card">
-        <p class="sync-title">真实数据同步</p>
+        <p class="sync-title">云端控制台</p>
         <label class="field">
-          <span>同步服务地址</span>
-          <input id="backendBaseUrl" type="text" placeholder="http://127.0.0.1:8787">
+          <span>服务地址</span>
+          <input id="backendBaseUrl" type="text" placeholder="https://web25-public.web25-boris.workers.dev 或你自己的地址">
         </label>
-        <div class="sync-key-row">
-          <span>同步密钥</span>
-          <code id="syncKeyValue">生成中...</code>
+        <div class="sync-status-row">
+          <span>账号状态</span>
+          <strong id="accountStatusValue">正在检查...</strong>
         </div>
         <div class="action-row">
-          <button id="copySyncKey" class="action-button" type="button">复制密钥</button>
-          <a id="openConsole" class="action-link" href="http://127.0.0.1:8787" target="_blank" rel="noreferrer">打开控制台</a>
+          <a id="openConsole" class="action-link" href="https://web25-public.web25-boris.workers.dev" target="_blank" rel="noreferrer">打开控制台</a>
         </div>
         <p id="syncStatus" class="hint compact-hint">
-          先不做登录，先用同步密钥把扩展和网页绑定起来，避免不同人的数据混在一起。
+          登录账号后，当前设备会自动接入控制台，不需要手动复制任何东西。
         </p>
       </div>
     </main>

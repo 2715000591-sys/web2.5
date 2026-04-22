@@ -4,6 +4,14 @@
   "type": "module",
   "scripts": {
     "dev": "node backend/server.mjs",
-    "backend": "node backend/server.mjs"
+    "backend": "node backend/server.mjs",
+    "cloud:dev": "npx wrangler@latest dev",
+    "cloud:deploy": "npx wrangler@latest deploy",
+    "cloud:check": "npx wrangler@latest deploy --dry-run",
+    "cloud:d1:apply:local": "npx wrangler@latest d1 execute web25 --local --file=cloudflare/schema.sql",
+    "console:open": "bash scripts/open-console.sh",
+    "console:status": "bash scripts/backend-status.sh",
+    "console:install-autostart": "bash scripts/install-autostart.sh",
+    "console:remove-autostart": "bash scripts/uninstall-autostart.sh"
   }
 }

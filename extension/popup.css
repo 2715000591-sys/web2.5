@@ -73,7 +73,7 @@ h1 {
 }
 
 .field span,
-.sync-key-row span {
+.sync-status-row span {
   font-size: 12px;
   font-weight: 700;
   color: #61778b;
@@ -91,21 +91,20 @@ h1 {
   font-size: 13px;
 }
 
-.sync-key-row {
+.sync-status-row {
   display: grid;
   gap: 6px;
   margin-top: 10px;
 }
 
-.sync-key-row code {
+.sync-status-row strong {
   display: block;
   padding: 8px 10px;
   border-radius: 10px;
   background: rgba(22, 32, 42, 0.06);
   color: #16202a;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.45;
-  word-break: break-all;
 }
 
 .action-row {

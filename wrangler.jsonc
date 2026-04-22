@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "web25-public",
+  "main": "cloudflare/src/index.js",
+  "compatibility_date": "2026-04-21",
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "web25",
+      "database_id": "1de6007d-2cce-451b-ae5c-033650ab142f"
+    }
+  ],
+  "vars": {
+    "APP_ENV": "production",
+    "APP_URL": "https://web25-public.web25-boris.workers.dev",
+    "ALLOW_DEVELOPER_DEBUG_CODE": "true",
+    "OTP_TTL_MINUTES": "10",
+    "OTP_RESEND_SECONDS": "60",
+    "SESSION_TTL_DAYS": "30",
+    "GLOBAL_RULE_MIN_SYNC_KEYS": "1",
+    "GLOBAL_RULE_MIN_SCORE": "4",
+    "AUTO_GLOBAL_EXACT_WINDOW_DAYS": "30",
+    "AUTO_GLOBAL_EXACT_MIN_HIDES": "2"
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

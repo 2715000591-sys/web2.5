@@ -3,4 +3,9 @@ xcuserdata/
 DerivedData/
 build/
 .build/
+node_modules/
+.wrangler/
+.dev.vars
+.env
 backend/data/
+test-results/

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>web2.5 控制台</title>
+    <meta
+      name="description"
+      content="web2.5 控制台会区分全局共享成果和登录后的个人累计数据。"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body class="console-body">
+    <div class="site-shell">
+      <header class="hero console-hero">
+        <nav class="topbar">
+          <div class="brand">
+            <div class="brand-mark" aria-hidden="true">
+              <span></span>
+            </div>
+            <div>
+              <p class="eyebrow">web2.5 console</p>
+              <h1>全局基础过滤 + 你的个人成果</h1>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <a class="ghost-button" href="/">官网首页</a>
+            <a class="ghost-button" href="https://github.com/2715000591-sys/web2.5" target="_blank" rel="noreferrer">GitHub 备份</a>
+            <span id="syncModePill" class="status-pill muted">正在连接控制台</span>
+          </div>
+        </nav>
+
+        <div class="console-hero-grid">
+          <div class="hero-copy hero-copy-stack">
+            <p class="hero-kicker">基础广告过滤和低质量回复过滤，会先进入全局共享层。</p>
+            <p class="hero-text">
+              登录后，你看到的是自己的累计成果、自己已经绑定的设备数据，以及以后属于你的个性化控制能力。
+            </p>
+            <p id="dashboardStatus" class="console-hint">正在判断当前是公网控制台还是本地控制台。</p>
+          </div>
+
+          <aside class="console-sync-panel" id="authPanel">
+            <div class="panel-label">登录控制台</div>
+            <div class="auth-stack" id="loggedOutState">
+              <label class="sync-stack">
+                <span>邮箱</span>
+                <input id="emailInput" type="email" placeholder="name@example.com" />
+              </label>
+              <div class="sync-actions">
+                <button id="requestCodeButton" class="primary-button small-button" type="button">发送验证码</button>
+              </div>
+              <label class="sync-stack">
+                <span>验证码</span>
+                <input id="codeInput" type="text" inputmode="numeric" placeholder="6 位验证码" />
+              </label>
+              <div class="sync-actions">
+                <button id="verifyCodeButton" class="ghost-button small-button" type="button">登录控制台</button>
+              </div>
+              <p id="authHint" class="console-hint">登录后，你的个人累计数据和已绑定设备会在这里展开。</p>
+            </div>
+
+            <div class="auth-stack hidden" id="loggedInState">
+              <div class="session-line">
+                <span>当前账号</span>
+                <strong id="viewerEmail">-</strong>
+              </div>
+              <div class="sync-actions">
+                <button id="refreshDashboard" class="ghost-button small-button" type="button">刷新</button>
+                <button id="logoutButton" class="ghost-button small-button" type="button">退出登录</button>
+              </div>
+              <div class="binding-block">
+                <span class="panel-label subtle-label">已接入设备</span>
+                <div id="bindingList" class="binding-list">
+                  <span class="surface-note">登录后，已安装插件的设备会自动跟着账号接入。</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="auth-stack hidden" id="legacyState">
+              <div class="session-line">
+                <span>本地控制台</span>
+                <strong>仅供调试</strong>
+              </div>
+              <div class="sync-actions">
+                <button id="legacyRefreshDashboard" class="ghost-button small-button" type="button">刷新</button>
+              </div>
+              <p class="console-hint">正式使用请登录云端控制台。设备会自动跟着账号走，不需要手动复制任何东西。</p>
+            </div>
+          </aside>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <section class="dashboard-section hidden" id="cloudDashboardSection">
+          <div class="section-heading tight-heading">
+            <p class="eyebrow">全局共享层</p>
+            <h2>所有用户会一起受益的基础过滤成果。</h2>
+          </div>
+          <section class="metrics-panel global-metrics-panel">
+            <article class="metric-card global-metric-card global-metric-card-primary">
+              <div class="global-metric-copy">
+                <span class="global-metric-tag">共享成果</span>
+                <p class="global-metric-label">全局累计自动整理</p>
+                <small>进入全局共享过滤后的自动处理次数</small>
+              </div>
+              <div class="global-metric-value">
+                <strong id="globalAutoHideCount">0</strong>
+                <span class="global-metric-unit">次</span>
+              </div>
+            </article>
+            <article class="metric-card global-metric-card global-metric-card-accent">
+              <div class="global-metric-copy">
+                <span class="global-metric-tag">广告过滤</span>
+                <p class="global-metric-label">已跳过的官方广告</p>
+                <small>已合并主页与回复区的官方广告跳过次数</small>
+                <div class="global-metric-breakdown" aria-label="官方广告跳过细分">
+                  <span>主页 <strong id="globalAdHomeHideCount">0</strong></span>
+                  <span>回复区 <strong id="globalAdReplyHideCount">0</strong></span>
+                </div>
+              </div>
+              <div class="global-metric-value">
+                <strong id="globalAdHideCount">0</strong>
+                <span class="global-metric-unit">次</span>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="dashboard-section" id="personalDashboardSection">
+          <div class="section-heading tight-heading">
+            <p class="eyebrow">你的累计成果</p>
+            <h2>登录后只看你自己的累计、恢复和最近动作。</h2>
+          </div>
+          <section class="metrics-panel">
+            <article class="metric-card">
+              <span>累计自动整理</span>
+              <strong id="autoHideCount">0</strong>
+              <small>系统自动帮你处理的次数</small>
+            </article>
+            <article class="metric-card">
+              <span>累计手动标记</span>
+              <strong id="manualHideCount">0</strong>
+              <small>你亲手确认过的次数</small>
+            </article>
+            <article class="metric-card">
+              <span>累计恢复</span>
+              <strong id="manualAllowCount">0</strong>
+              <small>恢复误标的次数</small>
+            </article>
+            <article class="metric-card">
+              <span>累计涉及账号数</span>
+              <strong id="distinctHandleCount">0</strong>
+              <small>你的使用过程中至少命中过一次的账号</small>
+            </article>
+            <article class="metric-card">
+              <span>累计高频话术数</span>
+              <strong id="heroPhraseCount">0</strong>
+              <small>你的使用过程中已经进入统计的话术</small>
+            </article>
+            <article class="metric-card">
+              <span>已在主页跳过广告</span>
+              <strong id="adHomeHideCount">0</strong>
+              <small>与你绑定的数据里跳过的官方推广帖</small>
+            </article>
+            <article class="metric-card">
+              <span>已在回复区跳过广告</span>
+              <strong id="adReplyHideCount">0</strong>
+              <small>与你绑定的数据里跳过的回复流广告</small>
+            </article>
+          </section>
+        </section>
+
+        <section class="surface-card review-section" id="adSection">
+          <div class="surface-head">
+            <div>
+              <p class="eyebrow">官方广告记录</p>
+              <h3>默认收起，需要时再展开</h3>
+            </div>
+            <div class="review-head-actions">
+              <span id="adCountPill" class="surface-note">默认收起</span>
+              <button id="adToggleButton" class="ghost-button small-button" type="button">展开广告记录</button>
+            </div>
+          </div>
+          <p class="review-hint">这里只记下被跳过的 X 官方广告是谁发的，以及它出现在主页还是回复区，不会去抓广告视频本体。</p>
+          <div class="review-list review-list-collapsed" id="ad-list"></div>
+        </section>
+
+        <section class="surface-card review-section" id="reviewSection">
+          <div class="surface-head">
+            <div>
+              <p class="eyebrow">回复审查</p>
+              <h3>默认收起，需要时再展开</h3>
+            </div>
+            <div class="review-head-actions">
+              <span id="reviewCountPill" class="surface-note">默认收起</span>
+              <button id="reviewToggleButton" class="ghost-button small-button" type="button">展开审查区</button>
+            </div>
+          </div>
+          <p class="review-hint">这里继续只看回复记录。广告不会进入这里；登录后的个性化控制也会优先从主贴内容开始扩展。</p>
+          <div id="reviewTools" class="review-tools review-tools-collapsed">
+            <div class="review-toolbar">
+              <label class="review-search">
+                <span>搜索</span>
+                <input id="reviewSearchInput" type="text" placeholder="搜账号、句子或关键词" />
+              </label>
+              <div class="review-toolbar-actions">
+                <div class="review-filter-group" id="reviewFilterGroup">
+                  <button class="filter-chip active" data-filter="all" type="button">全部</button>
+                  <button class="filter-chip" data-filter="auto" type="button">web2.5 自动</button>
+                  <button class="filter-chip" data-filter="manual" type="button">你的动作</button>
+                </div>
+                <div class="review-filter-group" id="reviewSortGroup">
+                  <button class="filter-chip active" data-sort="time" type="button">按时间</button>
+                  <button class="filter-chip" data-sort="weight" type="button">按重复度</button>
+                </div>
+              </div>
+            </div>
+            <div class="review-list review-list-collapsed" id="review-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js?v=2026-04-22-console-ads-batch-1"></script>
+  </body>
+</html>

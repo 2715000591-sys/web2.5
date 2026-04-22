@@ -1,38 +1,90 @@
-const syncKeyInput = document.getElementById("syncKeyInput");
-const saveSyncKeyButton = document.getElementById("saveSyncKey");
-const refreshDashboardButton = document.getElementById("refreshDashboard");
 const dashboardStatus = document.getElementById("dashboardStatus");
-const tokenCloud = document.getElementById("token-cloud");
-const recentList = document.getElementById("recent-list");
-const recentCountPill = document.getElementById("recentCountPill");
+const syncModePill = document.getElementById("syncModePill");
+const reviewTools = document.getElementById("reviewTools");
 const reviewList = document.getElementById("review-list");
 const reviewSearchInput = document.getElementById("reviewSearchInput");
 const reviewToggleButton = document.getElementById("reviewToggleButton");
 const reviewCountPill = document.getElementById("reviewCountPill");
 const reviewFilterGroup = document.getElementById("reviewFilterGroup");
-const syncModePill = document.getElementById("syncModePill");
-const backendStatusValue = document.getElementById("backendStatusValue");
-const ownershipHint = document.getElementById("ownershipHint");
-const accountChip = document.getElementById("accountChip");
+const reviewSortGroup = document.getElementById("reviewSortGroup");
+const cloudDashboardSection = document.getElementById("cloudDashboardSection");
+const developerSection = document.getElementById("developerSection");
+const personalDashboardSection = document.getElementById("personalDashboardSection");
+const adSection = document.getElementById("adSection");
+const adList = document.getElementById("ad-list");
+const adToggleButton = document.getElementById("adToggleButton");
+const adCountPill = document.getElementById("adCountPill");
+const reviewSection = document.getElementById("reviewSection");
+const developerBannerText = document.getElementById("developerBannerText");
+const developerPendingList = document.getElementById("developerPendingList");
+const developerPendingPager = document.getElementById("developerPendingPager");
+const developerRuleList = document.getElementById("developerRuleList");
+const developerRulePager = document.getElementById("developerRulePager");
+const developerRevokedList = document.getElementById("developerRevokedList");
+const developerSelectAll = document.getElementById("developerSelectAll");
+const developerSelectAllText = document.getElementById("developerSelectAllText");
+const developerSelectionPill = document.getElementById("developerSelectionPill");
+const developerBatchConfirmButton = document.getElementById("developerBatchConfirmButton");
 
-let dashboardCache = null;
-let reviewExpanded = false;
-let reviewQuery = "";
-let reviewFilter = "all";
+const authPanel = document.getElementById("authPanel");
+const loggedOutState = document.getElementById("loggedOutState");
+const loggedInState = document.getElementById("loggedInState");
+const legacyState = document.getElementById("legacyState");
+const emailInput = document.getElementById("emailInput");
+const codeInput = document.getElementById("codeInput");
+const requestCodeButton = document.getElementById("requestCodeButton");
+const verifyCodeButton = document.getElementById("verifyCodeButton");
+const authHint = document.getElementById("authHint");
+const viewerEmail = document.getElementById("viewerEmail");
+const logoutButton = document.getElementById("logoutButton");
+const bindingList = document.getElementById("bindingList");
 
-const statNodes = {
-  heroHideCount: document.getElementById("heroHideCount"),
-  heroAutoActiveCount: document.getElementById("heroAutoActiveCount"),
-  heroManualActiveCount: document.getElementById("heroManualActiveCount"),
-  heroAllowCount: document.getElementById("heroAllowCount"),
-  heroPhraseCount: document.getElementById("heroPhraseCount"),
-  activeHiddenCount: document.getElementById("activeHiddenCount"),
-  activeAutoHiddenCount: document.getElementById("activeAutoHiddenCount"),
-  activeManualHiddenCount: document.getElementById("activeManualHiddenCount"),
+const refreshDashboardButton = document.getElementById("refreshDashboard");
+const legacyRefreshDashboard = document.getElementById("legacyRefreshDashboard");
+
+const personalStatNodes = {
   autoHideCount: document.getElementById("autoHideCount"),
   manualHideCount: document.getElementById("manualHideCount"),
   manualAllowCount: document.getElementById("manualAllowCount"),
-  distinctHandleCount: document.getElementById("distinctHandleCount")
+  distinctHandleCount: document.getElementById("distinctHandleCount"),
+  heroPhraseCount: document.getElementById("heroPhraseCount"),
+  adHomeHideCount: document.getElementById("adHomeHideCount"),
+  adReplyHideCount: document.getElementById("adReplyHideCount")
+};
+
+const globalStatNodes = {
+  autoHideCount: document.getElementById("globalAutoHideCount"),
+  adTotalHideCount: document.getElementById("globalAdHideCount"),
+  manualHideCount: document.getElementById("globalManualHideCount"),
+  distinctHandleCount: document.getElementById("globalDistinctHandleCount"),
+  heroPhraseCount: document.getElementById("globalPhraseCount"),
+  adHomeHideCount: document.getElementById("globalAdHomeHideCount"),
+  adReplyHideCount: document.getElementById("globalAdReplyHideCount")
+};
+
+const developerStatNodes = {
+  feedCount: document.getElementById("developerFeedCount"),
+  activeRuleCount: document.getElementById("developerActiveRuleCount"),
+  revokedCount: document.getElementById("developerRevokedCount"),
+  pendingCount: document.getElementById("developerPendingCount")
+};
+
+const POLL_INTERVAL_MS = 30000;
+
+const appState = {
+  mode: "detecting",
+  viewer: null,
+  dashboardCache: null,
+  adExpanded: false,
+  reviewExpanded: false,
+  reviewQuery: "",
+  reviewFilter: "all",
+  reviewSort: "time",
+  pollTimer: null,
+  developerLoginEnabled: false,
+  selectedDeveloperEventIds: new Set(),
+  developerPendingPage: 1,
+  developerRulePage: 1
 };
 
 function getBackendBaseUrl() {
@@ -65,6 +117,19 @@ function setStatus(message) {
   }
 }
 
+function setAuthHint(message) {
+  if (authHint) {
+    authHint.textContent = message;
+  }
+}
+
+function formatViewerLabel(viewer) {
+  if (!viewer || !viewer.email) {
+    return "-";
+  }
+  return viewer.isDeveloper ? `${viewer.email} · 开发者` : viewer.email;
+}
+
 function escapeHtml(value) {
   return String(value || "").replace(/[&<>"']/g, function (char) {
     return {
@@ -78,44 +143,46 @@ function escapeHtml(value) {
 }
 
 function setNumber(node, value) {
+  if (node) {
+    node.textContent = String(value || 0);
+  }
+}
+
+function setHidden(node, hidden) {
   if (!node) {
     return;
   }
-
-  node.textContent = String(value || 0);
+  node.classList.toggle("hidden", hidden);
 }
 
 function renderEmpty(container, message) {
-  if (!container) {
-    return;
+  if (container) {
+    container.innerHTML = `<div class="empty-state">${message}</div>`;
   }
-
-  container.innerHTML = `<div class="empty-state">${message}</div>`;
 }
 
-function shortSyncKey(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "未绑定";
+function describeDeveloperKey(key) {
+  const raw = String(key || "");
+  if (raw.startsWith("status:")) {
+    return "原文状态 ID";
   }
-
-  if (raw.length <= 16) {
-    return raw;
+  if (raw.startsWith("compact:")) {
+    return "压缩文本";
   }
-
-  return `${raw.slice(0, 8)}…${raw.slice(-6)}`;
+  if (raw.startsWith("text:")) {
+    return "清洗文本";
+  }
+  return "精确规则";
 }
 
 function formatRelativeTime(value) {
   if (!value) {
     return "刚刚";
   }
-
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-
   return new Intl.DateTimeFormat("zh-CN", {
     month: "numeric",
     day: "numeric",
@@ -127,96 +194,88 @@ function formatRelativeTime(value) {
 function getSourceMeta(source) {
   if (source === "auto_hide") {
     return {
-      label: "系统自动整理",
+      label: "web2.5 自动",
       className: "reason-pill auto"
     };
   }
 
   if (source === "manual_allow") {
     return {
-      label: "你恢复了误标",
+      label: "恢复误标",
       className: "reason-pill allow"
     };
   }
 
   return {
-    label: "你手动下沉",
+    label: "手动标记",
     className: "reason-pill manual"
   };
 }
 
-function renderTokenCloud(items) {
-  if (!tokenCloud) {
-    return;
+function getAdScopeMeta(eventType) {
+  if (eventType === "ad_reply_hide") {
+    return {
+      label: "回复区广告",
+      className: "reason-pill allow",
+      placementLabel: "出现在别人的回复区"
+    };
   }
 
-  if (!items || items.length === 0) {
-    renderEmpty(tokenCloud, "还没有同步到高频话术。等你继续使用后，这里会慢慢变成你的真实风险词板。");
-    return;
-  }
-
-  tokenCloud.innerHTML = "";
-  const list = document.createElement("div");
-  list.className = "phrase-list";
-
-  items.forEach((item, index) => {
-    const row = document.createElement("article");
-    row.className = "phrase-row";
-    row.innerHTML = `
-      <span class="phrase-rank">${index + 1}</span>
-      <div class="phrase-copy">
-        <strong>${escapeHtml(item.label)}</strong>
-        <small>累计命中 ${item.count} 次</small>
-      </div>
-      <span class="phrase-count">${item.count}</span>
-    `;
-    list.appendChild(row);
-  });
-
-  tokenCloud.appendChild(list);
+  return {
+    label: "主页广告",
+    className: "reason-pill auto",
+    placementLabel: "出现在主页时间线"
+  };
 }
 
-function renderRecentList(items) {
-  if (!recentList) {
-    return;
-  }
+function getAdAdvertiserLabel(item) {
+  const displayName = String(item && item.replyDisplayName ? item.replyDisplayName : "").trim();
+  const handle = String(item && item.replyHandle ? item.replyHandle : "").trim();
+  return [displayName, handle].filter(Boolean).join(" ") || "未识别广告主";
+}
 
-  const list = Array.isArray(items) ? items : [];
-  if (recentCountPill) {
-    recentCountPill.textContent = `最近 ${list.length} 条`;
-  }
+function getReviewEventType(item) {
+  return String((item && (item.eventType || item.source)) || "");
+}
 
-  if (list.length === 0) {
-    renderEmpty(recentList, "后台还没有收到动作记录。你在扩展里继续整理后，这里才会开始长出真实时间线。");
-    return;
-  }
-
-  recentList.innerHTML = "";
-  list.slice(0, 12).forEach((item) => {
-    const meta = getSourceMeta(item.eventType);
-    const subtitle = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
-    const row = document.createElement("article");
-    row.className = "recent-row";
-    row.innerHTML = `
-      <div class="recent-row-top">
-        <span class="${meta.className}">${meta.label}</span>
-        <time>${formatRelativeTime(item.createdAt)}</time>
-      </div>
-      <p class="recent-row-identity">${escapeHtml(subtitle || "未识别账号")}</p>
-      <p class="recent-row-body">${escapeHtml(item.replyText || "这条记录没有保存正文。")}</p>
-    `;
-    recentList.appendChild(row);
+function getChronologicalReviewItems(items) {
+  const list = Array.isArray(items) ? items.slice() : [];
+  list.sort((left, right) => {
+    const leftTime = new Date(left && left.createdAt ? left.createdAt : 0).getTime();
+    const rightTime = new Date(right && right.createdAt ? right.createdAt : 0).getTime();
+    return rightTime - leftTime;
   });
+  return list;
+}
+
+function getReviewWeightKey(item) {
+  return String(
+    (item && (item.compactText || item.normalizedText || item.replyText || item.replyHandle || item.replyDisplayName)) || ""
+  ).trim().toLowerCase();
+}
+
+function getReviewWeightCounts(items) {
+  const counts = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const key = getReviewWeightKey(item);
+    if (!key) {
+      return;
+    }
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return counts;
 }
 
 function getFilteredReviewItems(items) {
-  const list = Array.isArray(items) ? items : [];
-  const query = String(reviewQuery || "").trim().toLowerCase();
+  const list = getChronologicalReviewItems(items);
+  const query = String(appState.reviewQuery || "").trim().toLowerCase();
 
   return list.filter((item) => {
-    const matchFilter = reviewFilter === "all"
-      || (reviewFilter === "auto" && item.source === "auto_hide")
-      || (reviewFilter === "manual" && item.source === "manual_hide");
+    const eventType = getReviewEventType(item);
+    const matchFilter = appState.reviewFilter === "all"
+      || (appState.reviewFilter === "auto" && eventType === "auto_hide")
+      || (appState.reviewFilter === "manual" && (eventType === "manual_hide" || eventType === "manual_allow"));
+
     if (!matchFilter) {
       return false;
     }
@@ -236,134 +295,264 @@ function getFilteredReviewItems(items) {
 
 function updateReviewShell(totalCount, visibleCount) {
   if (reviewCountPill) {
-    if (totalCount === 0) {
-      reviewCountPill.textContent = "当前为空";
-    } else if (reviewQuery || reviewFilter !== "all") {
-      reviewCountPill.textContent = `匹配 ${visibleCount} / 共 ${totalCount} 条`;
+    if (!appState.reviewExpanded) {
+      reviewCountPill.textContent = "默认收起";
+    } else if (appState.reviewQuery || appState.reviewFilter !== "all") {
+      reviewCountPill.textContent = `匹配 ${visibleCount} / 最近 ${totalCount} 条`;
     } else {
-      reviewCountPill.textContent = `当前 ${totalCount} 条`;
+      reviewCountPill.textContent = `最近 ${totalCount} 条`;
     }
   }
 
   if (reviewToggleButton) {
-    reviewToggleButton.textContent = reviewExpanded ? "收起列表" : "展开列表";
+    reviewToggleButton.textContent = appState.reviewExpanded ? "收起审查区" : "展开审查区";
+  }
+
+  if (reviewTools) {
+    reviewTools.classList.toggle("review-tools-collapsed", !appState.reviewExpanded);
   }
 
   if (reviewList) {
-    reviewList.classList.toggle("review-list-collapsed", !reviewExpanded);
+    reviewList.classList.toggle("review-list-collapsed", !appState.reviewExpanded);
+  }
+
+  if (reviewSortGroup) {
+    Array.from(reviewSortGroup.querySelectorAll("[data-sort]")).forEach((button) => {
+      button.classList.toggle("active", button.dataset.sort === appState.reviewSort);
+    });
   }
 }
 
-function renderReviewList(items) {
-  if (!reviewList) {
+function updateAdShell(totalCount) {
+  if (adCountPill) {
+    adCountPill.textContent = appState.adExpanded ? `最近 ${totalCount} 条` : "默认收起";
+  }
+
+  if (adToggleButton) {
+    adToggleButton.textContent = appState.adExpanded ? "收起广告记录" : "展开广告记录";
+  }
+
+  if (adList) {
+    adList.classList.toggle("review-list-collapsed", !appState.adExpanded);
+  }
+}
+
+function renderAdList(items) {
+  if (!adList) {
     return;
   }
 
-  const sourceItems = Array.isArray(items) ? items : [];
-  const filteredItems = getFilteredReviewItems(sourceItems);
-  updateReviewShell(sourceItems.length, filteredItems.length);
+  const list = getChronologicalReviewItems(items);
+  updateAdShell(list.length);
 
-  if (!reviewExpanded) {
-    reviewList.innerHTML = "";
+  if (!appState.adExpanded) {
+    adList.innerHTML = "";
     return;
   }
 
-  if (sourceItems.length === 0) {
-    renderEmpty(reviewList, "当前没有仍在生效的整理记录。");
+  if (!list.length) {
+    renderEmpty(adList, "还没有记录到被跳过的官方广告。");
     return;
   }
 
-  if (filteredItems.length === 0) {
-    renderEmpty(reviewList, "没有找到匹配的记录。试试换个关键词，或者把筛选切回“全部”。");
-    return;
-  }
-
-  reviewList.innerHTML = "";
-  filteredItems.forEach((item) => {
-    const meta = getSourceMeta(item.source);
-    const subtitle = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
+  adList.innerHTML = "";
+  list.forEach((item) => {
+    const meta = getAdScopeMeta(String(item && item.eventType ? item.eventType : ""));
     const row = document.createElement("article");
-    row.className = "review-row";
+    row.className = "review-row ad-row";
     row.innerHTML = `
       <div class="review-row-top">
         <div class="review-row-title">
           <span class="${meta.className}">${meta.label}</span>
-          <strong>${escapeHtml(subtitle || "未识别账号")}</strong>
+          <strong>${escapeHtml(getAdAdvertiserLabel(item))}</strong>
         </div>
-        <time>${formatRelativeTime(item.createdAt)}</time>
+        <div class="review-row-meta">
+          <time>${escapeHtml(formatRelativeTime(item && item.createdAt ? item.createdAt : ""))}</time>
+        </div>
       </div>
-      <p class="review-body review-body-compact">${escapeHtml(item.replyText || "这条记录里没有保存正文。")}</p>
-      <div class="review-detail" hidden>
-        <p class="review-detail-copy">${escapeHtml(item.replyText || "这条记录里没有保存正文。")}</p>
-      </div>
-      <div class="review-actions">
-        <button class="ghost-button small-button review-toggle-detail" type="button">查看内容</button>
-        <button class="ghost-button small-button review-restore-button" type="button">这是误标，恢复这条</button>
-      </div>
+      <p class="review-body">${escapeHtml(meta.placementLabel)}</p>
     `;
-
-    const detail = row.querySelector(".review-detail");
-    const detailButton = row.querySelector(".review-toggle-detail");
-    const restoreButton = row.querySelector(".review-restore-button");
-
-    detailButton.addEventListener("click", function () {
-      const expanded = row.classList.toggle("review-row-expanded");
-      detail.hidden = !expanded;
-      detailButton.textContent = expanded ? "收起内容" : "查看内容";
-    });
-
-    restoreButton.addEventListener("click", function () {
-      restoreItem(item, restoreButton);
-    });
-
-    reviewList.appendChild(row);
+    adList.appendChild(row);
   });
 }
 
-function renderDashboard(payload) {
-  dashboardCache = payload || null;
-  const stats = payload && payload.stats ? payload.stats : {};
-  const activeHiddenItems = payload && Array.isArray(payload.activeHiddenItems) ? payload.activeHiddenItems : [];
-
-  setNumber(statNodes.heroHideCount, stats.activeHiddenCount || activeHiddenItems.length);
-  setNumber(statNodes.heroAutoActiveCount, stats.activeAutoHidden || 0);
-  setNumber(statNodes.heroManualActiveCount, stats.activeManualHidden || 0);
-  setNumber(statNodes.heroAllowCount, stats.manualAllowEvents || 0);
-  setNumber(statNodes.heroPhraseCount, stats.distinctHiddenPhrases || 0);
-
-  setNumber(statNodes.activeHiddenCount, stats.activeHiddenCount || activeHiddenItems.length);
-  setNumber(statNodes.activeAutoHiddenCount, stats.activeAutoHidden || 0);
-  setNumber(statNodes.activeManualHiddenCount, stats.activeManualHidden || 0);
+function setMetricGroup(statNodes, stats) {
+  const adHomeHideEvents = stats.adHomeHideEvents || 0;
+  const adReplyHideEvents = stats.adReplyHideEvents || 0;
   setNumber(statNodes.autoHideCount, stats.autoHideEvents || 0);
+  if (statNodes.adTotalHideCount) {
+    setNumber(statNodes.adTotalHideCount, adHomeHideEvents + adReplyHideEvents);
+  }
   setNumber(statNodes.manualHideCount, stats.manualHideEvents || 0);
-  setNumber(statNodes.manualAllowCount, stats.manualAllowEvents || 0);
+  if (statNodes.manualAllowCount) {
+    setNumber(statNodes.manualAllowCount, stats.manualAllowEvents || 0);
+  }
   setNumber(statNodes.distinctHandleCount, stats.distinctHiddenHandles || 0);
-
-  renderTokenCloud(payload && payload.topPhrases ? payload.topPhrases : []);
-  renderRecentList(payload && payload.recent ? payload.recent : []);
-  renderReviewList(activeHiddenItems);
+  setNumber(statNodes.heroPhraseCount, stats.distinctHiddenPhrases || 0);
+  setNumber(statNodes.adHomeHideCount, adHomeHideEvents);
+  setNumber(statNodes.adReplyHideCount, adReplyHideEvents);
 }
 
-async function restoreItem(item, button) {
-  const syncKey = String(syncKeyInput.value || "").trim();
-  if (!syncKey) {
-    setStatus("先绑定同步密钥，才能恢复误标。");
+function setDeveloperStats(stats) {
+  const values = stats || {};
+  setNumber(developerStatNodes.feedCount, values.feedCount || 0);
+  setNumber(developerStatNodes.activeRuleCount, values.activeRuleCount || 0);
+  setNumber(developerStatNodes.revokedCount, values.revokedCount || 0);
+  setNumber(developerStatNodes.pendingCount, values.pendingCount || 0);
+}
+
+function getCachedDeveloperPayload() {
+  return appState.dashboardCache && appState.dashboardCache.developer
+    ? appState.dashboardCache.developer
+    : null;
+}
+
+function getCachedPendingDeveloperFeeds() {
+  const developer = getCachedDeveloperPayload();
+  return developer && Array.isArray(developer.pendingFeeds) ? developer.pendingFeeds : [];
+}
+
+function getCachedPendingDeveloperTotal() {
+  const developer = getCachedDeveloperPayload();
+  const stats = developer && developer.stats ? developer.stats : {};
+  return Number(stats.pendingCount || 0);
+}
+
+function getCachedPendingDeveloperPagination() {
+  const developer = getCachedDeveloperPayload();
+  return developer && developer.pendingPagination ? developer.pendingPagination : null;
+}
+
+function getSafePaginationMeta(meta) {
+  const source = meta || {};
+  const currentPage = Math.max(1, Number(source.currentPage || 1) || 1);
+  const totalPages = Math.max(0, Number(source.totalPages || 0) || 0);
+  const totalItems = Math.max(0, Number(source.totalItems || 0) || 0);
+  return {
+    currentPage,
+    totalPages,
+    totalItems,
+    pageSize: Math.max(1, Number(source.pageSize || 1) || 1),
+    hasPrev: Boolean(source.hasPrev),
+    hasNext: Boolean(source.hasNext)
+  };
+}
+
+function syncDeveloperPaginationState(payload) {
+  const developer = payload || {};
+  const pendingPagination = getSafePaginationMeta(developer.pendingPagination);
+  const activeRulePagination = getSafePaginationMeta(developer.activeRulePagination);
+  appState.developerPendingPage = pendingPagination.currentPage;
+  appState.developerRulePage = activeRulePagination.currentPage;
+}
+
+function getDeveloperDashboardRequestState() {
+  return {
+    developerPendingPage: Math.max(1, Number(appState.developerPendingPage || 1) || 1),
+    developerRulePage: Math.max(1, Number(appState.developerRulePage || 1) || 1)
+  };
+}
+
+function getSelectedDeveloperCount() {
+  return Array.from(appState.selectedDeveloperEventIds).filter(Boolean).length;
+}
+
+function updateDeveloperSelectionUi(items) {
+  const list = Array.isArray(items) ? items : [];
+  const selectedCount = getSelectedDeveloperCount();
+  const selectedOnPageCount = list.filter((item) => appState.selectedDeveloperEventIds.has(Number(item.eventId || 0))).length;
+  const totalPendingCount = Math.max(getCachedPendingDeveloperTotal(), list.length);
+  const pendingPagination = getSafePaginationMeta(getCachedPendingDeveloperPagination());
+
+  if (developerSelectionPill) {
+    if (totalPendingCount > 0) {
+      const parts = [`已选 ${selectedCount} 条`];
+      if (list.length > 0) {
+        parts.push(`此页已选 ${selectedOnPageCount} / ${list.length}`);
+      }
+      parts.push(`共 ${totalPendingCount} 条`);
+      if (pendingPagination.totalPages > 1) {
+        parts.push(`第 ${pendingPagination.currentPage} / ${pendingPagination.totalPages} 页`);
+      }
+      developerSelectionPill.textContent = parts.join(" · ");
+    } else {
+      developerSelectionPill.textContent = "当前没有待确认样本";
+    }
+  }
+
+  if (developerSelectAll) {
+    developerSelectAll.checked = list.length > 0 && selectedOnPageCount === list.length;
+    developerSelectAll.indeterminate = selectedOnPageCount > 0 && selectedOnPageCount < list.length;
+    developerSelectAll.disabled = list.length === 0;
+  }
+
+  if (developerSelectAllText) {
+    if (list.length === 0) {
+      developerSelectAllText.textContent = "当前没有待确认样本";
+    } else {
+      developerSelectAllText.textContent = `全选此页 ${list.length} 条`;
+    }
+  }
+
+  if (developerBatchConfirmButton) {
+    developerBatchConfirmButton.disabled = selectedCount === 0;
+    if (selectedCount === 0) {
+      developerBatchConfirmButton.textContent = "先勾选样本";
+    } else if (selectedCount === 1) {
+      developerBatchConfirmButton.textContent = "确认已选 1 条";
+    } else {
+      developerBatchConfirmButton.textContent = `批量确认 ${selectedCount} 条`;
+    }
+  }
+}
+
+function syncDeveloperSelectionState(items) {
+  const list = Array.isArray(items) ? items : [];
+  updateDeveloperSelectionUi(list);
+}
+
+function applyDeveloperPayload(payload) {
+  if (!appState.dashboardCache) {
+    appState.dashboardCache = {};
+  }
+  appState.dashboardCache.developer = payload || null;
+  renderDeveloperSection(payload || null);
+}
+
+function renderBindings(bindings) {
+  if (!bindingList) {
+    return;
+  }
+  const list = Array.isArray(bindings) ? bindings : [];
+  if (!list.length) {
+    bindingList.innerHTML = `<span class="surface-note">当前账号下还没有已接入设备。</span>`;
     return;
   }
 
-  const baseUrl = getBackendBaseUrl();
+  bindingList.innerHTML = list.map((item) => `
+    <div class="binding-item">
+      <strong>${escapeHtml(String(item && item.label ? item.label : "已接入"))}</strong>
+      <span class="surface-note">${escapeHtml(`最近活跃 ${formatRelativeTime(item.lastSeenAt)}`)}</span>
+    </div>
+  `).join("");
+}
+
+async function restoreItem(item, button) {
+  const syncKey = String(getActiveSyncKey() || "").trim();
+  if (!syncKey) {
+    setStatus("这台设备还没接上账号，刷新一下再试。");
+    return;
+  }
+
   if (button) {
     button.disabled = true;
     button.textContent = "正在恢复...";
   }
-  setStatus("正在把这条误标恢复回去...");
+  setStatus("正在恢复这条内容...");
 
   try {
-    const response = await fetch(`${baseUrl}/api/events`, {
+    const result = await requestJson("/api/events", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
       body: JSON.stringify({
         syncKey,
         source: "dashboard",
@@ -378,130 +567,880 @@ async function restoreItem(item, button) {
         compactText: item.compactText || ""
       })
     });
-    const payload = await response.json();
 
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "restore-failed");
+    if (!result.ok || !result.data || !result.data.ok) {
+      throw new Error((result.data && result.data.error) || "restore-failed");
     }
 
-    await fetchDashboard("已经把这条误标恢复了。Safari 那边刷新或重开后，也会吃到这次改动。");
+    await refreshDashboard("这条内容已经恢复。");
   } catch (error) {
-    setStatus("恢复失败了。先别慌，点一次刷新就能重新拉取后台状态。");
+    setStatus("恢复失败了，点刷新再试一次。");
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = "这是误标，恢复这条";
+      button.textContent = "恢复这条";
     }
   }
 }
 
-function updateConnectionCopy(syncKey, connected) {
-  if (syncModePill) {
-    syncModePill.textContent = syncKey
-      ? `当前密钥 ${shortSyncKey(syncKey)}`
-      : "先绑定同步密钥";
-  }
-
-  if (backendStatusValue) {
-    backendStatusValue.textContent = connected
-      ? "本地后台已连接，网页里看到的是实时数据。"
-      : "还没连到后台。等后台启动后，这里会自动变成实时数据。";
-  }
-
-  if (ownershipHint) {
-    ownershipHint.textContent = syncKey
-      ? `当前这份记录跟着同步密钥 ${shortSyncKey(syncKey)} 走。默认不是全体用户共享。`
-      : "当前还没绑定同步密钥，所以网站暂时不知道该显示谁的数据。";
-  }
-
-  if (accountChip) {
-    accountChip.textContent = syncKey ? "当前按同步密钥隔离" : "账户系统后续开放";
-  }
-}
-
-async function fetchDashboard(successMessage) {
-  const syncKey = String(syncKeyInput.value || "").trim();
-  if (!syncKey) {
-    renderDashboard({
-      stats: {
-        activeHiddenCount: 0,
-        activeAutoHidden: 0,
-        activeManualHidden: 0,
-        autoHideEvents: 0,
-        manualHideEvents: 0,
-        manualAllowEvents: 0,
-        distinctHiddenHandles: 0,
-        distinctHiddenPhrases: 0
-      },
-      topPhrases: [],
-      recent: [],
-      activeHiddenItems: []
-    });
-    updateConnectionCopy("", false);
-    setStatus("先把扩展里的同步密钥贴进来，网页才能读取你的真实数据。");
+async function confirmDeveloperFeed(item, button) {
+  if (!item || !item.eventId) {
     return;
   }
 
-  const baseUrl = getBackendBaseUrl();
-  setStatus("正在读取真实数据...");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "正在确认...";
+  }
+  setStatus("正在把这条明确垃圾加入全局基础过滤...");
 
   try {
-    const response = await fetch(`${baseUrl}/api/dashboard?syncKey=${encodeURIComponent(syncKey)}`, {
-      cache: "no-store"
+    const result = await requestJson("/api/developer/confirm-feed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(Object.assign({
+        eventId: item.eventId
+      }, getDeveloperDashboardRequestState()))
     });
-    const payload = await response.json();
 
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "dashboard-request-failed");
+    if (!result.ok || !result.data || !result.data.ok) {
+      throw new Error((result.data && result.data.error) || "developer-confirm-failed");
     }
 
-    window.localStorage.setItem("web25_sync_key", syncKey);
-    renderDashboard(payload);
-    updateConnectionCopy(syncKey, true);
-    setStatus(successMessage || "已经同步到真实记录。这里看到的不是演示数据，而是当前后台里的实际内容。");
+    appState.selectedDeveloperEventIds.delete(Number(item.eventId || 0));
+    applyDeveloperPayload(result.data.developer || null);
+    const remainingCount = getCachedPendingDeveloperTotal();
+    setStatus(remainingCount > 0
+      ? `这条明确垃圾已经进入全局基础过滤。当前还剩 ${remainingCount} 条待确认，不是卡住。`
+      : "这条明确垃圾已经进入全局基础过滤。当前没有待确认样本了。");
   } catch (error) {
-    renderDashboard({
-      stats: {
-        activeHiddenCount: 0,
-        activeAutoHidden: 0,
-        activeManualHidden: 0,
-        autoHideEvents: 0,
-        manualHideEvents: 0,
-        manualAllowEvents: 0,
-        distinctHiddenHandles: 0,
-        distinctHiddenPhrases: 0
-      },
-      topPhrases: [],
-      recent: [],
-      activeHiddenItems: dashboardCache && dashboardCache.activeHiddenItems ? dashboardCache.activeHiddenItems : []
-    });
-    updateConnectionCopy(syncKey, false);
-    setStatus("暂时还没连上后台。确认服务已经启动后，再点一次刷新。");
+    setStatus("这次没确认成功，等一下再试一次。");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "确认进入全局";
+    }
   }
 }
 
-saveSyncKeyButton.addEventListener("click", function () {
-  fetchDashboard();
-});
+async function dismissDeveloperFeed(item, button) {
+  if (!item || !item.eventId) {
+    return;
+  }
 
-refreshDashboardButton.addEventListener("click", function () {
-  fetchDashboard();
-});
+  if (button) {
+    button.disabled = true;
+    button.textContent = "正在排除...";
+  }
+  setStatus("正在把这条样本从待确认里排除...");
+
+  try {
+    const result = await requestJson("/api/developer/dismiss-feed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(Object.assign({
+        eventId: item.eventId
+      }, getDeveloperDashboardRequestState()))
+    });
+
+    if (!result.ok || !result.data || !result.data.ok) {
+      throw new Error((result.data && result.data.error) || "developer-dismiss-failed");
+    }
+
+    appState.selectedDeveloperEventIds.delete(Number(item.eventId || 0));
+    applyDeveloperPayload(result.data.developer || null);
+    const remainingCount = getCachedPendingDeveloperTotal();
+    setStatus(remainingCount > 0
+      ? `这条样本已标记为不是垃圾，并从待确认里排除了。当前还剩 ${remainingCount} 条待确认。`
+      : "这条样本已标记为不是垃圾，并从待确认里排除了。当前没有待确认样本了。");
+  } catch (error) {
+    setStatus("这次没排除成功，等一下再试一次。");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "不是垃圾";
+    }
+  }
+}
+
+async function confirmSelectedDeveloperFeeds() {
+  const eventIds = Array.from(appState.selectedDeveloperEventIds).filter(Boolean);
+  if (!eventIds.length) {
+    setStatus("先勾选待确认样本，再批量加入全局。");
+    return;
+  }
+
+  if (developerBatchConfirmButton) {
+    developerBatchConfirmButton.disabled = true;
+    developerBatchConfirmButton.textContent = "正在批量确认...";
+  }
+  setStatus(`正在批量确认 ${eventIds.length} 条明确垃圾...`);
+
+  try {
+    const result = await requestJson("/api/developer/confirm-feed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(Object.assign({
+        eventIds
+      }, getDeveloperDashboardRequestState()))
+    });
+
+    if (!result.ok || !result.data || !result.data.ok) {
+      throw new Error((result.data && result.data.error) || "developer-batch-confirm-failed");
+    }
+
+    appState.selectedDeveloperEventIds = new Set();
+    applyDeveloperPayload(result.data.developer || null);
+    const confirmedCount = result.data.confirmedCount || eventIds.length;
+    const remainingCount = getCachedPendingDeveloperTotal();
+    setStatus(remainingCount > 0
+      ? `已批量把 ${confirmedCount} 条样本加入全局基础过滤。当前还剩 ${remainingCount} 条待确认。`
+      : `已批量把 ${confirmedCount} 条样本加入全局基础过滤。当前没有待确认样本了。`);
+  } catch (error) {
+    setStatus("这次批量确认没成功，等一下再试一次。");
+  } finally {
+    updateDeveloperSelectionUi(getCachedPendingDeveloperFeeds());
+  }
+}
+
+async function revokeDeveloperRule(item, button) {
+  if (!item || !item.id) {
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "正在撤回...";
+  }
+  setStatus("正在从全局规则里撤回这条开发者样本...");
+
+  try {
+    const result = await requestJson("/api/developer/revoke-feed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(Object.assign({
+        decisionId: item.id
+      }, getDeveloperDashboardRequestState()))
+    });
+
+    if (!result.ok || !result.data || !result.data.ok) {
+      throw new Error((result.data && result.data.error) || "developer-revoke-failed");
+    }
+
+    applyDeveloperPayload(result.data.developer || null);
+    setStatus("这条开发者精确规则已经从全局基础过滤里撤回。");
+  } catch (error) {
+    setStatus("这次没撤回成功，等一下再试一次。");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "撤回全局规则";
+    }
+  }
+}
+
+function renderReviewList(items) {
+  if (!reviewList) {
+    return;
+  }
+
+  const sourceItems = getChronologicalReviewItems(items);
+  const filteredItems = getFilteredReviewItems(sourceItems);
+  const weightCounts = getReviewWeightCounts(filteredItems);
+  const sortedItems = filteredItems.slice();
+
+  if (appState.reviewSort === "weight") {
+    sortedItems.sort((left, right) => {
+      const rightCount = weightCounts.get(getReviewWeightKey(right)) || 0;
+      const leftCount = weightCounts.get(getReviewWeightKey(left)) || 0;
+      if (rightCount !== leftCount) {
+        return rightCount - leftCount;
+      }
+      const rightTime = new Date(right && right.createdAt ? right.createdAt : 0).getTime();
+      const leftTime = new Date(left && left.createdAt ? left.createdAt : 0).getTime();
+      return rightTime - leftTime;
+    });
+  }
+
+  updateReviewShell(sourceItems.length, filteredItems.length);
+
+  if (!appState.reviewExpanded) {
+    reviewList.innerHTML = "";
+    return;
+  }
+
+  if (sourceItems.length === 0) {
+    renderEmpty(reviewList, "还没有最近真实记录。");
+    return;
+  }
+
+  if (sortedItems.length === 0) {
+    renderEmpty(reviewList, "没有找到匹配结果。");
+    return;
+  }
+
+  reviewList.innerHTML = "";
+  sortedItems.forEach((item) => {
+    const eventType = getReviewEventType(item);
+    const meta = getSourceMeta(eventType);
+    const title = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
+    const canRestore = eventType === "auto_hide" || eventType === "manual_hide";
+    const repeatCount = weightCounts.get(getReviewWeightKey(item)) || 0;
+    const repeatNote = repeatCount > 1 ? `近${sourceItems.length}条里出现 ${repeatCount} 次` : "";
+    const row = document.createElement("article");
+    row.className = "review-row";
+    row.innerHTML = `
+      <div class="review-row-top">
+        <div class="review-row-title">
+          <span class="${meta.className}">${meta.label}</span>
+          <strong>${escapeHtml(title || "未识别账号")}</strong>
+        </div>
+        <div class="review-row-meta">
+          ${repeatNote ? `<span class="surface-note review-weight-note">${escapeHtml(repeatNote)}</span>` : ""}
+          <time>${formatRelativeTime(item.createdAt)}</time>
+        </div>
+      </div>
+      <p class="review-body">${escapeHtml(item.replyText || "这条记录里没有保存正文。")}</p>
+      ${canRestore ? `
+        <div class="review-actions">
+          <button class="ghost-button small-button review-restore-button" type="button">恢复这条</button>
+        </div>
+      ` : `
+        <div class="review-actions">
+          <span class="surface-note">这条已经恢复</span>
+        </div>
+      `}
+    `;
+
+    if (canRestore) {
+      const restoreButton = row.querySelector(".review-restore-button");
+      restoreButton.addEventListener("click", function () {
+        restoreItem(item, restoreButton);
+      });
+    }
+
+    reviewList.appendChild(row);
+  });
+}
+
+function buildDeveloperKeyPills(keys) {
+  return (Array.isArray(keys) ? keys : []).map((key) => `
+    <span class="developer-key-pill">${escapeHtml(describeDeveloperKey(key))}</span>
+  `).join("");
+}
+
+function getDeveloperPagerPages(currentPage, totalPages) {
+  if (totalPages <= 6) {
+    return Array.from({ length: totalPages }, function (_, index) {
+      return index + 1;
+    });
+  }
+  if (currentPage <= 3) {
+    return [1, 2, 3, 4, "ellipsis", totalPages];
+  }
+  if (currentPage >= totalPages - 2) {
+    return [1, "ellipsis", totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, "ellipsis", currentPage - 1, currentPage, currentPage + 1, "ellipsis", totalPages];
+}
+
+function renderDeveloperPager(container, pagination, mode) {
+  if (!container) {
+    return;
+  }
+
+  const meta = getSafePaginationMeta(pagination);
+  if (meta.totalPages <= 1) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const summary = `第 ${meta.currentPage} / ${meta.totalPages} 页 · 共 ${meta.totalItems} 条`;
+  const pages = getDeveloperPagerPages(meta.currentPage, meta.totalPages);
+
+  container.innerHTML = `
+    <div class="developer-pager-summary">${escapeHtml(summary)}</div>
+    <div class="developer-pager-buttons">
+      <button class="ghost-button small-button developer-page-button" type="button" data-page-action="prev" ${meta.hasPrev ? "" : "disabled"}>上一页</button>
+      ${pages.map((page) => page === "ellipsis"
+        ? `<span class="developer-page-ellipsis">…</span>`
+        : `<button class="ghost-button small-button developer-page-button${page === meta.currentPage ? " active" : ""}" type="button" data-page="${page}">${page}</button>`
+      ).join("")}
+      <button class="ghost-button small-button developer-page-button" type="button" data-page-action="next" ${meta.hasNext ? "" : "disabled"}>下一页</button>
+    </div>
+  `;
+
+  Array.from(container.querySelectorAll("[data-page]")).forEach((button) => {
+    button.addEventListener("click", function () {
+      const nextPage = Number(button.getAttribute("data-page") || 0);
+      if (!nextPage) {
+        return;
+      }
+      if (mode === "pending") {
+        changeDeveloperPendingPage(nextPage);
+        return;
+      }
+      changeDeveloperRulePage(nextPage);
+    });
+  });
+
+  Array.from(container.querySelectorAll("[data-page-action]")).forEach((button) => {
+    button.addEventListener("click", function () {
+      const action = String(button.getAttribute("data-page-action") || "");
+      const nextPage = action === "prev" ? meta.currentPage - 1 : meta.currentPage + 1;
+      if (mode === "pending") {
+        changeDeveloperPendingPage(nextPage);
+        return;
+      }
+      changeDeveloperRulePage(nextPage);
+    });
+  });
+}
+
+async function changeDeveloperPendingPage(page) {
+  const nextPage = Math.max(1, Number(page || 1) || 1);
+  if (nextPage === appState.developerPendingPage) {
+    return;
+  }
+  appState.developerPendingPage = nextPage;
+  await fetchCloudDashboard(`已切到待确认第 ${nextPage} 页。`);
+}
+
+async function changeDeveloperRulePage(page) {
+  const nextPage = Math.max(1, Number(page || 1) || 1);
+  if (nextPage === appState.developerRulePage) {
+    return;
+  }
+  appState.developerRulePage = nextPage;
+  await fetchCloudDashboard(`已切到全局规则第 ${nextPage} 页。`);
+}
+
+function renderDeveloperPendingFeeds(items, pagination) {
+  if (!developerPendingList) {
+    return;
+  }
+  const list = Array.isArray(items) ? items : [];
+  syncDeveloperSelectionState(list);
+  if (!list.length) {
+    renderEmpty(developerPendingList, "当前没有待你确认的新样本。");
+    renderDeveloperPager(developerPendingPager, pagination, "pending");
+    return;
+  }
+
+  developerPendingList.innerHTML = "";
+  list.forEach((item) => {
+    const title = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
+    const eventId = Number(item.eventId || 0);
+    const isSelected = appState.selectedDeveloperEventIds.has(eventId);
+    const row = document.createElement("article");
+    row.className = "developer-row";
+    row.innerHTML = `
+      <div class="developer-row-shell">
+        <label class="developer-row-select">
+          <input class="developer-select-input" type="checkbox" ${isSelected ? "checked" : ""} />
+        </label>
+        <div class="developer-row-main">
+          <div class="developer-row-top">
+            <div>
+              <strong>${escapeHtml(title || "未识别账号")}</strong>
+              <p class="developer-impact">${escapeHtml(item.impactLabel || "确认后会影响全局基础过滤。")}</p>
+            </div>
+            <time>${escapeHtml(formatRelativeTime(item.createdAt))}</time>
+          </div>
+          <div class="developer-key-list">${buildDeveloperKeyPills(item.exactKeys)}</div>
+          <p class="developer-body">${escapeHtml(item.replyText || "这条样本没有保存正文。")}</p>
+          <div class="developer-row-actions">
+            <span class="surface-note muted-note">先把误判样本排掉，再决定要不要进全局</span>
+            <div class="developer-row-button-group">
+              <button class="ghost-button small-button developer-dismiss-button" type="button">不是垃圾</button>
+              <button class="primary-button small-button developer-confirm-button" type="button">确认进入全局</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    const selectInput = row.querySelector(".developer-select-input");
+    selectInput.addEventListener("change", function () {
+      if (selectInput.checked) {
+        appState.selectedDeveloperEventIds.add(eventId);
+      } else {
+        appState.selectedDeveloperEventIds.delete(eventId);
+      }
+      updateDeveloperSelectionUi(list);
+    });
+    const dismissButton = row.querySelector(".developer-dismiss-button");
+    dismissButton.addEventListener("click", function () {
+      dismissDeveloperFeed(item, dismissButton);
+    });
+    const confirmButton = row.querySelector(".developer-confirm-button");
+    confirmButton.addEventListener("click", function () {
+      confirmDeveloperFeed(item, confirmButton);
+    });
+    developerPendingList.appendChild(row);
+  });
+  renderDeveloperPager(developerPendingPager, pagination, "pending");
+}
+
+function renderDeveloperRules(items, pagination) {
+  if (!developerRuleList) {
+    return;
+  }
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    renderEmpty(developerRuleList, "当前还没有通过你确认进入全局的精确规则。");
+    renderDeveloperPager(developerRulePager, pagination, "rule");
+    return;
+  }
+
+  developerRuleList.innerHTML = "";
+  list.forEach((item) => {
+    const title = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
+    const row = document.createElement("article");
+    row.className = "developer-row";
+    row.innerHTML = `
+      <div class="developer-row-top">
+        <div>
+          <strong>${escapeHtml(title || "未识别账号")}</strong>
+          <p class="developer-impact">${escapeHtml(item.impactLabel || "这条规则正在影响全局基础过滤。")}</p>
+        </div>
+        <time>${escapeHtml(formatRelativeTime(item.lastConfirmedAt || item.createdAt))}</time>
+      </div>
+      <div class="developer-key-list">${buildDeveloperKeyPills(item.exactKeys)}</div>
+      <p class="developer-body">${escapeHtml(item.replyText || "这条规则没有保存正文。")}</p>
+      <div class="developer-row-actions">
+        <span class="surface-note muted-note">这会立刻撤回全局规则，不是只影响你自己</span>
+        <button class="ghost-button small-button developer-revoke-button" type="button">撤回全局规则</button>
+      </div>
+    `;
+    const revokeButton = row.querySelector(".developer-revoke-button");
+    revokeButton.addEventListener("click", function () {
+      revokeDeveloperRule(item, revokeButton);
+    });
+    developerRuleList.appendChild(row);
+  });
+  renderDeveloperPager(developerRulePager, pagination, "rule");
+}
+
+function renderDeveloperRevoked(items) {
+  if (!developerRevokedList) {
+    return;
+  }
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) {
+    renderEmpty(developerRevokedList, "你还没有撤回过开发者全局规则。");
+    return;
+  }
+
+  developerRevokedList.innerHTML = "";
+  list.forEach((item) => {
+    const title = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
+    const row = document.createElement("article");
+    row.className = "developer-row developer-row-muted";
+    row.innerHTML = `
+      <div class="developer-row-top">
+        <div>
+          <strong>${escapeHtml(title || "未识别账号")}</strong>
+          <p class="developer-impact">${escapeHtml(item.impactLabel || "这条曾经进入全局，后来被你撤回。")}</p>
+        </div>
+        <time>${escapeHtml(formatRelativeTime(item.revokedAt || item.lastConfirmedAt || item.createdAt))}</time>
+      </div>
+      <div class="developer-key-list">${buildDeveloperKeyPills(item.exactKeys)}</div>
+      <p class="developer-body">${escapeHtml(item.replyText || "这条规则没有保存正文。")}</p>
+    `;
+    developerRevokedList.appendChild(row);
+  });
+}
+
+function renderDeveloperSection(payload) {
+  const isDeveloper = Boolean(appState.viewer && appState.viewer.isDeveloper);
+  setHidden(developerSection, !isDeveloper);
+  if (!isDeveloper) {
+    appState.selectedDeveloperEventIds = new Set();
+    appState.developerPendingPage = 1;
+    appState.developerRulePage = 1;
+    setDeveloperStats({});
+    renderDeveloperPendingFeeds([], null);
+    renderDeveloperRules([], null);
+    renderDeveloperRevoked([]);
+    return;
+  }
+
+  const developer = payload || {};
+  syncDeveloperPaginationState(developer);
+  const stats = developer.stats || {};
+  const pendingPagination = getSafePaginationMeta(developer.pendingPagination);
+  setDeveloperStats(stats);
+  renderDeveloperPendingFeeds(developer.pendingFeeds || [], developer.pendingPagination);
+  renderDeveloperRules(developer.activeRules || [], developer.activeRulePagination);
+  renderDeveloperRevoked(developer.revokedRules || []);
+
+  if (developerBannerText) {
+    developerBannerText.textContent = stats.pendingCount
+      ? pendingPagination.totalPages > 1
+        ? `当前还有 ${stats.pendingCount} 条待确认样本，共 ${pendingPagination.totalPages} 页，现在是第 ${pendingPagination.currentPage} 页。已选内容会跨页保留；全选只作用于当前页。`
+        : `当前还有 ${stats.pendingCount} 条待确认样本。已选内容会跨页保留；全选只作用于当前页。`
+      : "当前没有新的待确认样本。你之后的每一次高影响投喂，都会先在这里让你确认一次。";
+  }
+}
+
+function getActiveSyncKey() {
+  return getSyncKeyFromPage();
+}
+
+function renderCloudMode(loggedIn) {
+  appState.mode = "cloud";
+  setHidden(loggedOutState, Boolean(loggedIn));
+  setHidden(loggedInState, !loggedIn);
+  setHidden(legacyState, true);
+  setHidden(cloudDashboardSection, !loggedIn);
+  setHidden(developerSection, true);
+  setHidden(personalDashboardSection, !loggedIn);
+  setHidden(adSection, !loggedIn);
+  setHidden(reviewSection, !loggedIn);
+  if (syncModePill) {
+    syncModePill.textContent = loggedIn ? "已登录云端控制台" : "登录后查看个人控制台";
+  }
+}
+
+function renderLegacyMode() {
+  appState.mode = "legacy";
+  setHidden(loggedOutState, true);
+  setHidden(loggedInState, true);
+  setHidden(legacyState, false);
+  setHidden(cloudDashboardSection, true);
+  setHidden(developerSection, true);
+  setHidden(personalDashboardSection, false);
+  setHidden(adSection, false);
+  setHidden(reviewSection, false);
+  if (syncModePill) {
+    syncModePill.textContent = "本地控制台";
+  }
+}
+
+async function requestJson(path, options) {
+  const endpoint = path.startsWith("http") ? path : `${getBackendBaseUrl()}${path}`;
+  try {
+    const response = await fetch(endpoint, Object.assign({
+      cache: "no-store",
+      credentials: "include"
+    }, options || {}));
+    let data = {};
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = {};
+    }
+    return {
+      ok: response.ok,
+      status: response.status,
+      data
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: {},
+      error: error && error.message ? error.message : String(error)
+    };
+  }
+}
+
+async function detectConsoleMode() {
+  setStatus("正在连接控制台...");
+  const result = await requestJson("/api/me");
+  if (result.ok && result.data && result.data.mode === "cloud") {
+    appState.developerLoginEnabled = Boolean(result.data.developerLoginEnabled);
+    appState.viewer = result.data.loggedIn ? result.data.viewer : null;
+    renderCloudMode(Boolean(appState.viewer));
+    if (appState.viewer) {
+      viewerEmail.textContent = formatViewerLabel(appState.viewer);
+      await refreshDashboard("已连接到你的云端控制台。");
+    } else {
+      setStatus("先登录，控制台才会显示你的个人数据。");
+      setAuthHint(
+        appState.developerLoginEnabled
+          ? "开发者账号现在会直接显示开发验证码。普通邮箱登录，后面再接正式发信服务。"
+          : "验证码会发到你的邮箱。登录后，已安装的插件设备会自动接入账号。"
+      );
+    }
+    startPolling();
+    return;
+  }
+
+  renderLegacyMode();
+  await refreshDashboard();
+  startPolling();
+}
+
+async function requestLoginCode() {
+  const email = String(emailInput && emailInput.value ? emailInput.value : "").trim();
+  if (!email) {
+    setAuthHint("先填邮箱，再发验证码。");
+    return;
+  }
+
+  requestCodeButton.disabled = true;
+  setAuthHint("正在发送验证码...");
+  const result = await requestJson("/api/auth/request-code", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email })
+  });
+  requestCodeButton.disabled = false;
+
+  if (!result.ok || !result.data || !result.data.ok) {
+    if (result.data && result.data.detail === "missing-email-provider" && appState.developerLoginEnabled) {
+      setAuthHint("普通邮箱登录还没接发信服务。开发者账号会直接显示开发验证码。");
+    } else {
+      setAuthHint("这次没把验证码发出去。等一下再试，或者之后补上邮件服务配置。");
+    }
+    return;
+  }
+
+  if (codeInput && result.data.debugCode) {
+    codeInput.value = result.data.debugCode;
+  }
+
+  setAuthHint(result.data.debugCode
+    ? `开发者验证码：${result.data.debugCode}`
+    : "验证码已经发出，去邮箱里看一下。");
+}
+
+async function verifyLoginCode() {
+  const email = String(emailInput && emailInput.value ? emailInput.value : "").trim();
+  const code = String(codeInput && codeInput.value ? codeInput.value : "").trim();
+  if (!email || !code) {
+    setAuthHint("把邮箱和验证码都填上，再登录。");
+    return;
+  }
+
+  verifyCodeButton.disabled = true;
+  setAuthHint("正在验证验证码...");
+  const result = await requestJson("/api/auth/verify-code", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ email, code })
+  });
+  verifyCodeButton.disabled = false;
+
+  if (!result.ok || !result.data || !result.data.ok) {
+    setAuthHint("验证码不对，或者已经过期了。重新发一封再试。");
+    return;
+  }
+
+  appState.viewer = result.data.viewer || null;
+  renderCloudMode(true);
+  viewerEmail.textContent = formatViewerLabel(appState.viewer);
+  setAuthHint(appState.viewer && appState.viewer.isDeveloper
+    ? "开发者账号已登录。当前设备会自动接入这个账号。"
+    : "已经登录成功。已安装插件的设备会自动接入这个账号。");
+  await refreshDashboard("已登录到你的云端控制台。");
+}
+
+async function logout() {
+  logoutButton.disabled = true;
+  await requestJson("/api/auth/logout", { method: "POST" });
+  logoutButton.disabled = false;
+  appState.viewer = null;
+  appState.dashboardCache = null;
+  renderCloudMode(false);
+  setMetricGroup(globalStatNodes, {});
+  setMetricGroup(personalStatNodes, {});
+  renderDeveloperSection(null);
+  renderBindings([]);
+  renderAdList([]);
+  renderReviewList([]);
+  setStatus("你已经退出登录。");
+}
+
+function renderCloudDashboard(payload) {
+  appState.dashboardCache = payload || null;
+  setMetricGroup(globalStatNodes, payload && payload.globalStats ? payload.globalStats : {});
+  setMetricGroup(personalStatNodes, payload && payload.personalStats ? payload.personalStats : {});
+  renderBindings(payload && payload.bindings ? payload.bindings : []);
+  renderDeveloperSection(payload && payload.developer ? payload.developer : null);
+  renderAdList(payload && payload.adEvents ? payload.adEvents : []);
+  renderReviewList(payload && payload.recent ? payload.recent : []);
+  if (syncModePill) {
+    syncModePill.textContent = appState.viewer ? formatViewerLabel(appState.viewer) : "登录后查看个人控制台";
+  }
+}
+
+function renderLegacyDashboard(payload) {
+  appState.dashboardCache = payload || null;
+  setMetricGroup(personalStatNodes, payload && payload.stats ? payload.stats : {});
+  renderAdList(payload && payload.adEvents ? payload.adEvents : []);
+  renderReviewList(payload && payload.recent ? payload.recent : []);
+  if (syncModePill) {
+    syncModePill.textContent = "本地调试页";
+  }
+}
+
+async function fetchLegacyDashboard(successMessage) {
+  const syncKey = getActiveSyncKey();
+  if (!syncKey) {
+    renderLegacyDashboard({
+      stats: {},
+      adEvents: [],
+      recent: []
+    });
+    setStatus("这页现在只用于本地调试。正式数据请登录云端控制台查看。");
+    return;
+  }
+
+  setStatus("正在读取你的真实记录...");
+  const result = await requestJson(`/api/dashboard?syncKey=${encodeURIComponent(syncKey)}`);
+  if (!result.ok || !result.data || !result.data.ok) {
+    renderLegacyDashboard({
+      stats: {},
+      adEvents: [],
+      recent: appState.dashboardCache && appState.dashboardCache.recent ? appState.dashboardCache.recent : []
+    });
+    setStatus("这次没读到你的记录，点刷新再试一次。");
+    return;
+  }
+
+  window.localStorage.setItem("web25_sync_key", syncKey);
+  renderLegacyDashboard(result.data);
+  setStatus(successMessage || "真实数据已同步。");
+}
+
+async function fetchCloudDashboard(successMessage) {
+  setStatus("正在读取你的云端控制台...");
+  const syncKey = getSyncKeyFromPage();
+  const params = new URLSearchParams();
+  if (syncKey) {
+    params.set("syncKey", syncKey);
+  }
+  if (appState.viewer && appState.viewer.isDeveloper) {
+    const developerState = getDeveloperDashboardRequestState();
+    params.set("developerPendingPage", String(developerState.developerPendingPage));
+    params.set("developerRulePage", String(developerState.developerRulePage));
+  }
+  const query = params.toString();
+  const suffix = query ? `?${query}` : "";
+  const result = await requestJson(`/api/dashboard${suffix}`);
+  if (!result.ok || !result.data || !result.data.ok) {
+    renderCloudDashboard({
+      globalStats: {},
+      personalStats: {},
+      recent: [],
+      adEvents: [],
+      bindings: []
+    });
+    setStatus("这次没读到你的云端数据。等一下再刷新。");
+    return;
+  }
+
+  if (syncKey) {
+    window.localStorage.setItem("web25_sync_key", syncKey);
+  }
+  renderCloudDashboard(result.data);
+  setStatus(successMessage || "云端数据已经同步。");
+}
+
+async function refreshDashboard(successMessage) {
+  if (appState.mode === "cloud") {
+    if (!appState.viewer) {
+      setStatus("先登录，控制台才会显示你的个人数据。");
+      return;
+    }
+    await fetchCloudDashboard(successMessage);
+    return;
+  }
+
+  await fetchLegacyDashboard(successMessage);
+}
+
+function startPolling() {
+  if (appState.pollTimer) {
+    clearInterval(appState.pollTimer);
+  }
+  appState.pollTimer = setInterval(() => {
+    if (document.hidden) {
+      return;
+    }
+    refreshDashboard();
+  }, POLL_INTERVAL_MS);
+}
+
+if (requestCodeButton) {
+  requestCodeButton.addEventListener("click", requestLoginCode);
+}
+
+if (verifyCodeButton) {
+  verifyCodeButton.addEventListener("click", verifyLoginCode);
+}
+
+if (logoutButton) {
+  logoutButton.addEventListener("click", logout);
+}
+
+if (refreshDashboardButton) {
+  refreshDashboardButton.addEventListener("click", function () {
+    refreshDashboard();
+  });
+}
+
+if (developerBatchConfirmButton) {
+  developerBatchConfirmButton.addEventListener("click", function () {
+    confirmSelectedDeveloperFeeds();
+  });
+}
+
+if (developerSelectAll) {
+  developerSelectAll.addEventListener("change", function () {
+    const list = getCachedPendingDeveloperFeeds();
+    const pageIds = list.map((item) => Number(item.eventId || 0)).filter(Boolean);
+    if (developerSelectAll.checked) {
+      const nextSet = new Set(appState.selectedDeveloperEventIds);
+      pageIds.forEach((id) => nextSet.add(id));
+      appState.selectedDeveloperEventIds = nextSet;
+    } else {
+      const nextSet = new Set(appState.selectedDeveloperEventIds);
+      pageIds.forEach((id) => nextSet.delete(id));
+      appState.selectedDeveloperEventIds = nextSet;
+    }
+    renderDeveloperPendingFeeds(list, getCachedPendingDeveloperPagination());
+  });
+}
+
+if (legacyRefreshDashboard) {
+  legacyRefreshDashboard.addEventListener("click", function () {
+    refreshDashboard();
+  });
+}
 
 if (reviewToggleButton) {
   reviewToggleButton.addEventListener("click", function () {
-    reviewExpanded = !reviewExpanded;
-    renderReviewList(dashboardCache && dashboardCache.activeHiddenItems ? dashboardCache.activeHiddenItems : []);
+    appState.reviewExpanded = !appState.reviewExpanded;
+    renderReviewList(appState.dashboardCache && appState.dashboardCache.recent ? appState.dashboardCache.recent : []);
+  });
+}
+
+if (adToggleButton) {
+  adToggleButton.addEventListener("click", function () {
+    appState.adExpanded = !appState.adExpanded;
+    renderAdList(appState.dashboardCache && appState.dashboardCache.adEvents ? appState.dashboardCache.adEvents : []);
   });
 }
 
 if (reviewSearchInput) {
   reviewSearchInput.addEventListener("input", function (event) {
-    reviewQuery = String(event.target.value || "");
-    if (reviewQuery.trim()) {
-      reviewExpanded = true;
-    }
-    renderReviewList(dashboardCache && dashboardCache.activeHiddenItems ? dashboardCache.activeHiddenItems : []);
+    appState.reviewQuery = String(event.target.value || "");
+    renderReviewList(appState.dashboardCache && appState.dashboardCache.recent ? appState.dashboardCache.recent : []);
   });
 }
 
@@ -512,15 +1451,29 @@ if (reviewFilterGroup) {
       return;
     }
 
-    reviewFilter = String(button.dataset.filter || "all");
+    appState.reviewFilter = String(button.dataset.filter || "all");
     Array.from(reviewFilterGroup.querySelectorAll("[data-filter]")).forEach((node) => {
       node.classList.toggle("active", node === button);
     });
-    reviewExpanded = true;
-    renderReviewList(dashboardCache && dashboardCache.activeHiddenItems ? dashboardCache.activeHiddenItems : []);
+    renderReviewList(appState.dashboardCache && appState.dashboardCache.recent ? appState.dashboardCache.recent : []);
   });
 }
 
-syncKeyInput.value = getSyncKeyFromPage();
-updateConnectionCopy(syncKeyInput.value, false);
-fetchDashboard();
+if (reviewSortGroup) {
+  reviewSortGroup.addEventListener("click", function (event) {
+    const button = event.target.closest("[data-sort]");
+    if (!button) {
+      return;
+    }
+    appState.reviewSort = button.dataset.sort || "time";
+    renderReviewList(appState.dashboardCache && appState.dashboardCache.recent ? appState.dashboardCache.recent : []);
+  });
+}
+
+document.addEventListener("visibilitychange", function () {
+  if (!document.hidden) {
+    refreshDashboard();
+  }
+});
+
+detectConsoleMode();

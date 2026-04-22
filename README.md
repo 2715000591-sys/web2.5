@@ -103,6 +103,27 @@ npm run backend
 http://127.0.0.1:8787
 ```
 
+如果你只是想把控制台打开，不想自己敲命令，现在可以直接用：
+
+- 双击 `open-web25-console.command`
+- 或运行：
+
+```bash
+npm run console:open
+```
+
+如果你想把它做成“重启电脑后也能直接点 Safari 收藏夹打开”，仓库里也准备好了开机自启脚本：
+
+```bash
+npm run console:install-autostart
+```
+
+当前也可以用这个命令检查本地后台状态：
+
+```bash
+npm run console:status
+```
+
 当前最小闭环是：
 
 - 扩展在 `X` 里手动 `标记可疑 / 恢复此条`
