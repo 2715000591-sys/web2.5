@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-23-0052";
+  const BUILD_ID = "2026-04-22-2235";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -13,6 +13,20 @@
     /doubleclick/i,
     /\/i\/ads\//i
   ];
+  const SIDEBAR_TITLE_PATTERNS = {
+    happenings: [
+      /^有什么新鲜事$/i,
+      /^有什麼新鮮事$/i,
+      /^what'?s happening$/i,
+      /^what’s happening$/i
+    ],
+    follow: [
+      /^推荐关注$/i,
+      /^推薦關注$/i,
+      /^who to follow$/i,
+      /^you might like$/i
+    ]
+  };
   const SIMILARITY_TERMS = [
     "线下",
     "附近",
@@ -115,6 +129,7 @@
     revealedListItemsEl: null,
     revealedSignature: "",
     dockEl: null,
+    dismissedSidebarModules: new Set(),
     manualHideTexts: new Set(),
     manualAllowTexts: new Set(),
     globalTemplateRules: new Set(),
@@ -185,6 +200,7 @@
     Array.from(document.querySelectorAll(".web25-reply-actions-host, .web25-bottom-host, .web25-hidden-summary, .web25-revealed-list, .web25-status-dock")).forEach(function (node) {
       node.remove();
     });
+    clearSidebarModuleUi();
 
     const anchorStyleTag = document.getElementById("web25-anchor-style");
     if (anchorStyleTag && anchorStyleTag.getAttribute("data-web25-owned") === "1") {
@@ -516,6 +532,164 @@
 
   function isHomeTimelinePage() {
     return /^\/home\/?$/.test(location.pathname);
+  }
+
+  function normalizeSidebarHeadingText(value) {
+    return String(value || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+  }
+
+  function getSidebarModuleKindByTitle(title) {
+    const normalizedTitle = normalizeSidebarHeadingText(title);
+    if (!normalizedTitle) {
+      return "";
+    }
+
+    if (SIDEBAR_TITLE_PATTERNS.happenings.some(function (pattern) {
+      return pattern.test(normalizedTitle);
+    })) {
+      return "happenings";
+    }
+
+    if (SIDEBAR_TITLE_PATTERNS.follow.some(function (pattern) {
+      return pattern.test(normalizedTitle);
+    })) {
+      return "follow";
+    }
+
+    return "";
+  }
+
+  function getSidebarColumn() {
+    return document.querySelector('[data-testid="sidebarColumn"]');
+  }
+
+  function getSidebarModuleTitle(section) {
+    if (!section) {
+      return "";
+    }
+
+    const heading = section.querySelector('h1, h2, [role="heading"]');
+    return heading ? String(heading.textContent || "").trim() : "";
+  }
+
+  function collectSidebarModules() {
+    const sidebarColumn = getSidebarColumn();
+    if (!sidebarColumn) {
+      return [];
+    }
+
+    const seen = new Set();
+    const modules = [];
+
+    Array.from(sidebarColumn.querySelectorAll("section")).forEach(function (section) {
+      const kind = getSidebarModuleKindByTitle(getSidebarModuleTitle(section));
+      if (!kind || seen.has(section)) {
+        return;
+      }
+
+      seen.add(section);
+      modules.push({
+        kind: kind,
+        section: section
+      });
+    });
+
+    return modules;
+  }
+
+  function applySidebarModuleDismissed(section, dismissed) {
+    if (!section) {
+      return;
+    }
+
+    if (dismissed) {
+      section.setAttribute("data-web25-sidebar-hidden", "1");
+      return;
+    }
+
+    section.removeAttribute("data-web25-sidebar-hidden");
+  }
+
+  function dismissSidebarModule(kind) {
+    if (!kind) {
+      return;
+    }
+
+    state.dismissedSidebarModules.add(kind);
+    scanSidebarModules();
+  }
+
+  function ensureSidebarCloseButton(section, kind) {
+    if (!section || !kind) {
+      return;
+    }
+
+    section.setAttribute("data-web25-sidebar-module", kind);
+    section.classList.add("web25-sidebar-module");
+
+    let button = section.querySelector(".web25-sidebar-close");
+    if (!button) {
+      button = document.createElement("button");
+      button.type = "button";
+      button.className = "web25-sidebar-close";
+      button.setAttribute("data-web25-owned", "1");
+      section.appendChild(button);
+    }
+
+    const label = kind === "happenings" ? "关闭“有什么新鲜事”" : "关闭“推荐关注”";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.textContent = "×";
+    button.onclick = function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      dismissSidebarModule(kind);
+    };
+  }
+
+  function scanSidebarModules() {
+    const modules = collectSidebarModules();
+    root.dataset.web25SidebarModules = String(modules.length);
+    root.dataset.web25SidebarHidden = String(state.dismissedSidebarModules.size);
+
+    modules.forEach(function (entry) {
+      ensureSidebarCloseButton(entry.section, entry.kind);
+      applySidebarModuleDismissed(entry.section, state.dismissedSidebarModules.has(entry.kind));
+    });
+  }
+
+  function clearSidebarModuleUi() {
+    Array.from(document.querySelectorAll("[data-web25-sidebar-hidden='1']")).forEach(function (node) {
+      node.removeAttribute("data-web25-sidebar-hidden");
+    });
+
+    Array.from(document.querySelectorAll(".web25-sidebar-close")).forEach(function (node) {
+      node.remove();
+    });
+
+    Array.from(document.querySelectorAll("[data-web25-sidebar-module]")).forEach(function (node) {
+      node.classList.remove("web25-sidebar-module");
+      node.removeAttribute("data-web25-sidebar-module");
+    });
+  }
+
+  function containsSidebarNode(node) {
+    if (!node || node.nodeType !== 1) {
+      return false;
+    }
+
+    if (node.matches && node.matches('[data-testid="sidebarColumn"], [data-testid="sidebarColumn"] *')) {
+      return true;
+    }
+
+    if (node.closest && node.closest('[data-testid="sidebarColumn"]')) {
+      return true;
+    }
+
+    return Boolean(node.querySelector && node.querySelector('[data-testid="sidebarColumn"]'));
   }
 
   function getArticleCell(article) {
@@ -1813,6 +1987,8 @@
       node.remove();
     });
     state.dockEl = null;
+
+    clearSidebarModuleUi();
   }
 
   function removeAllAdHiding() {
@@ -2777,6 +2953,7 @@
 
     if (isHomeTimelinePage()) {
       removeAllHiding();
+      scanSidebarModules();
       scanHomeTimelineAds();
       return;
     }
@@ -2786,10 +2963,12 @@
     if (!isDetailPage()) {
       root.dataset.web25Stage = "scan:inactive";
       removeAllHiding();
+      scanSidebarModules();
       return;
     }
 
     setScrollAnchoringDisabled(true);
+    scanSidebarModules();
 
     const articles = getArticles();
     root.dataset.web25Articles = String(articles.length);
@@ -3077,6 +3256,10 @@
             return;
           }
 
+          if (containsSidebarNode(record.target)) {
+            relevant = true;
+          }
+
           if (isManagedNode(record.target)) {
             return;
           }
@@ -3089,6 +3272,10 @@
             if (containsBottomUiNode(node)) {
               duplicateBottomUiDetected = true;
               return;
+            }
+
+            if (containsSidebarNode(node)) {
+              relevant = true;
             }
 
             if (isManagedNode(node)) {

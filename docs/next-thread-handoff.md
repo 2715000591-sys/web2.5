@@ -65,6 +65,7 @@
   - 恢复
   - 蓝框
   - 官方广告跳过
+  - 右栏 `有什么新鲜事 / 推荐关注` 可注入灰色小叉并直接关闭
 - 公网网站已经能打开：
   - 官网首页：`https://web25-public-pages.pages.dev/`
   - 公网控制台：`https://web25-public-pages.pages.dev/console/`
