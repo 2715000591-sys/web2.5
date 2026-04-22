@@ -66,6 +66,7 @@
   - 蓝框
   - 官方广告跳过
   - 右栏 `有什么新鲜事 / 推荐关注` 可注入灰色小叉并直接关闭
+  - Safari 只应保留 `/Applications/web2.5.app` 这一份扩展注册；如果页面还在跑旧 `BUILD_ID`，先用 `pluginkit` 清掉缓存/临时构建，再重新注册 `/Applications/web2.5.app/Contents/PlugIns/web2.5 Extension.appex`
 - 公网网站已经能打开：
   - 官网首页：`https://web25-public-pages.pages.dev/`
   - 公网控制台：`https://web25-public-pages.pages.dev/console/`

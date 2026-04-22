@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-22-2305";
+  const BUILD_ID = "2026-04-22-2311";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -607,23 +607,14 @@
       return null;
     }
 
+    const semanticContainer = titleNode.closest("section, aside, [role='region'], [role='complementary']");
+    if (semanticContainer && sidebarColumn.contains(semanticContainer)) {
+      return semanticContainer;
+    }
+
     const cellContainer = titleNode.closest('[data-testid="cellInnerDiv"]');
     if (cellContainer && sidebarColumn.contains(cellContainer)) {
       return cellContainer;
-    }
-
-    const semanticContainer = titleNode.closest("section, aside, [role='region']");
-    if (semanticContainer && sidebarColumn.contains(semanticContainer)) {
-      let current = semanticContainer;
-      let highestInsideSidebar = semanticContainer;
-      while (current && current !== sidebarColumn) {
-        highestInsideSidebar = current;
-        if (current.parentElement === sidebarColumn) {
-          return current;
-        }
-        current = current.parentElement;
-      }
-      return highestInsideSidebar;
     }
 
     let node = titleNode;
@@ -725,6 +716,7 @@
       button.type = "button";
       button.className = "web25-sidebar-close";
       button.setAttribute("data-web25-owned", "1");
+      button.setAttribute("data-web25-sidebar-close", "1");
       section.appendChild(button);
     }
 
