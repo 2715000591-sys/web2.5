@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-22-2235";
+  const BUILD_ID = "2026-04-22-2250";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -89,6 +89,7 @@
   const IDB_NAME = "web25-manual-memory";
   const IDB_STORE = "state";
   const IDB_KEY = "manual-state";
+  const SIDEBAR_SESSION_STORAGE_KEY = "web25-dismissed-sidebar-modules-v1";
   const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://web25-public.web25-boris.workers.dev";
   const LEGACY_BACKEND_BASE_URLS = new Set([
     "",
@@ -130,6 +131,7 @@
     revealedSignature: "",
     dockEl: null,
     dismissedSidebarModules: new Set(),
+    sidebarStateLoaded: false,
     manualHideTexts: new Set(),
     manualAllowTexts: new Set(),
     globalTemplateRules: new Set(),
@@ -541,6 +543,40 @@
       .toLowerCase();
   }
 
+  function readDismissedSidebarModules() {
+    try {
+      const rawValue = window.sessionStorage.getItem(SIDEBAR_SESSION_STORAGE_KEY);
+      if (!rawValue) {
+        return new Set();
+      }
+
+      const parsed = JSON.parse(rawValue);
+      return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
+    } catch (error) {
+      return new Set();
+    }
+  }
+
+  function persistDismissedSidebarModules() {
+    try {
+      window.sessionStorage.setItem(
+        SIDEBAR_SESSION_STORAGE_KEY,
+        JSON.stringify(Array.from(state.dismissedSidebarModules))
+      );
+    } catch (error) {
+      // Ignore session persistence failures and keep page behavior working.
+    }
+  }
+
+  function ensureSidebarDismissedStateLoaded() {
+    if (state.sidebarStateLoaded) {
+      return;
+    }
+
+    state.dismissedSidebarModules = readDismissedSidebarModules();
+    state.sidebarStateLoaded = true;
+  }
+
   function getSidebarModuleKindByTitle(title) {
     const normalizedTitle = normalizeSidebarHeadingText(title);
     if (!normalizedTitle) {
@@ -566,13 +602,31 @@
     return document.querySelector('[data-testid="sidebarColumn"]');
   }
 
-  function getSidebarModuleTitle(section) {
-    if (!section) {
-      return "";
+  function resolveSidebarModuleContainer(titleNode, sidebarColumn) {
+    if (!titleNode || !sidebarColumn) {
+      return null;
     }
 
-    const heading = section.querySelector('h1, h2, [role="heading"]');
-    return heading ? String(heading.textContent || "").trim() : "";
+    const semanticContainer = titleNode.closest("section, aside, [role='region']");
+    if (semanticContainer && sidebarColumn.contains(semanticContainer)) {
+      return semanticContainer;
+    }
+
+    let node = titleNode;
+    let fallback = titleNode;
+    while (node && node !== sidebarColumn) {
+      if (node.parentElement === sidebarColumn) {
+        return node;
+      }
+
+      if (node.parentElement && node.parentElement.parentElement === sidebarColumn) {
+        fallback = node.parentElement;
+      }
+
+      node = node.parentElement;
+    }
+
+    return fallback;
   }
 
   function collectSidebarModules() {
@@ -584,16 +638,25 @@
     const seen = new Set();
     const modules = [];
 
-    Array.from(sidebarColumn.querySelectorAll("section")).forEach(function (section) {
-      const kind = getSidebarModuleKindByTitle(getSidebarModuleTitle(section));
-      if (!kind || seen.has(section)) {
+    Array.from(sidebarColumn.querySelectorAll("*")).forEach(function (node) {
+      if (!node || node.children.length > 0) {
         return;
       }
 
-      seen.add(section);
+      const kind = getSidebarModuleKindByTitle(node.textContent || "");
+      if (!kind) {
+        return;
+      }
+
+      const container = resolveSidebarModuleContainer(node, sidebarColumn);
+      if (!container || seen.has(container)) {
+        return;
+      }
+
+      seen.add(container);
       modules.push({
         kind: kind,
-        section: section
+        section: container
       });
     });
 
@@ -618,7 +681,9 @@
       return;
     }
 
+    ensureSidebarDismissedStateLoaded();
     state.dismissedSidebarModules.add(kind);
+    persistDismissedSidebarModules();
     scanSidebarModules();
   }
 
@@ -651,6 +716,7 @@
   }
 
   function scanSidebarModules() {
+    ensureSidebarDismissedStateLoaded();
     const modules = collectSidebarModules();
     root.dataset.web25SidebarModules = String(modules.length);
     root.dataset.web25SidebarHidden = String(state.dismissedSidebarModules.size);
