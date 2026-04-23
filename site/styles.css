@@ -521,6 +521,85 @@ button.ghost-button:disabled {
   line-height: 1.66;
 }
 
+.preference-card {
+  display: grid;
+  gap: 14px;
+}
+
+.preference-card-highlight {
+  border-color: rgba(11, 127, 123, 0.18);
+  background:
+    radial-gradient(circle at right top, rgba(11, 127, 123, 0.12), transparent 34%),
+    rgba(255, 255, 255, 0.92);
+}
+
+.preference-support-card {
+  display: grid;
+  gap: 14px;
+}
+
+.site-toggle-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.site-toggle-row input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.site-toggle-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.site-toggle-copy strong {
+  font-size: 14px;
+}
+
+.site-toggle-copy span {
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.site-toggle-status {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.compact-action-row {
+  margin-top: 0;
+}
+
+.preference-points {
+  display: grid;
+  gap: 12px;
+}
+
+.preference-point {
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.preference-point:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.preference-point strong {
+  display: block;
+  font-size: 14px;
+}
+
 .entry-actions {
   margin-top: auto;
   padding-top: 6px;
@@ -548,6 +627,23 @@ button.ghost-button:disabled {
 .update-item strong {
   display: block;
   font-size: 1rem;
+}
+
+.update-item-highlight {
+  border-color: rgba(17, 68, 166, 0.18);
+  background:
+    radial-gradient(circle at right top, rgba(29, 107, 255, 0.12), transparent 38%),
+    rgba(255, 255, 255, 0.9);
+}
+
+.stable-state-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at left top, rgba(29, 107, 255, 0.12), transparent 28%),
+    radial-gradient(circle at right bottom, rgba(11, 127, 123, 0.1), transparent 26%);
 }
 
 .sync-strip {

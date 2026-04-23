@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-22-2311";
+  const BUILD_ID = "2026-04-23-1415";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -23,8 +23,57 @@
     follow: [
       /^推荐关注$/i,
       /^推薦關注$/i,
-      /^who to follow$/i,
+      /^who to follow$/i
+    ],
+    suggested: [
+      /^你可能会喜欢$/i,
+      /^你可能會喜歡$/i,
       /^you might like$/i
+    ],
+    related: [
+      /^相关用户$/i,
+      /^相關用戶$/i,
+      /^relevant people$/i
+    ],
+    premium: [
+      /^订阅\s*premium$/i,
+      /^訂閱\s*premium$/i,
+      /^subscribe to premium$/i
+    ],
+    live: [
+      /^x\s*上的直播$/i,
+      /^live on x$/i
+    ]
+  };
+  const SIDEBAR_LEGAL_PATTERNS = {
+    terms: [
+      /服务条款/i,
+      /服務條款/i,
+      /terms of service/i
+    ],
+    privacy: [
+      /隐私政策/i,
+      /隱私政策/i,
+      /privacy policy/i
+    ],
+    cookie: [
+      /cookie 政策/i,
+      /cookie policy/i
+    ],
+    accessibility: [
+      /辅助功能/i,
+      /輔助功能/i,
+      /accessibility/i
+    ],
+    ads: [
+      /广告信息/i,
+      /廣告資訊/i,
+      /ads info/i,
+      /ad info/i
+    ],
+    copyright: [
+      /x corp/i,
+      /©/i
     ]
   };
   const SIMILARITY_TERMS = [
@@ -89,7 +138,6 @@
   const IDB_NAME = "web25-manual-memory";
   const IDB_STORE = "state";
   const IDB_KEY = "manual-state";
-  const SIDEBAR_SESSION_STORAGE_KEY = "web25-dismissed-sidebar-modules-v1";
   const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://web25-public.web25-boris.workers.dev";
   const LEGACY_BACKEND_BASE_URLS = new Set([
     "",
@@ -102,6 +150,7 @@
   const storageDefaults = {
     enabled: true,
     markingEnabled: false,
+    sidebarControlsEnabled: true,
     backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
     syncKey: "",
     deviceId: "",
@@ -113,6 +162,7 @@
   const state = {
     enabled: true,
     markingEnabled: false,
+    sidebarControlsEnabled: true,
     backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
     syncKey: "",
     deviceId: "",
@@ -122,6 +172,7 @@
     manualPersistTimer: null,
     bottomUiDedupeTimer: null,
     stabilizeTimers: [],
+    sidebarStabilizeTimers: [],
     currentUrl: location.href,
     bottomHostEl: null,
     bottomTrayOpen: false,
@@ -131,7 +182,6 @@
     revealedSignature: "",
     dockEl: null,
     dismissedSidebarModules: new Set(),
-    sidebarStateLoaded: false,
     manualHideTexts: new Set(),
     manualAllowTexts: new Set(),
     globalTemplateRules: new Set(),
@@ -154,6 +204,9 @@
     focusListener: null,
     visibilityListener: null,
     domReadyListener: null,
+    sidebarDebugHooksInstalled: false,
+    sidebarDebugDismissListener: null,
+    sidebarDebugResetListener: null,
     bootStarted: false,
     booted: false,
     destroyed: false
@@ -176,6 +229,10 @@
       clearTimeout(timerId);
     });
     state.stabilizeTimers = [];
+    state.sidebarStabilizeTimers.forEach(function (timerId) {
+      clearTimeout(timerId);
+    });
+    state.sidebarStabilizeTimers = [];
   }
 
   function clearStalePageArtifacts() {
@@ -258,6 +315,16 @@
       state.domReadyListener = null;
     }
 
+    if (state.sidebarDebugDismissListener) {
+      document.removeEventListener("web25:sidebar-dismiss", state.sidebarDebugDismissListener);
+      state.sidebarDebugDismissListener = null;
+    }
+
+    if (state.sidebarDebugResetListener) {
+      document.removeEventListener("web25:sidebar-reset", state.sidebarDebugResetListener);
+      state.sidebarDebugResetListener = null;
+    }
+
     resetManagedReplyState();
     removeAllHiding();
 
@@ -334,6 +401,7 @@
   root.dataset.web25ReplyCells = "0";
   root.dataset.web25ManualButtons = "0";
   root.dataset.web25MarkingEnabled = "0";
+  root.dataset.web25SidebarControlsEnabled = "1";
   root.dataset.web25SyncReady = "0";
   root.dataset.web25Stage = "boot";
   delete root.dataset.web25Error;
@@ -543,38 +611,29 @@
       .toLowerCase();
   }
 
-  function readDismissedSidebarModules() {
-    try {
-      const rawValue = window.sessionStorage.getItem(SIDEBAR_SESSION_STORAGE_KEY);
-      if (!rawValue) {
-        return new Set();
-      }
-
-      const parsed = JSON.parse(rawValue);
-      return new Set(Array.isArray(parsed) ? parsed.filter(Boolean) : []);
-    } catch (error) {
-      return new Set();
-    }
-  }
-
-  function persistDismissedSidebarModules() {
-    try {
-      window.sessionStorage.setItem(
-        SIDEBAR_SESSION_STORAGE_KEY,
-        JSON.stringify(Array.from(state.dismissedSidebarModules))
-      );
-    } catch (error) {
-      // Ignore session persistence failures and keep page behavior working.
-    }
-  }
-
-  function ensureSidebarDismissedStateLoaded() {
-    if (state.sidebarStateLoaded) {
-      return;
+  function normalizeSidebarControlsEnabled(value, fallback) {
+    if (typeof value === "boolean") {
+      return value;
     }
 
-    state.dismissedSidebarModules = readDismissedSidebarModules();
-    state.sidebarStateLoaded = true;
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized) {
+      return fallback !== false;
+    }
+
+    if (normalized === "0" || normalized === "false" || normalized === "off" || normalized === "no") {
+      return false;
+    }
+
+    if (normalized === "1" || normalized === "true" || normalized === "on" || normalized === "yes") {
+      return true;
+    }
+
+    return fallback !== false;
   }
 
   function getSidebarModuleKindByTitle(title) {
@@ -595,51 +654,541 @@
       return "follow";
     }
 
+    if (SIDEBAR_TITLE_PATTERNS.suggested.some(function (pattern) {
+      return pattern.test(normalizedTitle);
+    })) {
+      return "suggested";
+    }
+
+    if (SIDEBAR_TITLE_PATTERNS.related.some(function (pattern) {
+      return pattern.test(normalizedTitle);
+    })) {
+      return "related";
+    }
+
+    if (SIDEBAR_TITLE_PATTERNS.premium.some(function (pattern) {
+      return pattern.test(normalizedTitle);
+    })) {
+      return "premium";
+    }
+
+    if (SIDEBAR_TITLE_PATTERNS.live.some(function (pattern) {
+      return pattern.test(normalizedTitle);
+    })) {
+      return "live";
+    }
+
     return "";
+  }
+
+  function getSidebarModuleCloseLabel(kind) {
+    if (kind === "happenings") {
+      return "关闭“有什么新鲜事”";
+    }
+
+    if (kind === "follow") {
+      return "关闭“推荐关注”";
+    }
+
+    if (kind === "suggested") {
+      return "关闭“你可能会喜欢”";
+    }
+
+    if (kind === "related") {
+      return "关闭“相关用户”";
+    }
+
+    if (kind === "premium") {
+      return "关闭“订阅 Premium”";
+    }
+
+    if (kind === "live") {
+      return "关闭“X 上的直播”";
+    }
+
+    if (kind === "legal") {
+      return "关闭“政策链接”";
+    }
+
+    return "关闭右栏模块";
+  }
+
+  function getSidebarLegalSignalCount(text) {
+    const normalizedText = normalizeSidebarHeadingText(text);
+    if (!normalizedText) {
+      return {
+        total: 0,
+        core: 0
+      };
+    }
+
+    const categories = Object.keys(SIDEBAR_LEGAL_PATTERNS);
+    let total = 0;
+    let core = 0;
+
+    categories.forEach(function (category) {
+      const matched = SIDEBAR_LEGAL_PATTERNS[category].some(function (pattern) {
+        return pattern.test(normalizedText);
+      });
+
+      if (!matched) {
+        return;
+      }
+
+      total += 1;
+      if (category === "terms" || category === "privacy" || category === "cookie") {
+        core += 1;
+      }
+    });
+
+    return {
+      total: total,
+      core: core
+    };
+  }
+
+  function isSidebarLegalNav(node) {
+    if (!node || !node.matches || !node.matches("nav, [role='navigation']")) {
+      return false;
+    }
+
+    const signals = getSidebarLegalSignalCount(node.textContent || "");
+    return signals.total >= 3 && signals.core >= 2;
   }
 
   function getSidebarColumn() {
     return document.querySelector('[data-testid="sidebarColumn"]');
   }
 
-  function resolveSidebarModuleContainer(titleNode, sidebarColumn) {
+  function isManagedSidebarModuleContainer(container, kind) {
+    if (!container || container.nodeType !== 1 || !container.getAttribute) {
+      return false;
+    }
+
+    const existingKind = container.getAttribute("data-web25-sidebar-module")
+      || container.getAttribute("data-web25-sidebar-host")
+      || "";
+
+    if (!existingKind) {
+      return false;
+    }
+
+    return !kind || existingKind === kind;
+  }
+
+  function isSidebarLayoutEligible(sidebarColumn) {
+    if (!sidebarColumn || !sidebarColumn.isConnected || !sidebarColumn.getBoundingClientRect) {
+      return false;
+    }
+
+    const rect = sidebarColumn.getBoundingClientRect();
+    if (!rect.width || rect.width < 220 || rect.height < 160) {
+      return false;
+    }
+
+    if (window.innerWidth && rect.left < window.innerWidth * 0.52) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function isSidebarCardGeometrySafe(container, sidebarColumn) {
+    if (!container || !sidebarColumn || !container.getBoundingClientRect || !sidebarColumn.getBoundingClientRect) {
+      return false;
+    }
+
+    const rect = container.getBoundingClientRect();
+    const sidebarRect = sidebarColumn.getBoundingClientRect();
+    if (!sidebarRect.width || !rect.width) {
+      return false;
+    }
+
+    if (rect.width > sidebarRect.width + 8) {
+      return false;
+    }
+
+    if (rect.left < sidebarRect.left - 8 || rect.right > sidebarRect.right + 8) {
+      return false;
+    }
+
+    if (window.innerWidth && rect.left < window.innerWidth * 0.52) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function isSidebarPluginNode(node) {
+    return Boolean(
+      node
+      && node.nodeType === 1
+      && node.getAttribute
+      && node.getAttribute("data-web25-owned") === "1"
+      && (
+        node.classList.contains("web25-sidebar-close")
+        || node.classList.contains("web25-sidebar-content-wrap")
+        || node.hasAttribute("data-web25-sidebar-close")
+        || node.hasAttribute("data-web25-sidebar-content")
+      )
+    );
+  }
+
+  function getSidebarModuleWrap(section) {
+    if (!section) {
+      return null;
+    }
+
+    return Array.from(section.children).find(function (child) {
+      return child.classList
+        && child.classList.contains("web25-sidebar-content-wrap")
+        && child.getAttribute("data-web25-owned") === "1";
+    }) || null;
+  }
+
+  function getSidebarCloseButton(section) {
+    if (!section) {
+      return null;
+    }
+
+    return Array.from(section.children).find(function (child) {
+      return child.classList
+        && child.classList.contains("web25-sidebar-close")
+        && child.getAttribute("data-web25-owned") === "1";
+    }) || null;
+  }
+
+  function clearSidebarModuleShell(section) {
+    if (!section || !section.__web25SidebarShell) {
+      return;
+    }
+
+    const shell = section.__web25SidebarShell;
+    if (shell && shell.nodeType === 1) {
+      shell.classList.remove("web25-sidebar-shell");
+      shell.removeAttribute("data-web25-sidebar-shell");
+      shell.removeAttribute("data-web25-sidebar-shell-owner");
+      shell.removeAttribute("data-web25-sidebar-shell-collapsed");
+    }
+
+    delete section.__web25SidebarShell;
+  }
+
+  function hasVisibleSidebarCardChrome(node) {
+    if (!node || !window.getComputedStyle) {
+      return false;
+    }
+
+    const style = window.getComputedStyle(node);
+    const radius = parseFloat(style.borderTopLeftRadius || style.borderRadius || "0") || 0;
+    const borderWidth = [
+      style.borderTopWidth,
+      style.borderRightWidth,
+      style.borderBottomWidth,
+      style.borderLeftWidth
+    ].some(function (value) {
+      return (parseFloat(value || "0") || 0) >= 0.5;
+    });
+    const background = style.backgroundColor || "";
+    const hasBackground = background !== "rgba(0, 0, 0, 0)" && background !== "transparent";
+    const hasShadow = style.boxShadow && style.boxShadow !== "none";
+
+    return radius >= 12 && (hasBackground || borderWidth || hasShadow);
+  }
+
+  function isSafeSidebarModuleShell(node, section, sidebarColumn, kind) {
+    if (!node || !section || !sidebarColumn || node === section || !sidebarColumn.contains(node)) {
+      return false;
+    }
+
+    if (
+      node.matches
+      && node.matches("main, [role='main'], [data-testid='primaryColumn'], [data-testid='sidebarColumn']")
+    ) {
+      return false;
+    }
+
+    if (hasConflictingSidebarTitle(node, kind)) {
+      return false;
+    }
+
+    if (!hasVisibleSidebarCardChrome(node)) {
+      return false;
+    }
+
+    if (!section.getBoundingClientRect || !node.getBoundingClientRect) {
+      return false;
+    }
+
+    const sectionRect = section.getBoundingClientRect();
+    const shellRect = node.getBoundingClientRect();
+    if (!sectionRect.width || !shellRect.width) {
+      return false;
+    }
+
+    if (Math.abs(shellRect.width - sectionRect.width) > 16) {
+      return false;
+    }
+
+    if (Math.abs(shellRect.left - sectionRect.left) > 12) {
+      return false;
+    }
+
+    if (Math.abs(shellRect.top - sectionRect.top) > 12) {
+      return false;
+    }
+
+    if (shellRect.height < sectionRect.height - 8) {
+      return false;
+    }
+
+    if (shellRect.height > sectionRect.height + 48) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function findSidebarModuleShell(section, sidebarColumn, kind) {
+    if (!section || !sidebarColumn || !sidebarColumn.contains(section) || kind === "legal") {
+      return null;
+    }
+
+    let current = section.parentElement;
+    let depth = 0;
+    while (current && current !== sidebarColumn && depth < 4) {
+      if (isSafeSidebarModuleShell(current, section, sidebarColumn, kind)) {
+        return current;
+      }
+
+      current = current.parentElement;
+      depth += 1;
+    }
+
+    return null;
+  }
+
+  function syncSidebarModuleShell(section, kind) {
+    if (!section || !kind) {
+      return null;
+    }
+
+    const sidebarColumn = getSidebarColumn();
+    const nextShell = findSidebarModuleShell(section, sidebarColumn, kind);
+    const previousShell = section.__web25SidebarShell || null;
+    if (previousShell && previousShell !== nextShell) {
+      clearSidebarModuleShell(section);
+    }
+
+    if (!nextShell) {
+      return null;
+    }
+
+    nextShell.classList.add("web25-sidebar-shell");
+    nextShell.setAttribute("data-web25-sidebar-shell", "1");
+    nextShell.setAttribute("data-web25-sidebar-shell-owner", kind);
+    section.__web25SidebarShell = nextShell;
+    return nextShell;
+  }
+
+  function unwrapSidebarModuleWrap(wrap) {
+    if (!wrap || !wrap.parentNode) {
+      return;
+    }
+
+    const section = wrap.parentNode;
+    while (wrap.firstChild) {
+      section.insertBefore(wrap.firstChild, wrap);
+    }
+    wrap.remove();
+  }
+
+  function teardownSidebarModuleHost(section) {
+    if (!section || section.nodeType !== 1) {
+      return;
+    }
+
+    clearSidebarModuleShell(section);
+
+    const button = getSidebarCloseButton(section);
+    if (button) {
+      button.remove();
+    }
+
+    const wrap = getSidebarModuleWrap(section);
+    if (wrap) {
+      wrap.removeAttribute("data-web25-sidebar-content-hidden");
+      unwrapSidebarModuleWrap(wrap);
+    }
+
+    section.classList.remove("web25-sidebar-module");
+    section.removeAttribute("data-web25-sidebar-module");
+    section.removeAttribute("data-web25-sidebar-host");
+    section.removeAttribute("data-web25-sidebar-safe");
+    section.removeAttribute("data-web25-sidebar-state");
+    section.removeAttribute("data-web25-sidebar-collapsed");
+    section.removeAttribute("data-web25-sidebar-pending-dismiss");
+  }
+
+  function hasConflictingSidebarTitle(container, kind) {
+    if (!container || !kind) {
+      return false;
+    }
+
+    const headings = Array.from(
+      container.querySelectorAll('span, div, h1, h2, [role="heading"]')
+    );
+
+    return headings.some(function (node) {
+      const nodeKind = getSidebarModuleKindByTitle(node.textContent || "");
+      return Boolean(nodeKind && nodeKind !== kind);
+    });
+  }
+
+  function isSafeSidebarModuleContainer(container, sidebarColumn, kind) {
+    if (!container || !sidebarColumn || !sidebarColumn.contains(container)) {
+      return false;
+    }
+
+    if (isManagedSidebarModuleContainer(container, kind)) {
+      return true;
+    }
+
+    if (!isSidebarLayoutEligible(sidebarColumn)) {
+      return false;
+    }
+
+    if (container === sidebarColumn || container === document.body || container === document.documentElement) {
+      return false;
+    }
+
+    if (
+      container.matches
+      && container.matches("main, [role='main'], [data-testid='primaryColumn'], [data-testid='sidebarColumn']")
+    ) {
+      return false;
+    }
+
+    if (
+      container.closest
+      && (
+        container.closest("main, [role='main'], [data-testid='primaryColumn']") === container
+        || container.closest("[data-testid='sidebarColumn']") !== sidebarColumn
+      )
+    ) {
+      return false;
+    }
+
+    const owningCell = container.closest
+      ? container.closest('[data-testid="cellInnerDiv"]')
+      : null;
+    if (owningCell && owningCell !== container) {
+      return false;
+    }
+
+    const isCellContainer = Boolean(
+      container.matches && container.matches('[data-testid="cellInnerDiv"]')
+    );
+    const isSemanticCard = Boolean(
+      container.matches && container.matches("section, aside, [role='region'], [role='complementary']")
+    );
+    const isLegalNav = Boolean(
+      kind === "legal"
+      && container.matches
+      && container.matches("nav, [role='navigation']")
+    );
+    const isChromeCardDiv = Boolean(
+      container.matches
+      && container.matches("div")
+      && hasVisibleSidebarCardChrome(container)
+    );
+
+    if (!(isCellContainer || isSemanticCard || isLegalNav || isChromeCardDiv)) {
+      return false;
+    }
+
+    if (!isSidebarCardGeometrySafe(container, sidebarColumn)) {
+      return false;
+    }
+
+    if (hasConflictingSidebarTitle(container, kind)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function resolveSidebarModuleContainer(titleNode, sidebarColumn, kind) {
     if (!titleNode || !sidebarColumn || !sidebarColumn.contains(titleNode)) {
       return null;
     }
 
-    const semanticContainer = titleNode.closest("section, aside, [role='region'], [role='complementary']");
-    if (semanticContainer && sidebarColumn.contains(semanticContainer)) {
-      return semanticContainer;
+    const managedHost = titleNode.closest
+      ? titleNode.closest("[data-web25-sidebar-module], [data-web25-sidebar-host]")
+      : null;
+    if (
+      managedHost
+      && sidebarColumn.contains(managedHost)
+      && isManagedSidebarModuleContainer(managedHost, kind)
+    ) {
+      return managedHost;
     }
 
     const cellContainer = titleNode.closest('[data-testid="cellInnerDiv"]');
-    if (cellContainer && sidebarColumn.contains(cellContainer)) {
+    if (isSafeSidebarModuleContainer(cellContainer, sidebarColumn, kind)) {
       return cellContainer;
     }
 
     let node = titleNode;
-    let fallback = titleNode;
     while (node && node !== sidebarColumn) {
-      if (node.parentElement === sidebarColumn) {
+      if (isSafeSidebarModuleContainer(node, sidebarColumn, kind)) {
         return node;
-      }
-
-      if (node.parentElement && node.parentElement.parentElement === sidebarColumn) {
-        fallback = node.parentElement;
       }
 
       node = node.parentElement;
     }
 
-    return fallback;
+    const semanticContainer = titleNode.closest("section, aside, [role='region'], [role='complementary']");
+    if (isSafeSidebarModuleContainer(semanticContainer, sidebarColumn, kind)) {
+      return semanticContainer;
+    }
+
+    return null;
+  }
+
+  function collectSidebarLegalModules(sidebarColumn, seen, modules) {
+    Array.from(sidebarColumn.querySelectorAll("nav, [role='navigation']")).forEach(function (node) {
+      if (!isSidebarLegalNav(node)) {
+        return;
+      }
+
+      const container = isSafeSidebarModuleContainer(node, sidebarColumn, "legal") ? node : null;
+      if (!container || seen.has(container)) {
+        return;
+      }
+
+      seen.add(container);
+      modules.push({
+        kind: "legal",
+        section: container
+      });
+    });
   }
 
   function collectSidebarModules() {
     const sidebarColumn = getSidebarColumn();
+    root.dataset.web25SidebarColumn = sidebarColumn ? "1" : "0";
     if (!sidebarColumn) {
+      root.dataset.web25SidebarLayout = "missing";
       return [];
     }
 
+    if (!isSidebarLayoutEligible(sidebarColumn)) {
+      root.dataset.web25SidebarLayout = "ineligible";
+      return [];
+    }
+
+    root.dataset.web25SidebarLayout = "eligible";
     const seen = new Set();
     const modules = [];
     const titleCandidates = Array.from(
@@ -663,7 +1212,7 @@
         return;
       }
 
-      const container = resolveSidebarModuleContainer(node, sidebarColumn);
+      const container = resolveSidebarModuleContainer(node, sidebarColumn, kind);
       if (!container || seen.has(container)) {
         return;
       }
@@ -675,6 +1224,11 @@
       });
     });
 
+    collectSidebarLegalModules(sidebarColumn, seen, modules);
+
+    root.dataset.web25SidebarKinds = modules.map(function (entry) {
+      return entry.kind;
+    }).join(",");
     return modules;
   }
 
@@ -683,23 +1237,133 @@
       return;
     }
 
-    if (dismissed) {
-      section.setAttribute("data-web25-sidebar-hidden", "1");
+    const kind = section.getAttribute("data-web25-sidebar-module")
+      || section.getAttribute("data-web25-sidebar-host")
+      || "";
+    const shell = syncSidebarModuleShell(section, kind);
+    const wrap = getSidebarModuleWrap(section);
+    section.setAttribute("data-web25-sidebar-state", dismissed ? "collapsed" : "open");
+    section.removeAttribute("data-web25-sidebar-pending-dismiss");
+
+    if (!wrap) {
+      section.removeAttribute("data-web25-sidebar-collapsed");
+      if (shell) {
+        shell.removeAttribute("data-web25-sidebar-shell-collapsed");
+      }
       return;
     }
 
-    section.removeAttribute("data-web25-sidebar-hidden");
+    if (dismissed) {
+      section.setAttribute("data-web25-sidebar-collapsed", "1");
+      wrap.setAttribute("data-web25-sidebar-content-hidden", "1");
+      if (shell) {
+        shell.setAttribute("data-web25-sidebar-shell-collapsed", "1");
+      }
+      return;
+    }
+
+    section.removeAttribute("data-web25-sidebar-collapsed");
+    wrap.removeAttribute("data-web25-sidebar-content-hidden");
+    if (shell) {
+      shell.removeAttribute("data-web25-sidebar-shell-collapsed");
+    }
   }
 
   function dismissSidebarModule(kind) {
-    if (!kind) {
+    if (!kind || !state.sidebarControlsEnabled) {
       return;
     }
 
-    ensureSidebarDismissedStateLoaded();
     state.dismissedSidebarModules.add(kind);
-    persistDismissedSidebarModules();
     scanSidebarModules();
+  }
+
+  function ensureSidebarModuleWrap(section, kind) {
+    if (!section || !kind) {
+      return null;
+    }
+
+    section.setAttribute("data-web25-sidebar-module", kind);
+    section.setAttribute("data-web25-sidebar-host", kind);
+    section.setAttribute("data-web25-sidebar-safe", "1");
+    section.classList.add("web25-sidebar-module");
+
+    let wrap = getSidebarModuleWrap(section);
+    const button = getSidebarCloseButton(section);
+    if (!wrap) {
+      wrap = document.createElement("div");
+      wrap.className = "web25-sidebar-content-wrap";
+      if (kind === "legal") {
+        wrap.classList.add("web25-sidebar-content-wrap-legal");
+      }
+      wrap.setAttribute("data-web25-owned", "1");
+      wrap.setAttribute("data-web25-sidebar-content", kind);
+      if (button && button.parentNode === section) {
+        section.insertBefore(wrap, button);
+      } else {
+        section.appendChild(wrap);
+      }
+    }
+
+    Array.from(section.childNodes).forEach(function (node) {
+      if (node === wrap || isSidebarPluginNode(node)) {
+        return;
+      }
+
+      wrap.appendChild(node);
+    });
+
+    if (!wrap.childNodes.length) {
+      wrap.remove();
+      section.removeAttribute("data-web25-sidebar-safe");
+      return null;
+    }
+
+    wrap.setAttribute("data-web25-sidebar-content", kind);
+    if (kind === "legal") {
+      wrap.classList.add("web25-sidebar-content-wrap-legal");
+    }
+    return wrap;
+  }
+
+  function queueSidebarModuleDismiss(section, kind, button) {
+    if (!section || !kind) {
+      return;
+    }
+
+    if (section.getAttribute("data-web25-sidebar-pending-dismiss") === "1") {
+      return;
+    }
+
+    section.setAttribute("data-web25-sidebar-pending-dismiss", "1");
+    root.dataset.web25SidebarPending = kind;
+
+    if (button) {
+      button.setAttribute("data-web25-sidebar-pending", "1");
+      button.setAttribute("aria-disabled", "true");
+    }
+
+    const finalize = function () {
+      if (button) {
+        button.removeAttribute("data-web25-sidebar-pending");
+        button.removeAttribute("aria-disabled");
+      }
+
+      delete root.dataset.web25SidebarPending;
+
+      if (!section.isConnected) {
+        return;
+      }
+
+      dismissSidebarModule(kind);
+    };
+
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(finalize);
+      return;
+    }
+
+    window.setTimeout(finalize, 0);
   }
 
   function ensureSidebarCloseButton(section, kind) {
@@ -707,10 +1371,11 @@
       return;
     }
 
-    section.setAttribute("data-web25-sidebar-module", kind);
-    section.classList.add("web25-sidebar-module");
+    if (!ensureSidebarModuleWrap(section, kind)) {
+      return;
+    }
 
-    let button = section.querySelector(".web25-sidebar-close");
+    let button = getSidebarCloseButton(section);
     if (!button) {
       button = document.createElement("button");
       button.type = "button";
@@ -720,7 +1385,7 @@
       section.appendChild(button);
     }
 
-    const label = kind === "happenings" ? "关闭“有什么新鲜事”" : "关闭“推荐关注”";
+    const label = getSidebarModuleCloseLabel(kind);
     button.setAttribute("aria-label", label);
     button.title = label;
     button.textContent = "×";
@@ -730,16 +1395,50 @@
       event.stopPropagation();
     };
 
-    button.onpointerdown = stopInteraction;
-    button.onclick = function (event) {
+    const dismissFromEvent = function (event) {
       stopInteraction(event);
-      dismissSidebarModule(kind);
+      queueSidebarModuleDismiss(section, kind, button);
+    };
+
+    button.onpointerdown = dismissFromEvent;
+    button.onclick = stopInteraction;
+    button.onkeydown = function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        dismissFromEvent(event);
+      }
     };
   }
 
   function scanSidebarModules() {
-    ensureSidebarDismissedStateLoaded();
+    if (!state.sidebarControlsEnabled) {
+      state.dismissedSidebarModules = new Set();
+      clearSidebarModuleUi();
+      root.dataset.web25SidebarModules = "0";
+      root.dataset.web25SidebarHidden = "0";
+      root.dataset.web25SidebarKinds = "";
+      return;
+    }
+
     const modules = collectSidebarModules();
+    const activeSections = new Set(modules.map(function (entry) {
+      return entry.section;
+    }));
+
+    Array.from(document.querySelectorAll("[data-web25-sidebar-module]")).forEach(function (node) {
+      if (!activeSections.has(node)) {
+        teardownSidebarModuleHost(node);
+      }
+    });
+
+    Array.from(document.querySelectorAll("[data-web25-sidebar-shell='1']")).forEach(function (node) {
+      if (!node.querySelector("[data-web25-sidebar-module]")) {
+        node.classList.remove("web25-sidebar-shell");
+        node.removeAttribute("data-web25-sidebar-shell");
+        node.removeAttribute("data-web25-sidebar-shell-owner");
+        node.removeAttribute("data-web25-sidebar-shell-collapsed");
+      }
+    });
+
     root.dataset.web25SidebarModules = String(modules.length);
     root.dataset.web25SidebarHidden = String(state.dismissedSidebarModules.size);
 
@@ -750,18 +1449,77 @@
   }
 
   function clearSidebarModuleUi() {
-    Array.from(document.querySelectorAll("[data-web25-sidebar-hidden='1']")).forEach(function (node) {
-      node.removeAttribute("data-web25-sidebar-hidden");
+    Array.from(document.querySelectorAll("[data-web25-sidebar-module]")).forEach(function (node) {
+      teardownSidebarModuleHost(node);
+    });
+
+    Array.from(document.querySelectorAll(".web25-sidebar-content-wrap")).forEach(function (node) {
+      unwrapSidebarModuleWrap(node);
     });
 
     Array.from(document.querySelectorAll(".web25-sidebar-close")).forEach(function (node) {
       node.remove();
     });
 
-    Array.from(document.querySelectorAll("[data-web25-sidebar-module]")).forEach(function (node) {
-      node.classList.remove("web25-sidebar-module");
-      node.removeAttribute("data-web25-sidebar-module");
-    });
+    delete root.dataset.web25SidebarPending;
+  }
+
+  function applySidebarControlsPreference(value) {
+    state.sidebarControlsEnabled = normalizeSidebarControlsEnabled(value, true);
+    root.dataset.web25SidebarControlsEnabled = state.sidebarControlsEnabled ? "1" : "0";
+
+    if (state.sidebarControlsEnabled) {
+      return;
+    }
+
+    state.dismissedSidebarModules = new Set();
+    clearSidebarModuleUi();
+  }
+
+  function ensureSidebarDebugHooks() {
+    if (state.sidebarDebugHooksInstalled) {
+      return;
+    }
+
+    state.sidebarDebugDismissListener = function (event) {
+      if (state.destroyed) {
+        return;
+      }
+
+      const detail = event && event.detail ? event.detail : {};
+      const kind = typeof detail.kind === "string" ? detail.kind.trim() : "";
+      if (
+        !kind
+        || (
+          kind !== "happenings"
+          && kind !== "follow"
+          && kind !== "suggested"
+          && kind !== "related"
+          && kind !== "premium"
+          && kind !== "live"
+          && kind !== "legal"
+        )
+      ) {
+        return;
+      }
+
+      root.dataset.web25SidebarDebugAction = "dismiss:" + kind;
+      dismissSidebarModule(kind);
+    };
+    document.addEventListener("web25:sidebar-dismiss", state.sidebarDebugDismissListener);
+
+    state.sidebarDebugResetListener = function () {
+      if (state.destroyed) {
+        return;
+      }
+
+      state.dismissedSidebarModules = new Set();
+      root.dataset.web25SidebarDebugAction = "reset";
+      scanSidebarModules();
+    };
+    document.addEventListener("web25:sidebar-reset", state.sidebarDebugResetListener);
+
+    state.sidebarDebugHooksInstalled = true;
   }
 
   function containsSidebarNode(node) {
@@ -1251,8 +2009,18 @@
       const remoteAllowTexts = Array.isArray(payload.manualAllowKeys) ? payload.manualAllowKeys : [];
       const remoteTemplateRules = Array.isArray(payload.templateRules) ? payload.templateRules : [];
       const remoteRepeatSuspiciousHandles = Array.isArray(payload.repeatSuspiciousHandles) ? payload.repeatSuspiciousHandles : [];
+      const remoteSidebarControlsEnabled = normalizeSidebarControlsEnabled(
+        payload.sidebarControlsEnabled,
+        state.sidebarControlsEnabled
+      );
       state.globalTemplateRules = new Set(remoteTemplateRules);
       state.repeatSuspiciousHandles = new Set(remoteRepeatSuspiciousHandles);
+      if (remoteSidebarControlsEnabled !== state.sidebarControlsEnabled) {
+        applySidebarControlsPreference(remoteSidebarControlsEnabled);
+        api.storage.local.set({
+          sidebarControlsEnabled: remoteSidebarControlsEnabled
+        });
+      }
       applyResolvedManualState(remoteHideTexts, remoteAllowTexts, function () {
         scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
         if (typeof callback === "function") {
@@ -1281,6 +2049,7 @@
 
           state.enabled = Boolean(resolvedResult.enabled);
           state.markingEnabled = Boolean(resolvedResult.markingEnabled);
+          applySidebarControlsPreference(resolvedResult.sidebarControlsEnabled);
           state.backendBaseUrl = normalizeBackendBaseUrl(resolvedResult.backendBaseUrl || storageDefaults.backendBaseUrl);
           state.syncKey = String(resolvedResult.syncKey || "").trim();
           state.deviceId = String(resolvedResult.deviceId || "").trim();
@@ -1351,6 +2120,10 @@
       if (changes.markingEnabled) {
         state.markingEnabled = Boolean(changes.markingEnabled.newValue);
         root.dataset.web25MarkingEnabled = state.markingEnabled ? "1" : "0";
+      }
+
+      if (changes.sidebarControlsEnabled) {
+        applySidebarControlsPreference(changes.sidebarControlsEnabled.newValue);
       }
 
       if (changes.backendBaseUrl) {
@@ -1469,6 +2242,27 @@
         scanPage();
       }, delayMs);
       state.stabilizeTimers.push(timerId);
+    });
+  }
+
+  function queueSidebarStabilizationScans(delays) {
+    if (state.destroyed) {
+      return;
+    }
+
+    state.sidebarStabilizeTimers.forEach(function (timerId) {
+      clearTimeout(timerId);
+    });
+    state.sidebarStabilizeTimers = [];
+
+    (delays || []).forEach(function (delayMs) {
+      const timerId = setTimeout(function () {
+        if (state.destroyed) {
+          return;
+        }
+        scanSidebarModules();
+      }, delayMs);
+      state.sidebarStabilizeTimers.push(timerId);
     });
   }
 
@@ -2029,7 +2823,8 @@
     };
   }
 
-  function removeAllHiding() {
+  function removeAllHiding(options) {
+    const keepSidebarUi = Boolean(options && options.keepSidebarUi);
     root.dataset.web25Detail = isDetailPage() ? "1" : "0";
     setScrollAnchoringDisabled(Boolean(state.enabled && isDetailPage()));
 
@@ -2076,7 +2871,9 @@
     });
     state.dockEl = null;
 
-    clearSidebarModuleUi();
+    if (!keepSidebarUi) {
+      clearSidebarModuleUi();
+    }
   }
 
   function removeAllAdHiding() {
@@ -3042,6 +3839,7 @@
     if (isHomeTimelinePage()) {
       removeAllHiding();
       scanSidebarModules();
+      queueSidebarStabilizationScans([120, 420, 1200]);
       scanHomeTimelineAds();
       return;
     }
@@ -3052,18 +3850,20 @@
       root.dataset.web25Stage = "scan:inactive";
       removeAllHiding();
       scanSidebarModules();
+      queueSidebarStabilizationScans([120, 420, 1200]);
       return;
     }
 
     setScrollAnchoringDisabled(true);
     scanSidebarModules();
+    queueSidebarStabilizationScans([120, 420, 1200]);
 
     const articles = getArticles();
     root.dataset.web25Articles = String(articles.length);
     if (articles.length < 2) {
       root.dataset.web25Stage = "scan:not-enough-articles";
       queueStabilizationScans([700, 1600, 3200]);
-      removeAllHiding();
+      removeAllHiding({ keepSidebarUi: true });
       return;
     }
 
@@ -3284,6 +4084,7 @@
       }
 
       watchSettingChanges();
+      ensureSidebarDebugHooks();
       if (api.runtime && api.runtime.onMessage) {
         if (!state.runtimeMessageListener) {
           state.runtimeMessageListener = function (message) {

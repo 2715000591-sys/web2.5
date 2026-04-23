@@ -46,6 +46,35 @@ h1 {
   height: 16px;
 }
 
+.feature-card {
+  padding: 12px;
+  border: 1px solid rgba(22, 32, 42, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.feature-card + .feature-card,
+.feature-card + .sync-card {
+  margin-top: 12px;
+}
+
+.control-card {
+  display: grid;
+  gap: 10px;
+}
+
+.feature-card-separated {
+  margin-top: 12px;
+}
+
+.toggle-sub {
+  margin-left: 26px;
+}
+
+.toggle-sub-disabled {
+  opacity: 0.5;
+}
+
 .hint {
   margin: 12px 0 0;
   font-size: 12px;
@@ -54,9 +83,7 @@ h1 {
 }
 
 .sync-card {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(22, 32, 42, 0.08);
+  padding-top: 2px;
 }
 
 .sync-title {
@@ -66,29 +93,10 @@ h1 {
   color: #16202a;
 }
 
-.field {
-  display: grid;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.field span,
 .sync-status-row span {
   font-size: 12px;
   font-weight: 700;
   color: #61778b;
-}
-
-.field input {
-  width: 100%;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid rgba(22, 32, 42, 0.12);
-  border-radius: 10px;
-  background: white;
-  color: #16202a;
-  font: inherit;
-  font-size: 13px;
 }
 
 .sync-status-row {

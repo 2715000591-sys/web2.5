@@ -24,7 +24,9 @@
             </div>
           </div>
           <div class="topbar-actions">
+            <a class="ghost-button" href="/stable-state.html">稳定状态归档</a>
             <a class="ghost-button" href="https://github.com/2715000591-sys/web2.5" target="_blank" rel="noreferrer">GitHub 备份</a>
+            <a class="ghost-button" href="#sidebar-feature">右栏精简</a>
             <a class="ghost-button" href="#updates">更新记录</a>
           </div>
         </nav>
@@ -38,6 +40,7 @@
             <div class="hero-action-row">
               <a class="primary-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">当前先体验 X / Safari</a>
               <a class="ghost-button" href="/console/">打开控制台</a>
+              <a class="ghost-button" href="/stable-state.html">查看当前稳定状态</a>
             </div>
           </section>
 
@@ -83,6 +86,52 @@
           </div>
         </section>
 
+        <section class="marketing-section" id="sidebar-feature">
+          <div class="section-heading">
+            <p class="eyebrow">新能力</p>
+            <h2>右栏精简现在不再是强塞给你，而是一个你自己决定开不开的功能。</h2>
+          </div>
+          <div class="entry-grid">
+            <article class="entry-card preference-card preference-card-highlight">
+              <p class="eyebrow">右栏模块关闭按钮</p>
+              <h3>多余模块，交给你自己处理。</h3>
+              <p>开启后，X 右栏的 `有什么新鲜事 / 推荐关注 / 你可能会喜欢 / 相关用户 / Premium / 直播 / 政策链接` 会出现灰色小叉。关掉后不留白框，刷新后重新出现。</p>
+              <label class="site-toggle-row">
+                <input type="checkbox" data-web25-sidebar-pref-toggle>
+                <span class="site-toggle-copy">
+                  <strong>为我的 web2.5 开启右栏精简</strong>
+                  <span>你可以先在官网决定，也可以稍后在 Safari 插件左上角弹窗里再改。</span>
+                </span>
+              </label>
+              <p class="site-toggle-status" data-web25-sidebar-pref-status>
+                当前未登录时，这个勾选会先记在这个浏览器里；登录后会同步到你的插件账号偏好。
+              </p>
+              <div class="hero-action-row compact-action-row">
+                <span class="status-pill mellow" data-web25-sidebar-pref-pill>当前偏好：开启</span>
+                <a class="ghost-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">安装 Safari 插件</a>
+              </div>
+            </article>
+            <article class="entry-card preference-support-card">
+              <p class="eyebrow">宣传口径</p>
+              <h3>web2.5 不是替你决定，而是把决定权还给你。</h3>
+              <div class="preference-points">
+                <div class="preference-point">
+                  <strong>这不是一刀切隐藏</strong>
+                  <p>主时间线、左栏和帖子正文不会被误伤，右栏模块各关各的。</p>
+                </div>
+                <div class="preference-point">
+                  <strong>这不是永久删掉页面的一部分</strong>
+                  <p>当前设计是刷新后重新出现，方便你每次按当下需要决定。</p>
+                </div>
+                <div class="preference-point">
+                  <strong>这不是只能本机偷偷开</strong>
+                  <p>现在官网和 Safari 插件都会有同一个选项，登录后会尽量保持同一偏好。</p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
         <section class="marketing-section updates-section" id="updates">
           <div class="section-heading">
             <p class="eyebrow">当前进展</p>
@@ -94,6 +143,10 @@
               <p>标记、自动整理、手动下沉和恢复这条链路已经稳定工作。</p>
             </article>
             <article class="update-item">
+              <strong>右栏精简已经变成可选功能</strong>
+              <p>官网和 Safari 插件弹窗现在都能决定是否开启右栏模块关闭按钮，不再默认强塞给所有人。</p>
+            </article>
+            <article class="update-item">
               <strong>控制台已经只看真实数据</strong>
               <p>接下来会继续升级成公网登录控制台，把全局共享层和你的个人累计分开展示。</p>
             </article>
@@ -101,9 +154,17 @@
               <strong>GitHub 备份已经就位</strong>
               <p>当前稳定版本已经上云，后续继续优化网站不会把它弄丢。</p>
             </article>
+            <article class="update-item update-item-highlight">
+              <strong>当前稳定状态已经正式归档</strong>
+              <p>这次被认可的右栏关闭体验和当前产品稳态，已经同时写进官网和本地交接文档，后续接力不该再把它随手改坏。</p>
+              <div class="entry-actions">
+                <a class="ghost-button" href="/stable-state.html">打开稳定状态归档</a>
+              </div>
+            </article>
           </div>
         </section>
       </main>
     </div>
+    <script src="/landing.js"></script>
   </body>
 </html>

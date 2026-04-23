@@ -18,6 +18,10 @@ const AUTO_GLOBAL_EXACT_WINDOW_DAYS = 30;
 const AUTO_GLOBAL_EXACT_MIN_HIDES = 2;
 const REPEAT_HANDLE_WINDOW_HOURS = 24;
 const REPEAT_HANDLE_MIN_HIDES = 2;
+const DEFAULT_USER_PREFERENCES = Object.freeze({
+  sidebarControlsEnabled: true
+});
+const GLOBAL_RULE_STATE_CACHE_VERSION = "exclude-test-events-v1";
 const ZERO_WIDTH_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 const COMPACT_PUNCTUATION_PATTERN = /[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g;
 const EMOJI_PATTERN = /[\u{1F100}-\u{1FAFF}\u2600-\u27BF]/gu;
@@ -224,6 +228,21 @@ const GEO_MEETUP_BAIT_PATTERNS = [
 ];
 const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
 
+function buildNonTestModerationEventSql(alias) {
+  const prefix = alias ? `${alias}.` : "";
+  return `(
+    TRIM(COALESCE(${prefix}sync_key, '')) NOT LIKE 'sync_test_%'
+    AND TRIM(COALESCE(${prefix}sync_key, '')) NOT LIKE 'sync_dev_test_%'
+    AND TRIM(COALESCE(${prefix}device_id, '')) NOT LIKE 'device_test_%'
+    AND LOWER(TRIM(COALESCE(${prefix}reply_handle, ''))) NOT IN ('tester', 'tester2', 'devtrash')
+    AND TRIM(COALESCE(${prefix}reply_text, '')) NOT IN ('公网同步测试', '公网同步测试二', '测试开发者全局投喂样本')
+  )`;
+}
+
+function buildVisibleDeveloperEventSql(eventAlias) {
+  return `(${eventAlias}.id IS NULL OR ${buildNonTestModerationEventSql(eventAlias)})`;
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
@@ -284,8 +303,17 @@ async function handleApi(request, env, ctx, url) {
       },
       200,
       request,
-      true
+      true,
+      buildSessionRefreshHeaders(request, viewer)
     );
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/preferences") {
+    return handlePreferences(request, env);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/preferences") {
+    return handleUpdatePreferences(request, env);
   }
 
   if (request.method === "POST" && url.pathname === "/api/auth/request-code") {
@@ -527,6 +555,33 @@ async function handleBindSyncKey(request, env) {
   return json({ ok: true, syncKey }, 200, request, true);
 }
 
+async function handlePreferences(request, env) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  const preferences = await getUserPreferences(env, viewer.id);
+  return json({ ok: true, preferences }, 200, request, true, buildSessionRefreshHeaders(request, viewer));
+}
+
+async function handleUpdatePreferences(request, env) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  const payload = await readJson(request);
+  if (!Object.prototype.hasOwnProperty.call(payload, "sidebarControlsEnabled")) {
+    return json({ ok: false, error: "missing-sidebar-controls-enabled" }, 400, request, true);
+  }
+
+  const preferences = await upsertUserPreferences(env, viewer.id, {
+    sidebarControlsEnabled: payload.sidebarControlsEnabled
+  });
+  return json({ ok: true, preferences }, 200, request, true, buildSessionRefreshHeaders(request, viewer));
+}
+
 async function handleDashboard(request, env, url) {
   const viewer = await requireViewer(request, env, true);
   if (!viewer) {
@@ -545,6 +600,7 @@ async function handleDashboard(request, env, url) {
     buildRecentAdEvents(env, viewer.id),
     listBoundSyncKeys(env, viewer.id)
   ]);
+  const preferences = await getUserPreferences(env, viewer.id);
 
   return json(
     {
@@ -555,11 +611,13 @@ async function handleDashboard(request, env, url) {
       recent,
       adEvents,
       bindings,
+      preferences,
       developer: null
     },
     200,
     request,
-    true
+    true,
+    buildSessionRefreshHeaders(request, viewer)
   );
 }
 
@@ -701,9 +759,10 @@ async function handleState(request, env, url) {
   }
 
   await touchSyncKey(env, syncKey, String(url.searchParams.get("deviceId") || "").trim());
-  const [globalRuleState, personalState] = await Promise.all([
+  const [globalRuleState, personalState, sidebarControlsEnabled] = await Promise.all([
     buildGlobalRuleState(env),
-    buildDerivedStateForSyncKey(env, syncKey)
+    buildDerivedStateForSyncKey(env, syncKey),
+    getSidebarControlsEnabledForSyncKey(env, syncKey)
   ]);
 
   const mergedHideKeys = new Set(globalRuleState.manualHideKeys);
@@ -718,7 +777,8 @@ async function handleState(request, env, url) {
       manualHideKeys: Array.from(mergedHideKeys),
       manualAllowKeys: personalState.manualAllowKeys,
       templateRules: Array.isArray(globalRuleState.templateRules) ? globalRuleState.templateRules : [],
-      repeatSuspiciousHandles: Array.isArray(personalState.repeatSuspiciousHandles) ? personalState.repeatSuspiciousHandles : []
+      repeatSuspiciousHandles: Array.isArray(personalState.repeatSuspiciousHandles) ? personalState.repeatSuspiciousHandles : [],
+      sidebarControlsEnabled
     },
     200,
     request,
@@ -807,8 +867,9 @@ async function buildStats(env, userId) {
           WHEN event_type IN ('manual_hide', 'auto_hide') AND COALESCE(normalized_text, '') != '' THEN normalized_text
           ELSE NULL
         END) AS distinct_hidden_phrases
-      FROM moderation_events
-      WHERE user_id = ?
+      FROM moderation_events me
+      WHERE me.user_id = ?
+        AND ${buildNonTestModerationEventSql("me")}
     `
     : `
       SELECT
@@ -825,7 +886,8 @@ async function buildStats(env, userId) {
           WHEN event_type IN ('manual_hide', 'auto_hide') AND COALESCE(normalized_text, '') != '' THEN normalized_text
           ELSE NULL
         END) AS distinct_hidden_phrases
-      FROM moderation_events
+      FROM moderation_events me
+      WHERE ${buildNonTestModerationEventSql("me")}
     `;
   const row = userId
     ? await env.DB.prepare(query).bind(userId).first()
@@ -860,9 +922,10 @@ async function buildRecentEvents(env, userId) {
         reply_handle,
         reply_display_name,
         created_at
-      FROM moderation_events
-      WHERE user_id = ?
+      FROM moderation_events me
+      WHERE me.user_id = ?
         AND event_type IN ('auto_hide', 'manual_hide', 'manual_allow')
+        AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id DESC
       LIMIT 20
     `
@@ -899,9 +962,10 @@ async function buildRecentAdEvents(env, userId) {
         reply_handle,
         reply_display_name,
         created_at
-      FROM moderation_events
-      WHERE user_id = ?
+      FROM moderation_events me
+      WHERE me.user_id = ?
         AND event_type IN ('ad_home_hide', 'ad_reply_hide')
+        AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id DESC
       LIMIT 24
     `
@@ -962,6 +1026,127 @@ async function bindSyncKeyToUser(env, syncKey, userId) {
     ).bind(syncKey, userId, now, now, now).run();
   }
   await env.DB.prepare("UPDATE moderation_events SET user_id = ? WHERE sync_key = ?").bind(userId, syncKey).run();
+}
+
+function normalizeSidebarControlsEnabled(value, fallback) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return fallback !== false;
+  }
+
+  if (normalized === "0" || normalized === "false" || normalized === "off" || normalized === "no") {
+    return false;
+  }
+
+  if (normalized === "1" || normalized === "true" || normalized === "on" || normalized === "yes") {
+    return true;
+  }
+
+  return fallback !== false;
+}
+
+function buildDefaultUserPreferences() {
+  return {
+    sidebarControlsEnabled: DEFAULT_USER_PREFERENCES.sidebarControlsEnabled
+  };
+}
+
+function serializeUserPreferencesRow(row) {
+  if (!row) {
+    return buildDefaultUserPreferences();
+  }
+
+  return {
+    sidebarControlsEnabled: normalizeSidebarControlsEnabled(
+      row.sidebar_controls_enabled,
+      DEFAULT_USER_PREFERENCES.sidebarControlsEnabled
+    )
+  };
+}
+
+async function getUserPreferences(env, userId) {
+  if (!userId) {
+    return buildDefaultUserPreferences();
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        sidebar_controls_enabled
+      FROM user_preferences
+      WHERE user_id = ?
+      LIMIT 1
+    `
+  ).bind(userId).first();
+
+  return serializeUserPreferencesRow(row);
+}
+
+async function upsertUserPreferences(env, userId, patch) {
+  if (!userId) {
+    return buildDefaultUserPreferences();
+  }
+
+  const current = await getUserPreferences(env, userId);
+  const next = {
+    sidebarControlsEnabled: normalizeSidebarControlsEnabled(
+      patch && patch.sidebarControlsEnabled,
+      current.sidebarControlsEnabled
+    )
+  };
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `
+      INSERT INTO user_preferences (
+        user_id,
+        sidebar_controls_enabled,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        sidebar_controls_enabled = excluded.sidebar_controls_enabled,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    userId,
+    next.sidebarControlsEnabled ? 1 : 0,
+    now,
+    now
+  ).run();
+
+  return next;
+}
+
+async function getSidebarControlsEnabledForSyncKey(env, syncKey) {
+  if (!syncKey) {
+    return DEFAULT_USER_PREFERENCES.sidebarControlsEnabled;
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        up.sidebar_controls_enabled
+      FROM sync_keys sk
+      LEFT JOIN user_preferences up
+        ON up.user_id = sk.user_id
+      WHERE sk.sync_key = ?
+      LIMIT 1
+    `
+  ).bind(syncKey).first();
+
+  return normalizeSidebarControlsEnabled(
+    row && row.sidebar_controls_enabled,
+    DEFAULT_USER_PREFERENCES.sidebarControlsEnabled
+  );
 }
 
 async function buildDerivedStateForSyncKey(env, syncKey) {
@@ -1094,19 +1279,23 @@ async function getGlobalRuleStateRevision(env) {
     env.DB.prepare(
       `
         SELECT COALESCE(MAX(id), 0) AS last_event_id
-        FROM moderation_events
+        FROM moderation_events me
         WHERE event_type IN ('manual_hide', 'manual_allow')
+          AND ${buildNonTestModerationEventSql("me")}
       `
     ).first(),
     env.DB.prepare(
       `
         SELECT
-          COUNT(*) AS total_rows,
-          COALESCE(SUM(confirm_count), 0) AS confirm_sum,
-          COALESCE(SUM(revoke_count), 0) AS revoke_sum,
-          COALESCE(MAX(last_confirmed_at), '') AS max_confirmed_at,
-          COALESCE(MAX(revoked_at), '') AS max_revoked_at
-        FROM developer_global_decisions
+          COUNT(d.id) AS total_rows,
+          COALESCE(SUM(d.confirm_count), 0) AS confirm_sum,
+          COALESCE(SUM(d.revoke_count), 0) AS revoke_sum,
+          COALESCE(MAX(d.last_confirmed_at), '') AS max_confirmed_at,
+          COALESCE(MAX(d.revoked_at), '') AS max_revoked_at
+        FROM developer_global_decisions d
+        LEFT JOIN moderation_events me
+          ON me.id = d.event_id
+        WHERE ${buildVisibleDeveloperEventSql("me")}
       `
     ).first()
   ]);
@@ -1119,6 +1308,7 @@ async function getGlobalRuleStateRevision(env) {
       revokeSum: Number(decisionRow && decisionRow.revoke_sum ? decisionRow.revoke_sum : 0),
       maxConfirmedAt: decisionRow && decisionRow.max_confirmed_at ? decisionRow.max_confirmed_at : "",
       maxRevokedAt: decisionRow && decisionRow.max_revoked_at ? decisionRow.max_revoked_at : "",
+      logicVersion: GLOBAL_RULE_STATE_CACHE_VERSION,
       hourBucket: currentHourBucket
     })
   };
@@ -1146,9 +1336,10 @@ async function buildGlobalRuleStateUncached(env) {
         reply_handle,
         reply_display_name,
         created_at
-      FROM moderation_events
+      FROM moderation_events me
       WHERE event_type IN ('manual_hide', 'manual_allow')
         AND created_at >= ?
+        AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id ASC
     `
   ).bind(windowCutoffIso).all();
@@ -1820,10 +2011,13 @@ async function buildDeveloperDashboard(env, userId, options) {
     env.DB.prepare(
       `
         SELECT
-          COALESCE(SUM(confirm_count), 0) AS feed_count,
-          COALESCE(SUM(revoke_count), 0) AS revoked_count
-        FROM developer_global_decisions
-        WHERE user_id = ?
+          COALESCE(SUM(d.confirm_count), 0) AS feed_count,
+          COALESCE(SUM(d.revoke_count), 0) AS revoked_count
+        FROM developer_global_decisions d
+        LEFT JOIN moderation_events me
+          ON me.id = d.event_id
+        WHERE d.user_id = ?
+          AND ${buildVisibleDeveloperEventSql("me")}
       `
     ).bind(userId).first()
   ]);
@@ -1911,15 +2105,19 @@ async function buildDeveloperDashboard(env, userId, options) {
 
 async function listDeveloperDecisionRows(env, options) {
   const limit = Math.max(1, Math.min(400, Number(options && options.limit ? options.limit : 40) || 40));
-  const filter = options && Object.prototype.hasOwnProperty.call(options, "revoked")
-    ? (options.revoked ? "WHERE revoked_at IS NOT NULL" : "WHERE revoked_at IS NULL")
-    : "";
+  const conditions = [buildVisibleDeveloperEventSql("me")];
+  if (options && Object.prototype.hasOwnProperty.call(options, "revoked")) {
+    conditions.push(options.revoked ? "d.revoked_at IS NOT NULL" : "d.revoked_at IS NULL");
+  }
+  const whereClause = conditions.length ? `WHERE ${conditions.join("\n        AND ")}` : "";
   const { results = [] } = await env.DB.prepare(
     `
-      SELECT *
-      FROM developer_global_decisions
-      ${filter}
-      ORDER BY last_confirmed_at DESC
+      SELECT d.*
+      FROM developer_global_decisions d
+      LEFT JOIN moderation_events me
+        ON me.id = d.event_id
+      ${whereClause}
+      ORDER BY d.last_confirmed_at DESC
       LIMIT ?
     `
   ).bind(limit).all();
@@ -1942,9 +2140,10 @@ async function listDeveloperPendingFeedRows(env, userId, limit) {
         normalized_text,
         compact_text,
         created_at
-      FROM moderation_events
-      WHERE user_id = ?
+      FROM moderation_events me
+      WHERE me.user_id = ?
         AND event_type = 'manual_hide'
+        AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id DESC
       LIMIT ?
     `
@@ -1957,16 +2156,19 @@ async function listDeveloperPendingReviewRows(env, userId, limit) {
   const { results = [] } = await env.DB.prepare(
     `
       SELECT
-        id,
-        fingerprint,
-        event_id,
-        user_id,
-        review_type,
-        updated_at
-      FROM developer_pending_reviews
-      WHERE user_id = ?
-        AND review_type = 'not_garbage'
-      ORDER BY updated_at DESC
+        r.id,
+        r.fingerprint,
+        r.event_id,
+        r.user_id,
+        r.review_type,
+        r.updated_at
+      FROM developer_pending_reviews r
+      LEFT JOIN moderation_events me
+        ON me.id = r.event_id
+      WHERE r.user_id = ?
+        AND r.review_type = 'not_garbage'
+        AND ${buildVisibleDeveloperEventSql("me")}
+      ORDER BY r.updated_at DESC
       LIMIT ?
     `
   ).bind(userId, safeLimit).all();
@@ -2144,6 +2346,7 @@ function isTruthy(value) {
 function isCredentialedPath(pathname) {
   return pathname.startsWith("/api/auth/")
     || pathname === "/api/me"
+    || pathname === "/api/preferences"
     || pathname === "/api/dashboard"
     || pathname === "/api/account/bind-sync-key"
     || pathname === "/api/developer/confirm-feed"
@@ -2206,12 +2409,25 @@ function readCookie(request, name) {
   return "";
 }
 
+function buildSessionRefreshHeaders(request, viewer) {
+  const headers = new Headers();
+  if (!viewer) {
+    return headers;
+  }
+
+  const sessionId = readCookie(request, SESSION_COOKIE);
+  if (sessionId) {
+    headers.set("Set-Cookie", serializeSessionCookie(sessionId));
+  }
+  return headers;
+}
+
 function serializeSessionCookie(sessionId) {
-  return `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${60 * 60 * 24 * 30}`;
+  return `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${60 * 60 * 24 * 30}`;
 }
 
 function clearSessionCookie() {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0`;
 }
 
 function normalizeRuleText(text) {

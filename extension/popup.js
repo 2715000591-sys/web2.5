@@ -9,7 +9,11 @@
   ]);
   const enabledCheckbox = document.getElementById("enabled");
   const markingCheckbox = document.getElementById("markingEnabled");
-  const backendBaseUrlInput = document.getElementById("backendBaseUrl");
+  const markingToggleRow = document.getElementById("markingToggleRow");
+  const cleanupStatus = document.getElementById("cleanupStatus");
+  const sidebarControlsCheckbox = document.getElementById("sidebarControlsEnabled");
+  const sidebarControlsStatus = document.getElementById("sidebarControlsStatus");
+  const serviceStatusValue = document.getElementById("serviceStatusValue");
   const accountStatusValue = document.getElementById("accountStatusValue");
   const openConsoleLink = document.getElementById("openConsole");
   const syncStatus = document.getElementById("syncStatus");
@@ -65,9 +69,148 @@
   }
 
   function renderConsoleLink() {
-    const backendBaseUrl = normalizeBackendBaseUrl(backendBaseUrlInput.value);
+    const backendBaseUrl = getBackendBaseUrl();
     const href = backendBaseUrl ? `${backendBaseUrl}/console/` : "#";
     openConsoleLink.href = href;
+  }
+
+  function getBackendBaseUrl(resolvedResult) {
+    const value = normalizeBackendBaseUrl(
+      resolvedResult && resolvedResult.backendBaseUrl
+        ? resolvedResult.backendBaseUrl
+        : DEFAULT_PUBLIC_BACKEND_BASE_URL
+    );
+    return value || DEFAULT_PUBLIC_BACKEND_BASE_URL;
+  }
+
+  function renderServiceStatus(resolvedResult) {
+    if (!serviceStatusValue) {
+      return;
+    }
+
+    const backendBaseUrl = getBackendBaseUrl(resolvedResult);
+    serviceStatusValue.textContent = backendBaseUrl === DEFAULT_PUBLIC_BACKEND_BASE_URL
+      ? "官方云端"
+      : "自定义服务";
+  }
+
+  function updateCleanupUi() {
+    if (!enabledCheckbox || !markingCheckbox) {
+      return;
+    }
+
+    const cleanupEnabled = Boolean(enabledCheckbox.checked);
+    markingCheckbox.disabled = !cleanupEnabled;
+    if (markingToggleRow) {
+      markingToggleRow.classList.toggle("toggle-sub-disabled", !cleanupEnabled);
+    }
+    if (cleanupStatus) {
+      cleanupStatus.textContent = cleanupEnabled
+        ? "只在帖子详情页生效。"
+        : "关闭后，下面这项也不生效。";
+    }
+  }
+
+  function setSidebarControlsStatus(message) {
+    if (sidebarControlsStatus) {
+      sidebarControlsStatus.textContent = message;
+    }
+  }
+
+  function applySidebarControlsValue(value, persistLocally) {
+    const enabled = value !== false;
+    if (sidebarControlsCheckbox) {
+      sidebarControlsCheckbox.checked = enabled;
+    }
+
+    if (!persistLocally) {
+      return;
+    }
+
+    api.storage.local.set({
+      sidebarControlsEnabled: enabled
+    });
+  }
+
+  async function syncRemotePreferences(resolvedResult) {
+    if (!sidebarControlsCheckbox) {
+      return;
+    }
+
+    const backendBaseUrl = normalizeBackendBaseUrl(
+      resolvedResult && resolvedResult.backendBaseUrl
+        ? resolvedResult.backendBaseUrl
+        : getBackendBaseUrl()
+    );
+
+    if (!backendBaseUrl) {
+      setSidebarControlsStatus("当前先按这台设备自己的设置生效。登录后会同步到账号。");
+      return;
+    }
+
+    const me = await requestJson(`${backendBaseUrl}/api/me`);
+    if (!me.ok || !me.data || !me.data.loggedIn || !me.data.viewer) {
+      setSidebarControlsStatus("当前先按这台设备自己的设置生效。登录官网后，这个偏好会同步到账号。");
+      return;
+    }
+
+    const preferenceResult = await requestJson(`${backendBaseUrl}/api/preferences`);
+    if (!preferenceResult.ok || !preferenceResult.data || !preferenceResult.data.preferences) {
+      setSidebarControlsStatus("账号已经登录，但这次没读到右栏精简偏好。插件仍会先按本机设置生效。");
+      return;
+    }
+
+    const remoteEnabled = preferenceResult.data.preferences.sidebarControlsEnabled !== false;
+    applySidebarControlsValue(remoteEnabled, true);
+    setSidebarControlsStatus(
+      remoteEnabled
+        ? "当前账号已开启右栏模块关闭按钮。官网和插件会尽量保持同一偏好。"
+        : "当前账号已关闭右栏模块关闭按钮。官网和插件会尽量保持同一偏好。"
+    );
+  }
+
+  async function saveSidebarControlsPreference() {
+    if (!sidebarControlsCheckbox) {
+      return;
+    }
+
+    const enabled = Boolean(sidebarControlsCheckbox.checked);
+    api.storage.local.set({
+      sidebarControlsEnabled: enabled
+    });
+
+    const backendBaseUrl = getBackendBaseUrl();
+    if (!backendBaseUrl) {
+      setSidebarControlsStatus("当前已保存到这台设备。登录后会同步到账号。");
+      return;
+    }
+
+    const me = await requestJson(`${backendBaseUrl}/api/me`);
+    if (!me.ok || !me.data || !me.data.loggedIn || !me.data.viewer) {
+      setSidebarControlsStatus("当前已保存到这台设备。登录官网后，这个偏好会同步到账号。");
+      return;
+    }
+
+    const result = await requestJson(`${backendBaseUrl}/api/preferences`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        sidebarControlsEnabled: enabled
+      })
+    });
+
+    if (!result.ok || !result.data || !result.data.ok) {
+      setSidebarControlsStatus("账号已经登录，但这次没同步上。插件还是会先按本机设置生效。");
+      return;
+    }
+
+    setSidebarControlsStatus(
+      enabled
+        ? "右栏模块关闭按钮已开启，并且已经同步到账号。"
+        : "右栏模块关闭按钮已关闭，并且已经同步到账号。"
+    );
   }
 
   function ensureIdentity(result, callback) {
@@ -99,6 +242,7 @@
     api.storage.local.get({
       enabled: true,
       markingEnabled: false,
+      sidebarControlsEnabled: true,
       backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
       syncKey: "",
       deviceId: ""
@@ -106,9 +250,12 @@
       ensureIdentity(result, function (resolvedResult) {
         enabledCheckbox.checked = Boolean(resolvedResult.enabled);
         markingCheckbox.checked = Boolean(resolvedResult.markingEnabled);
-        backendBaseUrlInput.value = normalizeBackendBaseUrl(resolvedResult.backendBaseUrl || DEFAULT_PUBLIC_BACKEND_BASE_URL);
+        applySidebarControlsValue(Boolean(resolvedResult.sidebarControlsEnabled), false);
+        renderServiceStatus(resolvedResult);
+        updateCleanupUi();
         renderConsoleLink();
         syncAccountConnection(resolvedResult);
+        syncRemotePreferences(resolvedResult);
       });
     });
   }
@@ -117,7 +264,7 @@
     const backendBaseUrl = normalizeBackendBaseUrl(
       resolvedResult && resolvedResult.backendBaseUrl
         ? resolvedResult.backendBaseUrl
-        : backendBaseUrlInput.value
+        : getBackendBaseUrl()
     );
     const syncKey = String(resolvedResult && resolvedResult.syncKey ? resolvedResult.syncKey : "").trim();
 
@@ -126,14 +273,14 @@
     }
 
     if (!backendBaseUrl) {
-      accountStatusValue.textContent = "未配置服务";
-      syncStatus.textContent = "先填好服务地址，登录后的账号和插件设备才能自动接上。";
+      accountStatusValue.textContent = "服务异常";
+      syncStatus.textContent = "当前没接上云端。";
       return;
     }
 
     if (!syncKey) {
       accountStatusValue.textContent = "设备初始化中";
-      syncStatus.textContent = "正在准备当前设备的身份信息，稍后会自动接入账号。";
+      syncStatus.textContent = "正在准备设备。";
       return;
     }
 
@@ -143,7 +290,7 @@
     const me = await requestJson(`${backendBaseUrl}/api/me`);
     if (!me.ok || !me.data || !me.data.loggedIn || !me.data.viewer) {
       accountStatusValue.textContent = "未登录";
-      syncStatus.textContent = "登录控制台后，当前设备会自动接入账号，不需要手动复制任何东西。";
+      syncStatus.textContent = "去官网登录一次就行。";
       return;
     }
 
@@ -157,34 +304,28 @@
 
     if (!bindResult.ok || !bindResult.data || !bindResult.data.ok) {
       accountStatusValue.textContent = formatViewerLabel(me.data.viewer);
-      syncStatus.textContent = "账号已经登录，但这台设备这次还没接上。刷新一下，再给它一点时间。";
+      syncStatus.textContent = "已登录，设备接入中。";
       return;
     }
 
     accountStatusValue.textContent = formatViewerLabel(me.data.viewer);
-    syncStatus.textContent = "当前设备已经自动接入这个账号。以后只管登录账号就行。";
+    syncStatus.textContent = "已登录，设备已接上。";
   }
 
   enabledCheckbox.addEventListener("change", function () {
     api.storage.local.set({ enabled: enabledCheckbox.checked });
+    updateCleanupUi();
   });
 
   markingCheckbox.addEventListener("change", function () {
     api.storage.local.set({ markingEnabled: markingCheckbox.checked });
   });
 
-  backendBaseUrlInput.addEventListener("change", function () {
-    const value = normalizeBackendBaseUrl(backendBaseUrlInput.value);
-    backendBaseUrlInput.value = value;
-    api.storage.local.set({ backendBaseUrl: value });
-    renderConsoleLink();
-    api.storage.local.get({
-      backendBaseUrl: value,
-      syncKey: ""
-    }, function (result) {
-      syncAccountConnection(result);
+  if (sidebarControlsCheckbox) {
+    sidebarControlsCheckbox.addEventListener("change", function () {
+      saveSidebarControlsPreference();
     });
-  });
+  }
 
   readSetting();
 })();
