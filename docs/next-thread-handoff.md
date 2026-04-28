@@ -239,6 +239,16 @@ codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app
 open /Applications/web2.5.app
 ```
 
+重要：替换 App 后，已经打开的 `x.com` / `twitter.com` 标签页不会自动重新注入 content script。必须刷新 X 标签页，或者重启 Safari 后再验证。否则用户会看到“冲走”和右栏灰叉都消失，但其实只是旧标签页没有加载扩展。
+
+可以用 Safari AppleScript 验证真实页面是否已注入：
+
+```bash
+osascript -e 'tell application "Safari" to do JavaScript "document.documentElement.dataset.web25Build || \"NO_WEB25_BUILD\"" in current tab of front window'
+```
+
+如果返回 `NO_WEB25_BUILD`，优先刷新当前 X 标签页；如果仍不行，再检查 Safari 扩展开关和站点权限。
+
 如果只是 Cloudflare Worker / 网站改动，不一定需要更新本机 App。只要影响扩展代码，就需要。
 
 ## 8. 常用验证命令
@@ -255,6 +265,13 @@ npm run cloud:deploy
 rg -n "BUILD_ID|displayNameLooksStrongLure|low-information-strong-lure-name" "/Applications/web2.5.app/Contents/PlugIns/web2.5 Extension.appex/Contents/Resources/content"
 codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app
 pluginkit -m -A | rg "web2\\.5|web25|yourCompany|Colorful"
+```
+
+真实页面注入验证：
+
+```bash
+osascript -e 'tell application "Safari" to do JavaScript "document.documentElement.dataset.web25Build || \"NO_WEB25_BUILD\"" in current tab of front window'
+osascript -e 'tell application "Safari" to do JavaScript "document.querySelectorAll(\"[data-web25-action=manual-hide], .web25-sidebar-close, [data-web25-sidebar-close]\").length.toString()" in current tab of front window'
 ```
 
 ## 9. 下一步优先级

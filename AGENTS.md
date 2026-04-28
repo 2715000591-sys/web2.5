@@ -42,6 +42,8 @@ Before saying a change is done, run the smallest useful verification set for the
 - Build/deploy when the change is intended to reach users.
 - Confirm `/Applications/web2.5.app` contains the latest `BUILD_ID` after local Safari app updates.
 - Confirm `codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` passes after replacing the app.
+- After replacing the Safari app, reload existing `x.com` / `twitter.com` Safari tabs. Already-open tabs may keep running without the content script until they are refreshed.
+- Verify the real page, not just the app bundle: check `document.documentElement.dataset.web25Build`, visible `冲走` buttons on detail pages, and visible sidebar close buttons when a sidebar is present.
 
 ## Current Stable References
 
