@@ -237,6 +237,7 @@ rm -rf /Applications/web2.5.app
 ditto /tmp/web25-derived/Build/Products/Debug/web2.5.app /Applications/web2.5.app
 codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app
 open /Applications/web2.5.app
+npm run safari:verify-live
 ```
 
 重要：替换 App 后，已经打开的 `x.com` / `twitter.com` 标签页不会自动重新注入 content script。必须刷新 X 标签页，或者重启 Safari 后再验证。否则用户会看到“冲走”和右栏灰叉都消失，但其实只是旧标签页没有加载扩展。
