@@ -113,6 +113,14 @@
     /(纸飞机|飞机号|扣扣|企鹅|群号|频道号|频道|群聊)/,
     /(搜|加).{0,3}(id|号|账号|小号|vx|wx|tg|电报|飞机)/
   ];
+  const DISPLAY_NAME_STRONG_LURE_PATTERNS = [
+    /(男大|女大|男高|女高|大学生|高中生|体育生|健身|肌肉|弟弟|哥哥|姐姐|妹妹|男生|女生|小男|小女).{0,4}(可约|可聊|可撩|可线下|可上门|可到家|可见面)/,
+    /(可约|可聊|可撩|可线下|可上门|可到家|可见面).{0,4}(男大|女大|男高|女高|大学生|高中生|体育生|健身|肌肉|弟弟|哥哥|姐姐|妹妹|男生|女生|小男|小女)/,
+    /(同城|附近|线下|上门|到家).{0,4}(可约|可聊|可撩|见面|男大|女大|男高|女高|体育生)/,
+    /(男大|女大|男高|女高|体育生).{0,4}(接|找|蹲|约|聊|撩)/,
+    /(接|找|蹲).{0,3}(男大|女大|男高|女高|体育生)/,
+    /可约.{0,4}(私|主页|置顶|简介|资料|id|号|vx|wx|tg)/
+  ];
   const HIGH_RISK_DISPLAY_NAME_PATTERNS = [
     /迷药/,
     /催情/,
@@ -622,6 +630,10 @@
       return true;
     }
 
+    if (displayNameLooksStrongLure(name)) {
+      return true;
+    }
+
     if (DISPLAY_NAME_LURE_PATTERNS.some(function (pattern) {
       return pattern.test(normalized) || pattern.test(compact);
     })) {
@@ -638,6 +650,19 @@
     return marketingTermCount >= 2
       || lureTermCount >= 2
       || (marketingTermCount + lureTermCount >= 1 && hasMarketingBadge);
+  }
+
+  function displayNameLooksStrongLure(name) {
+    const raw = String(name || "");
+    const normalized = normalize(raw);
+    const compact = buildCompact(raw);
+    if (!compact) {
+      return false;
+    }
+
+    return DISPLAY_NAME_STRONG_LURE_PATTERNS.some(function (pattern) {
+      return pattern.test(normalized) || pattern.test(compact);
+    });
   }
 
   function displayNameLooksHighRisk(name) {
@@ -721,17 +746,21 @@
     const shareLinkScam = looksLikeShareLinkScam(replyText);
     const innocentPetContext = looksLikeInnocentPetContext(replyText);
     const highRiskDisplayName = displayNameLooksHighRisk(flags.displayName || "");
-    const lureDisplayName = !highRiskDisplayName && displayNameLooksLure(flags.displayName || "");
+    const strongLureDisplayName = !highRiskDisplayName && displayNameLooksStrongLure(flags.displayName || "");
+    const lureDisplayName = !highRiskDisplayName && (strongLureDisplayName || displayNameLooksLure(flags.displayName || ""));
     const suspiciousHandle = handleLooksSuspicious(flags.handle || "");
     const trustedOverride = shareLinkScam || highRiskDisplayName || (lureDisplayName && reply.hasMinimalTextPayload);
     const reasons = [];
     let score = 0;
 
     if (!reply.normalized) {
-      if (highRiskDisplayName || (lureDisplayName && suspiciousHandle)) {
+      if (highRiskDisplayName || strongLureDisplayName || (lureDisplayName && suspiciousHandle)) {
         const emptyReasons = [];
         if (highRiskDisplayName) {
           emptyReasons.push("high-risk-display-name");
+        }
+        if (strongLureDisplayName) {
+          emptyReasons.push("strong-lure-display-name");
         }
         if (lureDisplayName) {
           emptyReasons.push("lure-display-name");
@@ -871,6 +900,11 @@
       reasons.push("lure-display-name");
     }
 
+    if (strongLureDisplayName && (reply.hasLowInformationBadge || reply.hasFragmentedSymbolicReply || reply.hasMinimalTextPayload)) {
+      score += 3;
+      reasons.push("strong-lure-display-name-low-info");
+    }
+
     if (lureDisplayName && suspiciousHandle) {
       score += 1;
       reasons.push("risky-account-profile");
@@ -974,6 +1008,7 @@
     normalizeText: normalize,
     handleLooksSuspicious: handleLooksSuspicious,
     displayNameLooksLure: displayNameLooksLure,
+    displayNameLooksStrongLure: displayNameLooksStrongLure,
     displayNameLooksHighRisk: displayNameLooksHighRisk,
     buildDisplayNameRiskKey: buildDisplayNameRiskKey,
     buildHighRiskDisplayNameKey: buildHighRiskDisplayNameKey,

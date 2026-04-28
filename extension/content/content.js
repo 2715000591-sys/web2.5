@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-27-2202";
+  const BUILD_ID = "2026-04-28-1757";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -3028,6 +3028,12 @@
       && typeof window.Web25Rules.buildDisplayNameRiskKey === "function"
       && window.Web25Rules.buildDisplayNameRiskKey(authorMeta.displayName || "")
     );
+    const strongDisplayNameRisk = Boolean(
+      authorMeta
+      && window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksStrongLure === "function"
+      && window.Web25Rules.displayNameLooksStrongLure(authorMeta.displayName || "")
+    );
     const suspiciousHandle = Boolean(
       authorMeta
       && window.Web25Rules
@@ -3041,6 +3047,14 @@
 
     if (analysis && analysis.hasBaitQuestionShape) {
       return "pattern:bait-question-shape";
+    }
+
+    if (
+      analysis
+      && strongDisplayNameRisk
+      && (analysis.hasLowInformationBadge || analysis.hasFragmentedSymbolicReply || analysis.hasMinimalTextPayload)
+    ) {
+      return "pattern:low-information-strong-lure-name";
     }
 
     if (analysis && analysis.hasLowInformationBadge && displayNameRisk && suspiciousHandle) {

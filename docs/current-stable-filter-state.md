@@ -75,6 +75,7 @@
 - `geo-meetup-bait`
 - `bait-question-shape`
 - `low-information-lure-account`
+- `low-information-strong-lure-name`
 - `risky-account-profile`
 - `hook-erotic-combo`
 
@@ -85,6 +86,7 @@
 - `pattern:geo-meetup-bait`
 - `pattern:bait-question-shape`
 - `pattern:low-information-lure-account`
+- `pattern:low-information-strong-lure-name`
 
 如果未来新增新的高价值模式键，也必须遵守同样原则：
 
@@ -106,7 +108,7 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-04-23-0052`
+  - `BUILD_ID = 2026-04-28-1757`
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`

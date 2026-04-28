@@ -280,6 +280,14 @@ const DISPLAY_NAME_LURE_PATTERNS = [
   /(纸飞机|飞机号|扣扣|企鹅|群号|频道号|频道|群聊)/,
   /(搜|加).{0,3}(id|号|账号|小号|vx|wx|tg|电报|飞机)/
 ];
+const DISPLAY_NAME_STRONG_LURE_PATTERNS = [
+  /(男大|女大|男高|女高|大学生|高中生|体育生|健身|肌肉|弟弟|哥哥|姐姐|妹妹|男生|女生|小男|小女).{0,4}(可约|可聊|可撩|可线下|可上门|可到家|可见面)/,
+  /(可约|可聊|可撩|可线下|可上门|可到家|可见面).{0,4}(男大|女大|男高|女高|大学生|高中生|体育生|健身|肌肉|弟弟|哥哥|姐姐|妹妹|男生|女生|小男|小女)/,
+  /(同城|附近|线下|上门|到家).{0,4}(可约|可聊|可撩|见面|男大|女大|男高|女高|体育生)/,
+  /(男大|女大|男高|女高|体育生).{0,4}(接|找|蹲|约|聊|撩)/,
+  /(接|找|蹲).{0,3}(男大|女大|男高|女高|体育生)/,
+  /可约.{0,4}(私|主页|置顶|简介|资料|id|号|vx|wx|tg)/
+];
 const SHARE_LINK_PATTERNS = [
   /(?:https?:\/\/)?pan\.quark\.cn\/s\//,
   /(?:https?:\/\/)?pan\.baidu\.com\//,
@@ -7117,6 +7125,10 @@ function displayNameLooksLure(name) {
     return true;
   }
 
+  if (displayNameLooksStrongLure(name)) {
+    return true;
+  }
+
   if (DISPLAY_NAME_LURE_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact))) {
     return true;
   }
@@ -7131,6 +7143,17 @@ function displayNameLooksLure(name) {
   return marketingTermCount >= 2
     || lureTermCount >= 2
     || (marketingTermCount + lureTermCount >= 1 && hasMarketingBadge);
+}
+
+function displayNameLooksStrongLure(name) {
+  const raw = String(name || "");
+  const normalized = normalizeRuleText(raw);
+  const compact = buildCompactRuleText(raw);
+  if (!compact) {
+    return false;
+  }
+
+  return DISPLAY_NAME_STRONG_LURE_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact));
 }
 
 function buildDisplayNameRiskKey(displayName, protectedAccount) {
@@ -7201,6 +7224,12 @@ function buildRowKeys(row) {
   const spamTemplateSignal = protectedGuardApplies ? false : looksLikeSpamTemplateSignal(replyText || normalized);
   const explicitEroticBait = protectedGuardApplies ? false : looksLikeExplicitEroticBait(replyText || normalized);
   const eroticMentionRedirect = protectedGuardApplies ? false : looksLikeEroticMentionRedirect(replyText || normalized);
+  const lowInformationStrongLureName = protectedGuardApplies
+    ? false
+    : (
+      (looksLikeLowInformationBadge(replyText || normalized) || looksLikeFragmentedSymbolicReply(replyText || normalized))
+      && displayNameLooksStrongLure(row.reply_display_name || row.replyDisplayName || "")
+    );
   const lowInformationLureAccount = protectedGuardApplies
     ? false
     : (
@@ -7225,23 +7254,27 @@ function buildRowKeys(row) {
           baitQuestionShape
             ? "pattern:bait-question-shape"
             : (
-              lowInformationLureAccount
-                ? "pattern:low-information-lure-account"
+              lowInformationStrongLureName
+                ? "pattern:low-information-strong-lure-name"
                 : (
-                  shareLinkScam
-                    ? "pattern:share-link-scam"
+                  lowInformationLureAccount
+                    ? "pattern:low-information-lure-account"
                     : (
-                      spamTemplateSignal
-                        ? "pattern:spam-template-signal"
+                      shareLinkScam
+                        ? "pattern:share-link-scam"
                         : (
-                          eroticMentionRedirect
-                          ? "pattern:mention-lure-redirect"
+                          spamTemplateSignal
+                            ? "pattern:spam-template-signal"
                           : (
-                            explicitEroticBait
-                              ? "pattern:explicit-erotic-bait"
-                              : (matchedTerms.length > 0
-                                ? "pattern:" + matchedTerms.join("|")
-                                : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                            eroticMentionRedirect
+                            ? "pattern:mention-lure-redirect"
+                            : (
+                              explicitEroticBait
+                                ? "pattern:explicit-erotic-bait"
+                                : (matchedTerms.length > 0
+                                  ? "pattern:" + matchedTerms.join("|")
+                                  : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                            )
                           )
                         )
                     )
