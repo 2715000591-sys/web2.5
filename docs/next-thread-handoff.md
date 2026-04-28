@@ -19,10 +19,39 @@
 
 下一轮接手前，先读这份：
 
+- `AGENTS.md`
 - `docs/current-stable-filter-state.md`
 - `docs/current-stable-ui-state.md`
+- `docs/moderation-database-training-plan.md`
 
 这是当前筛选机制和当前 UI 交互的稳定基线，不是普通参考文档。
+
+## 最高优先级：以后必须自己完成更新闭环
+
+用户已经明确要求：不要每次只口头说明，不要让用户自己理解复杂步骤。
+
+下一轮助手默认必须这样做：
+
+- 能直接做的维护动作，就自己做完
+- 修改代码后，自己跑必要检查
+- 需要提交的改动，自己提交
+- 需要推送的改动，自己推送
+- 需要部署的改动，自己部署
+- 影响 Safari 扩展的改动，自己更新 `/Applications/web2.5.app`
+- 更新本机 App 后，自己验证 `BUILD_ID` 和签名
+- 最后用简单中文告诉用户“已经做到哪里”，不要只讲理论
+
+只有这些高风险动作需要先停下来讲清楚风险：
+
+- 删除或覆盖云端 D1 真实数据
+- 改登录 / 账号身份逻辑
+- 改密钥、环境变量、费用相关配置
+- 接入会产生费用的 AI / API
+- 大改已经稳定的筛选架构
+
+一句话：
+
+**普通维护默认直接帮用户完成，高风险数据和费用动作先确认。**
 
 ## 当前新增的最高优先级硬约束
 
@@ -98,15 +127,45 @@
     - 主页广告跳过 `3`
     - 回复区广告跳过 `0`
 - 插件默认同步地址已经是公网，不再默认写本地
+- 名字屏蔽已经增强：
+  - 风险显示名会进入筛选判断
+  - 例如 `免费破处`、`无偿`、`同城`、`搭子`、`南大可约`、`男大可约`、`女高可聊`、`体育生可线下` 等明显诱导名字
+  - 风险名字配合 `NEW` / `dd` / `hi` / 极短低信息回复时，可以直接触发更强规则
+  - 当前关键模式键：`pattern:low-information-strong-lure-name`
 - 云端当前已经新增用户偏好接口：
   - `GET /api/preferences`
   - `POST /api/preferences`
   - `GET /api/state` 也会回传 `sidebarControlsEnabled`
 - 当前本地与云端规则已经对齐：
-  - Safari 本地构建 `BUILD_ID = 2026-04-23-1415`
+  - Safari 本地构建 `BUILD_ID = 2026-04-28-1757`
   - Cloudflare Worker 已部署
   - 线上 URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - 当前 Version ID: `ca843ed1-1bd2-429f-b16c-b19906e3f994`
+  - 当前 Version ID: `e85cc291-b3c5-4121-bbc4-30359a442657`
+- 本机 Safari App 已经更新：
+  - 路径：`/Applications/web2.5.app`
+  - 当前扩展：`com.yourCompany.web25.extension(1.0.30)`
+  - 已验证签名通过
+  - 如果页面仍跑旧 `BUILD_ID`，优先重新打开 `/Applications/web2.5.app` 并检查 Safari 扩展缓存
+
+## 数据库和数据分层硬约束
+
+云端 D1 数据库是重要资产。下一轮助手必须默认保护数据，不要把真实历史当测试数据处理。
+
+必须守住：
+
+- 动 D1 schema、迁移、清理前，先备份
+- 不要删除真实用户事件、真实同步历史、真实全局规则
+- 只允许清理已经确认的开发测试行
+- 如果无法确认一行是不是测试数据，默认保留
+- 开发者确认出来的全局规则可以给所有用户使用
+- 个人屏蔽数量、个人恢复数量、个人偏好、个人历史必须按账号隔离
+- 新账号可以共享全局规则，但不能继承开发者账号的个人计数
+
+目前已经验证过的设计方向：
+
+- 公共数据库负责大家都讨厌的通用垃圾内容
+- 个人偏好后续再接 AI 或个性化层
+- 这样可以少花 API 钱，也能保留基础审核强度
 
 ### 还没做完的
 
@@ -251,8 +310,8 @@
 ## 当前分支与现场
 
 - 当前分支：`codex/cloudflare-public-foundation`
-- 当前工作区：脏的
-- 下一轮不要假设仓库是干净的
+- 当前工作区可能随用户操作或部署产物变化
+- 下一轮必须先跑 `git status --branch --short`
 - 下一轮不要随便回退现有改动
 
 ## 哪些数据是真实的，哪些还没接通
@@ -279,7 +338,7 @@
 
 把下面这段原样发给新对话最合适：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先不要扩功能，也不要重构。X 插件主链路已经稳定，绝对不要乱动：冲走、自动下沉、恢复、蓝框、广告跳过都不能改坏。先读 `cloudflare/src/index.js`、`cloudflare/schema.sql`、`site/console.html`、`site/console/index.html`、`site/app.js`、`site/styles.css`、`wrangler.jsonc`，然后只回答三件事：1. 当前真实状态是什么；2. 还缺什么；3. 下一步只应该收哪一个点。默认优先清理开发测试痕迹和普通用户邮件验证码，不要抢跑 AI 和个性化。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`。先不要扩功能，也不要重构。X 插件主链路已经稳定，绝对不要乱动：冲走、自动下沉、恢复、蓝框、广告跳过、名字屏蔽和数据库同步都不能改坏。用户没有计算机基础，所以默认要自己完成检查、修改、提交、推送、部署、本机 App 更新和验证，不要只口头解释。云端 D1 数据很重要，动 schema、清理、迁移前必须先备份；真实数据不能丢。默认优先保护数据、收口普通用户登录/邮件验证码、做完整人工验收，不要抢跑 AI 和大规模个性化。
 
 ## 默认实现原则
 
@@ -289,5 +348,8 @@
 - 继续以公网网站为主入口
 - 真实数据优先，不造假
 - 小步修改，改完就验
+- 改完需要上线的，默认自己上线
+- 影响 Safari 扩展的，默认自己更新 `/Applications/web2.5.app`
+- 需要提交的，默认自己提交并推送
 - 先做收口，再做扩展
 - 先做普通用户可用，再谈高级个性化
