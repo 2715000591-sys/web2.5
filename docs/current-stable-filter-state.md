@@ -112,7 +112,7 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `983e4bcb-dc55-46a4-91c4-8418880259d5`
+  - Version ID: `e85cc291-b3c5-4121-bbc4-30359a442657`
 
 ## 如果未来真的要改筛选，必须先做什么
 
