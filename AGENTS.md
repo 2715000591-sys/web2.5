@@ -52,6 +52,13 @@ Read these before touching core behavior:
 - `docs/current-stable-ui-state.md`
 - `docs/moderation-database-training-plan.md`
 
+## Cross-Thread Handoff
+
+- Keep `docs/next-thread-handoff.md` concise, current, and operational.
+- Do not let it become a chat transcript or a pile of historical counts.
+- When a deployment, local Safari app build, database migration, or stable behavior changes, update the handoff and the relevant stable-state doc in the same change.
+- Prefer dated version anchors, exact paths, and verification commands over vague reminders.
+
 ## High-Risk Actions
 
 Pause and explain the risk before doing any of these:

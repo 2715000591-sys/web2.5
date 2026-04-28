@@ -1,73 +1,140 @@
 # Colorful Toilet 下一轮接力说明
 
-## Summary
+最后整理日期：2026-04-28
 
-- `X / Safari` 插件主链路已经成熟，默认视为稳定版本。
-- 当前筛选机制已经得到用户明确高评价，默认视为 `金状态`，不要轻易改。
-- 下一轮最重要的是守住已完成的东西，不要乱改。
-- 网站已经上公网，且主历史数据已经从本地迁到公网。
-- 当前阶段不要再随意扩功能，先稳住、收口、验收、再小步前进。
+这份文件是给下一轮 Codex / 开发助手看的，不是产品宣传文档。目标只有一个：新对话打开后，能快速、安全、连续地接手，不重复解释，不误删数据，不改坏已经稳定的插件。
 
-这份说明的目标是让下一轮助手：
+## 0. 新对话开场必须先做
 
-- 快速进入状态
-- 不踩回归
-- 维持高执行度
-- 听用户的话，不自作主张乱加戏
+下一轮接手时，先按这个顺序做：
 
-## 当前必须先读的稳定状态文件
+1. 进入仓库：`/Users/boriszhang/Documents/Codex/project 1`
+2. 运行：`git status --branch --short`
+3. 先读：
+   - `AGENTS.md`
+   - `docs/next-thread-handoff.md`
+   - `docs/current-stable-filter-state.md`
+   - `docs/current-stable-ui-state.md`
+   - `docs/moderation-database-training-plan.md`
+4. 再根据用户最新一句话行动，不要被旧上下文带偏。
 
-下一轮接手前，先读这份：
+不要假设工作区是干净的。不要回退自己没改过的东西。
 
-- `AGENTS.md`
-- `docs/current-stable-filter-state.md`
-- `docs/current-stable-ui-state.md`
-- `docs/moderation-database-training-plan.md`
+## 1. 用户工作方式
 
-这是当前筛选机制和当前 UI 交互的稳定基线，不是普通参考文档。
+用户没有计算机基础，不应该被迫理解提交、推送、部署、D1、Worker、构建签名这些细节。
 
-## 最高优先级：以后必须自己完成更新闭环
+默认工作方式：
 
-用户已经明确要求：不要每次只口头说明，不要让用户自己理解复杂步骤。
+- 能做的就直接做完
+- 修改后自己测试
+- 需要提交就提交
+- 需要推送就推送
+- 需要上线就部署
+- 影响 Safari 扩展就更新 `/Applications/web2.5.app`
+- 更新本机 App 后验证 `BUILD_ID` 和签名
+- 最后用简单中文说清楚“已经做到哪一步”
 
-下一轮助手默认必须这样做：
+只有高风险动作需要先停下来讲清楚：
 
-- 能直接做的维护动作，就自己做完
-- 修改代码后，自己跑必要检查
-- 需要提交的改动，自己提交
-- 需要推送的改动，自己推送
-- 需要部署的改动，自己部署
-- 影响 Safari 扩展的改动，自己更新 `/Applications/web2.5.app`
-- 更新本机 App 后，自己验证 `BUILD_ID` 和签名
-- 最后用简单中文告诉用户“已经做到哪里”，不要只讲理论
-
-只有这些高风险动作需要先停下来讲清楚风险：
-
-- 删除或覆盖云端 D1 真实数据
-- 改登录 / 账号身份逻辑
+- 删除或覆盖 Cloudflare D1 真实数据
+- 改登录、账号身份、权限
 - 改密钥、环境变量、费用相关配置
 - 接入会产生费用的 AI / API
-- 大改已经稳定的筛选架构
+- 大改当前已经稳定的筛选架构
 
-一句话：
+一句话：普通维护默认完整执行，高风险数据和费用动作先确认。
 
-**普通维护默认直接帮用户完成，高风险数据和费用动作先确认。**
+## 2. 当前产品状态
 
-## 当前新增的最高优先级硬约束
+### 已稳定
 
-### 0. 不要轻易动当前筛选机制
+- `X / Safari` 插件主链路已经稳定：
+  - 冲走
+  - 自动下沉
+  - 恢复
+  - 蓝框
+  - 官方广告跳过
+  - 右栏模块关闭
+  - 名字屏蔽
+  - 基础云端同步
+- 公网网站可用：
+  - 首页：`https://colorful-toilet.colorful-toilet.workers.dev/`
+  - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
+- 开发者登录可用：
+  - 邮箱：`2715000591@qq.com`
+  - 开发者验证码当前会直接显示
+- 开发者模式可用：
+  - 待确认投喂
+  - 精确项直达全局
+  - 全局撤回
+- 插件默认同步地址已经指向公网，不再默认写本地后台。
 
-用户已经明确表示，当前筛选效果 `完全符合心意`，并给出了很高评价。
+### 还没完成
 
-这意味着下一轮默认必须遵守：
+- 普通用户真实邮件验证码发送还没接正式发信服务
+- 普通用户正式登录闭环还没完全收口
+- 个性化屏蔽还没开始
+- AI 判断还没接入正式流程
+- 正式自定义域名还没定
+- 远程 D1 里仍有少量开发测试原始行，只能在明确识别后清理
 
-- 不要手痒改评分阈值
-- 不要为了“更聪明”重写筛选机制
-- 不要把当前已经压住的引流话术放回来
-- 不要只改本地规则，不改云端
-- 不要只改云端，不改本地
+## 3. 当前版本锚点
 
-尤其当前必须守住：
+这些是截至 2026-04-28 的已知稳定锚点：
+
+- 当前分支：`codex/cloudflare-public-foundation`
+- Cloudflare Worker：
+  - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
+  - Version ID：`e85cc291-b3c5-4121-bbc4-30359a442657`
+- Cloudflare D1：
+  - 数据库名：`web25`
+  - 绑定名：`DB`
+- Safari / Web Extension：
+  - `BUILD_ID = 2026-04-28-1757`
+  - extension manifest version：`0.1.30`
+  - App / Extension version：`1.0.30 (31)`
+  - 本机安装路径：`/Applications/web2.5.app`
+  - Bundle：`com.yourCompany.web25.extension`
+
+如果实际文件或线上状态与这里不一致，以实际检查结果为准，并更新本文件。
+
+## 4. 数据库硬约束
+
+Cloudflare D1 是重要生产数据，不是临时缓存。
+
+必须守住：
+
+- 动 schema、迁移、清理、危险写入前，先备份 D1
+- 不删除真实用户事件
+- 不删除真实同步历史
+- 不删除真实全局规则
+- 只清理已经确认的开发测试行
+- 如果无法确认是不是测试数据，默认保留
+- 不把单个用户反馈直接变成公共规则
+- 不让个人偏好污染公共规则库
+
+数据分层口径：
+
+- 公共基础层：大家普遍不想看到的招嫖、诈骗、导流、黑产联系方式、高频垃圾模板
+- 样本标注层：用户反馈、开发者审核、AI 判断都先成为样本和 label
+- 个人偏好层：个人不喜欢的话题、语气、账号风格，后续再用 AI 或个性化规则处理
+
+新账号可以共享公共基础库，但不能继承开发者账号的个人屏蔽数量、恢复数量、偏好和历史。
+
+## 5. 筛选机制硬约束
+
+当前筛选机制已经得到用户明确认可，默认是稳态资产。
+
+不要随意：
+
+- 改评分阈值
+- 重写筛选架构
+- 把已经压住的引流话术放回来
+- 只改本地不改云端
+- 只改云端不改本地
+
+必须守住的命中类型：
 
 - `有万达广场附近的吗`
 - `有附近的吗`
@@ -77,279 +144,199 @@
 - `NEW / dd / 极短符号 + 风险显示名 + 数字 handle`
 - `哥哥我想要`
 - `有哥哥找下吗`
+- 风险显示名配低信息回复，例如 `男大可约` + `dd`
 
-也必须继续避免误伤：
+必须避免误伤：
 
 - `Apple ID 一直登不上`
 - `我在万达广场附近上班`
 - `万达广场附近有什么好吃的`
 - `附近有家面馆不错`
+- 普通账号正常说 `hi` / `ok`
 
-## 当前真实状态
+当前关键模式键：
 
-### 已经做成的
+- `pattern:geo-meetup-bait`
+- `pattern:bait-question-shape`
+- `pattern:low-information-lure-account`
+- `pattern:low-information-strong-lure-name`
 
-- `X / Safari` 插件主链路已经稳定：
-  - 冲走
-  - 自动下沉
-  - 恢复
-  - 蓝框
-  - 官方广告跳过
-  - 右栏 `订阅 Premium / X 上的直播 / 你可能会喜欢 / 相关用户 / 有什么新鲜事 / 推荐关注 / 政策链接块` 可注入灰色小叉并直接关闭
-  - 右栏模块关闭后不会再留下白框
-  - 右栏模块关闭能力现在已经不是强制开启：
-    - Safari 插件弹窗里可以单独勾选是否开启
-    - 官网公开页里也有同一项偏好开关
-    - 用户登录后，这个偏好会通过云端账号尽量同步到插件
-  - 刷新页面后，右栏模块会重新出现，允许再次手动关闭
-  - 某些详情页会在首轮渲染后把右栏灰叉吃掉；当前版本已经用延迟复扫补挂，默认不要删这层兜底
-  - Safari 只应保留 `/Applications/web2.5.app` 这一份扩展注册；如果页面还在跑旧 `BUILD_ID`，先用 `pluginkit` 清掉缓存/临时构建，再重新注册 `/Applications/web2.5.app/Contents/PlugIns/web2.5 Extension.appex`
-- 公网网站已经能打开：
-  - 官网首页：`https://colorful-toilet.colorful-toilet.workers.dev/`
-  - 公网控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- 开发者登录已经可用：
-  - `2715000591@qq.com`
-  - 开发者验证码会直接显示
-- 公网控制台已经是同一个 `/console/` 页面壳层：
-  - 普通用户以后走普通内容层
-  - 开发者登录后走开发者内容层
-- 开发者模式已经具备：
-  - 待确认投喂
-  - 精确项直达全局
-  - 全局撤回
-- 本地旧数据已经确认存在，并且主真实数据已迁入公网：
-  - 主 `syncKey`：`sync_b876d1579af44972af4278b1606ceee7`
-  - 公网中已对上：
-    - 总事件 `146`
-    - 自动整理 `80`
-    - 手动标记 `54`
-    - 恢复 `9`
-    - 主页广告跳过 `3`
-    - 回复区广告跳过 `0`
-- 插件默认同步地址已经是公网，不再默认写本地
-- 名字屏蔽已经增强：
-  - 风险显示名会进入筛选判断
-  - 例如 `免费破处`、`无偿`、`同城`、`搭子`、`南大可约`、`男大可约`、`女高可聊`、`体育生可线下` 等明显诱导名字
-  - 风险名字配合 `NEW` / `dd` / `hi` / 极短低信息回复时，可以直接触发更强规则
-  - 当前关键模式键：`pattern:low-information-strong-lure-name`
-- 云端当前已经新增用户偏好接口：
-  - `GET /api/preferences`
-  - `POST /api/preferences`
-  - `GET /api/state` 也会回传 `sidebarControlsEnabled`
-- 当前本地与云端规则已经对齐：
-  - Safari 本地构建 `BUILD_ID = 2026-04-28-1757`
-  - Cloudflare Worker 已部署
-  - 线上 URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - 当前 Version ID: `e85cc291-b3c5-4121-bbc4-30359a442657`
-- 本机 Safari App 已经更新：
-  - 路径：`/Applications/web2.5.app`
-  - 当前扩展：`com.yourCompany.web25.extension(1.0.30)`
-  - 已验证签名通过
-  - 如果页面仍跑旧 `BUILD_ID`，优先重新打开 `/Applications/web2.5.app` 并检查 Safari 扩展缓存
+相关文件必须同构：
 
-## 数据库和数据分层硬约束
+- `extension/content/rules.js`
+- `extension/content/content.js`
+- `cloudflare/src/index.js`
 
-云端 D1 数据库是重要资产。下一轮助手必须默认保护数据，不要把真实历史当测试数据处理。
+## 6. UI 硬约束
+
+右栏关闭能力是稳定能力，不要乱改。
+
+当前可关闭模块：
+
+- `订阅 Premium`
+- `X 上的直播`
+- `你可能会喜欢`
+- `相关用户`
+- `有什么新鲜事`
+- `推荐关注`
+- 底部政策链接块
 
 必须守住：
 
-- 动 D1 schema、迁移、清理前，先备份
-- 不要删除真实用户事件、真实同步历史、真实全局规则
-- 只允许清理已经确认的开发测试行
-- 如果无法确认一行是不是测试数据，默认保留
-- 开发者确认出来的全局规则可以给所有用户使用
-- 个人屏蔽数量、个人恢复数量、个人偏好、个人历史必须按账号隔离
-- 新账号可以共享全局规则，但不能继承开发者账号的个人计数
+- 每块右上角有灰色小叉
+- 点叉只关闭自己
+- 关闭后不能留下白框
+- 关闭后不能让页面白屏
+- 页面局部重渲染后要能补挂灰叉
+- 真正刷新页面后模块会重新出现，用户可以再次关闭
 
-目前已经验证过的设计方向：
+右栏关闭是“当前页面有效”，不是“跨刷新永久记忆”。
 
-- 公共数据库负责大家都讨厌的通用垃圾内容
-- 个人偏好后续再接 AI 或个性化层
-- 这样可以少花 API 钱，也能保留基础审核强度
+## 7. 常见任务怎么做
 
-### 还没做完的
+### 改筛选规则
 
-- 普通用户真实邮件验证码发送还没接正式发信服务
-- 个性化定制还没开始
-- 正式自定义域名还没定
-- 远程 D1 里仍保留少量开发测试原始行，但已经不再混进控制台累计、开发者面板和全局规则学习
-- 如果后面要做“物理删库”，必须只删测试行，不能碰真实历史
+1. 先看 `docs/current-stable-filter-state.md`
+2. 小范围定向加权，不大改架构
+3. 同时改本地和云端：
+   - `extension/content/rules.js`
+   - `extension/content/content.js`
+   - `cloudflare/src/index.js`
+4. 更新 `BUILD_ID`
+5. 跑语法检查和样本回归
+6. `npm run cloud:check`
+7. 需要上线就 `npm run cloud:deploy`
+8. 需要本机可用就重建并替换 `/Applications/web2.5.app`
+9. 更新稳定状态文档
+10. 提交并推送
 
-## 下一轮最重要的硬约束
+### 改数据库或清理数据
 
-### 1. 不要乱动 X 插件主链路
+1. 先备份远程 D1
+2. 明确目标是 schema、迁移、还是清理
+3. 只处理确认范围内的数据
+4. 不确定是不是测试数据就保留
+5. 改完验证表结构、关键计数、个人/全局分层
+6. 记录备份文件和执行结果
 
-下一轮助手必须默认遵守：
+### 改网站 / Worker
 
-- 不要重写插件
-- 不要重新设计交互
-- 不要移动按钮
-- 不要乱改蓝框逻辑
-- 不要为了“优化”而破坏现在已经稳定的体验
+1. 读 `cloudflare/src/index.js`、`site/`、`wrangler.jsonc`
+2. 跑 `npm run cloud:check`
+3. 需要上线就 `npm run cloud:deploy`
+4. 记录 Cloudflare Version ID
+5. 更新相关文档
 
-尤其不能改坏：
+### 更新本机 Safari App
 
-- 冲走
-- 自动下沉
-- 恢复
-- 蓝框
-- 主页广告跳过
-- 回复区广告跳过
-- 当前已经被用户认可的筛选机制
+常用流程：
 
-一句话：
+```bash
+npm run safari:build
+rm -rf /Applications/web2.5.app
+ditto /tmp/web25-derived/Build/Products/Debug/web2.5.app /Applications/web2.5.app
+codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app
+open /Applications/web2.5.app
+```
 
-**插件现在是稳态资产，不是实验田。**
+如果只是 Cloudflare Worker / 网站改动，不一定需要更新本机 App。只要影响扩展代码，就需要。
 
-### 2. 网站改动要克制
+## 8. 常用验证命令
 
-下一轮如果动网站，只能做这些风格的工作：
+按改动范围选择，不要假装验证过。
 
-- 收口
-- 澄清
-- 小幅提质
-- 把已完成能力表达更清楚
+```bash
+git status --branch --short
+node --check cloudflare/src/index.js
+node --check extension/content/rules.js
+node --check extension/content/content.js
+npm run cloud:check
+npm run cloud:deploy
+rg -n "BUILD_ID|displayNameLooksStrongLure|low-information-strong-lure-name" "/Applications/web2.5.app/Contents/PlugIns/web2.5 Extension.appex/Contents/Resources/content"
+codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app
+pluginkit -m -A | rg "web2\\.5|web25|yourCompany|Colorful"
+```
 
-不要做：
+## 9. 下一步优先级
 
-- 大改结构
-- 自作主张换产品方向
-- 重新发明一套首页
-- 再次把控制台和官网混乱重组
+当前阶段先收口，不抢跑。
 
-### 3. 必须高执行度
+第一优先级：数据安全和真实验收
 
-下一轮助手要遵守：
+- 确认 D1 真实数据分层
+- 确认开发者账号和普通账号看到的个人统计不同
+- 确认公共规则可以共享，但个人计数不共享
+- 如需清理测试行，先备份，只删确认测试行
 
-- 少空谈，多落地
-- 少解释自己想法，多按用户要求改
-- 不要把“建议”偷换成“直接改方向”
-- 有问题先查清，再说话
-- 改完必须自己验证，不准假装好了
+第二优先级：普通用户登录闭环
 
-## 对下一轮助手的工作风格要求
+- 接正式邮件验证码发送
+- 普通用户登录后能看自己的统计和偏好
+- 开发者模式与普通用户模式保持隔离
 
-### 要这样做
+第三优先级：完整人工验收
 
-- 先理解用户要求，再动手
-- 每次只改用户明确点到的那一块
-- 不要顺手乱动别的地方
-- 遇到风险高的地方，先提醒边界
-- 先验证真实结果，再汇报
-- 汇报要简单、直接、别端着
+- 插件里真实产生一条动作
+- 看是否进入公网 D1
+- 看是否出现在公网控制台
+- 看开发者确认 / 撤回是否真实影响全局规则
 
-### 不要这样做
-
-- 不要“为了更完整”自己扩功能
-- 不要把用户满意的地方重做一遍
-- 不要用开发者口吻教育用户
-- 不要拿假数据糊弄
-- 不要在没验收的情况下说“已经好了”
-- 不要把临时测试数据、测试分支、测试逻辑混进正式体验
-
-## 下一轮最应该优先做什么
-
-### 第一优先级
-
-- 清理开发测试痕迹
-  - 现在“查询层隔离”已经完成
-  - 如果还要继续，只能做测试原始行的物理清理
-  - 不碰真实历史数据
-
-### 第二优先级
-
-- 接普通用户真实邮件验证码发送
-  - 这是公网产品真正闭环前最值得补的一步
-  - 补完之后，网站才算从“开发者可用”走向“普通人可用”
-
-### 第三优先级
-
-- 做一轮完整人工验收
-  - 插件里真实产生一条动作
-  - 看是否进入公网数据库
-  - 看是否出现在公网控制台
-  - 看开发者确认 / 撤回是否真实影响全局规则
-
-### 当前不要优先做的
+暂时不要优先：
 
 - AI 个性化
 - 多浏览器扩展
 - 大规模 UI 重做
-- 重新设计插件体验
-- 再开更多模块
+- 重写插件体验
+- 新增很多模块
 
-## 当前关键文件
+## 10. 关键文件地图
 
-下一轮最应该先读这些文件：
+核心规则：
 
+- `extension/content/rules.js`
+- `extension/content/content.js`
 - `cloudflare/src/index.js`
+
+云端和数据库：
+
 - `cloudflare/schema.sql`
-- `site/console.html`
+- `wrangler.jsonc`
+- `docs/moderation-database-training-plan.md`
+
+网站和控制台：
+
+- `site/index.html`
 - `site/console/index.html`
 - `site/app.js`
 - `site/styles.css`
-- `wrangler.jsonc`
-- `extension/content/content.js`
-- `extension/popup.js`
-- `extension/popup.html`
 
-## 当前真实验证结论
+Safari App：
 
-这些不是猜的，是已经确认过的：
+- `scripts/build-safari-app.sh`
+- `web2.5/web2.5.xcodeproj/project.pbxproj`
+- `extension/manifest.json`
 
-- 公网首页可以打开
-- 公网控制台可以打开
-- 开发者登录可以成功
-- 开发者模式是同一个 `/console/` 壳层，不是新后台
-- 开发者待确认样本可以出现
-- 开发者确认后，精确规则能进入全局
-- 开发者撤回后，精确规则不会被旧聚合逻辑偷偷顶回全局
-- 主真实 `syncKey` 的旧本地历史数据已经迁进公网
-- 插件默认同步地址已指向公网
+稳定状态文档：
 
-## 当前分支与现场
+- `AGENTS.md`
+- `docs/current-stable-filter-state.md`
+- `docs/current-stable-ui-state.md`
+- `docs/next-thread-handoff.md`
 
-- 当前分支：`codex/cloudflare-public-foundation`
-- 当前工作区可能随用户操作或部署产物变化
-- 下一轮必须先跑 `git status --branch --short`
-- 下一轮不要随便回退现有改动
+## 11. 给新对话的提示词
 
-## 哪些数据是真实的，哪些还没接通
+可以直接把下面这段发给新对话：
 
-### 已真实接通
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`，然后跑 `git status --branch --short`。先不要扩功能，也不要重构。X / Safari 插件主链路已经稳定，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽和数据库同步都不能改坏。用户没有计算机基础，所以默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证，不要只口头解释。Cloudflare D1 数据很重要，动 schema、清理、迁移前必须先备份；真实数据不能丢。默认优先保护数据、收口普通用户登录/邮件验证码、做完整人工验收，不要抢跑 AI 和大规模个性化。
 
-- 公网 Pages
-- 公网 Worker
-- 云端 D1 数据库
-- 开发者登录
-- 插件到公网的基础同步
-- 开发者全局规则确认 / 撤回
-- 主真实历史数据迁移
+## 12. 维护这份文件的规则
 
-### 还没接通或不完整
+每次完成重要改动后，检查这份文件是否需要更新。
 
-- 普通用户真实邮件发送
-- 普通用户正式登录闭环
-- 个性化定制
-- 正式域名
-- 开发测试原始行的物理清理
+更新原则：
 
-## 下一轮助手的第一句提示词
-
-把下面这段原样发给新对话最合适：
-
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`。先不要扩功能，也不要重构。X 插件主链路已经稳定，绝对不要乱动：冲走、自动下沉、恢复、蓝框、广告跳过、名字屏蔽和数据库同步都不能改坏。用户没有计算机基础，所以默认要自己完成检查、修改、提交、推送、部署、本机 App 更新和验证，不要只口头解释。云端 D1 数据很重要，动 schema、清理、迁移前必须先备份；真实数据不能丢。默认优先保护数据、收口普通用户登录/邮件验证码、做完整人工验收，不要抢跑 AI 和大规模个性化。
-
-## 默认实现原则
-
-如果下一轮没有新的明确指令，默认遵守这几条：
-
-- 守住插件，不乱改
-- 继续以公网网站为主入口
-- 真实数据优先，不造假
-- 小步修改，改完就验
-- 改完需要上线的，默认自己上线
-- 影响 Safari 扩展的，默认自己更新 `/Applications/web2.5.app`
-- 需要提交的，默认自己提交并推送
-- 先做收口，再做扩展
-- 先做普通用户可用，再谈高级个性化
+- 保持短、准、可执行
+- 删除过时数字，不把历史计数写成实时状态
+- 当前版本锚点要及时更新
+- 新增高风险规则要写清楚原因
+- 不要把聊天流水账搬进来
