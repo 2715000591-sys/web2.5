@@ -45,7 +45,7 @@ Safari 会把这个扩展加到临时扩展列表里。
 
 1. 回到 `Safari > 设置`
 2. 打开 `扩展` 标签
-3. 找到 `web2.5`
+3. 找到 `Colorful Toilet`
 4. 勾选启用
 
 如果你使用 Safari Profile, 还需要在对应 Profile 的扩展权限里启用它。
@@ -60,7 +60,7 @@ https://x.com/.../status/1234567890
 ```
 
 3. 点击 Safari 工具栏里的扩展按钮
-4. 打开 `web2.5`
+4. 打开 `Colorful Toilet`
 5. 确认开关是开启状态
 
 ## 当前版本的预期表现

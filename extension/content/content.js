@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-23-1415";
+  const BUILD_ID = "2026-04-27-2202";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -7,11 +7,42 @@
   const INSTANCE_ID = BUILD_ID + ":" + Date.now().toString(36) + ":" + Math.random().toString(36).slice(2, 8);
   const FAST_SCAN_DELAY_MS = 70;
   const NORMAL_SCAN_DELAY_MS = 180;
-  const OFFICIAL_AD_LABELS = ["广告", "Promoted", "推广"];
+  const MIN_SCAN_INTERVAL_MS = 140;
+  const SCROLL_IDLE_SCAN_DELAY_MS = 260;
+  const REPLY_AI_BATCH_MAX_ITEMS = 6;
+  const REPLY_AI_BATCH_FLUSH_DELAY_MS = 1200;
+  const REPLY_AI_MIN_BATCH_INTERVAL_MS = 4000;
+  const REPLY_AI_BASE_SUSPICION_THRESHOLD = 3;
+  const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
+  const REPLY_AI_SESSION_CACHE_LIMIT = 240;
+  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v1";
+  const OFFICIAL_AD_LABEL_PATTERNS = [
+    /^广告$/i,
+    /^廣告$/i,
+    /^推广$/i,
+    /^推廣$/i,
+    /^promoted$/i,
+    /^promoted\s+post$/i,
+    /^ad$/i,
+    /^ads$/i,
+    /^sponsored$/i,
+    /^advertisement$/i
+  ];
+  const OFFICIAL_AD_HINT_PATTERNS = [
+    /why\s+this\s+ad/i,
+    /ads?\s+info/i,
+    /promoted/i,
+    /sponsored/i,
+    /^ad$/i,
+    /advertisement/i,
+    /广告|廣告|推广|推廣/i
+  ];
   const OFFICIAL_AD_LINK_PATTERNS = [
     /ad\.doubleclick\.net/i,
     /doubleclick/i,
-    /\/i\/ads\//i
+    /\/i\/ads\//i,
+    /business\.x\.com\/.*ads/i,
+    /why-this-ad/i
   ];
   const SIDEBAR_TITLE_PATTERNS = {
     happenings: [
@@ -138,12 +169,18 @@
   const IDB_NAME = "web25-manual-memory";
   const IDB_STORE = "state";
   const IDB_KEY = "manual-state";
-  const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://web25-public.web25-boris.workers.dev";
+  const USER_AGENT = navigator.userAgent || "";
+  const IS_CHROMIUM_BROWSER = /\b(?:Chrome|Chromium|CriOS|Edg|EdgiOS)\//i.test(USER_AGENT);
+  const IS_SAFARI_BROWSER = !IS_CHROMIUM_BROWSER && /\bSafari\//i.test(USER_AGENT);
+  const PERSISTENT_MANUAL_TRAY_SUPPORTED = IS_CHROMIUM_BROWSER;
+  const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
   const LEGACY_BACKEND_BASE_URLS = new Set([
     "",
     "http://127.0.0.1:8787",
     "http://localhost:8787",
-    "https://web25-public-pages.pages.dev"
+    "https://web25-public-pages.pages.dev",
+    "https://web25-public.web25-boris.workers.dev",
+    "https://colorful-toilet.web25-boris.workers.dev"
   ]);
   const api = typeof browser !== "undefined" ? browser : chrome;
   const root = document.documentElement;
@@ -174,18 +211,39 @@
     stabilizeTimers: [],
     sidebarStabilizeTimers: [],
     currentUrl: location.href,
+    lastScanFinishedAt: 0,
+    scrollActivityUntil: 0,
     bottomHostEl: null,
     bottomTrayOpen: false,
     summaryEl: null,
     revealedListEl: null,
     revealedListItemsEl: null,
     revealedSignature: "",
+    revealedListScrollTop: 0,
+    revealedListInteractionUntil: 0,
+    revealedListInteractionTimer: null,
+    pendingRevealedListPayload: null,
+    manualTrayThreadKey: "",
+    manualTrayEntries: new Map(),
     dockEl: null,
     dismissedSidebarModules: new Set(),
     manualHideTexts: new Set(),
     manualAllowTexts: new Set(),
     globalTemplateRules: new Set(),
+    globalReplyBlockedHandles: new Set(),
+    replyAiSettingsUpdatedAt: "",
     repeatSuspiciousHandles: new Set(),
+    replyAiEnabled: false,
+    replyAiDecisionCache: new Map(),
+    replyAiInFlightKeys: new Set(),
+    replyAiQueuedKeys: new Set(),
+    replyAiPendingQueue: [],
+    replyAiBatchTimer: null,
+    replyAiBatchInFlight: false,
+    lastReplyAiBatchSentAt: 0,
+    replyAiSessionCacheKey: "",
+    profileSignalCache: new Map(),
+    profileSignalInFlightKeys: new Set(),
     autoHideSyncedKeys: new Set(),
     adHideSyncedKeys: new Set(),
     adHidePendingKeys: new Set(),
@@ -203,6 +261,7 @@
     popstateListener: null,
     focusListener: null,
     visibilityListener: null,
+    scrollListener: null,
     domReadyListener: null,
     sidebarDebugHooksInstalled: false,
     sidebarDebugDismissListener: null,
@@ -211,6 +270,160 @@
     booted: false,
     destroyed: false
   };
+
+  function parseRgbColor(value) {
+    const normalized = String(value || "").trim();
+    const hexMatch = normalized.match(/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const expand = function (part) {
+        return part.length === 1 ? part + part : part;
+      };
+
+      if (hex.length === 3 || hex.length === 4) {
+        return {
+          r: parseInt(expand(hex.slice(0, 1)), 16),
+          g: parseInt(expand(hex.slice(1, 2)), 16),
+          b: parseInt(expand(hex.slice(2, 3)), 16),
+          a: hex.length === 4 ? parseInt(expand(hex.slice(3, 4)), 16) / 255 : 1
+        };
+      }
+
+      return {
+        r: parseInt(hex.slice(0, 2), 16),
+        g: parseInt(hex.slice(2, 4), 16),
+        b: parseInt(hex.slice(4, 6), 16),
+        a: hex.length === 8 ? parseInt(hex.slice(6, 8), 16) / 255 : 1
+      };
+    }
+
+    const match = normalized.match(/^rgba?\(([^)]+)\)$/i);
+    if (!match) {
+      return null;
+    }
+
+    const parts = match[1].split(",").map(function (part) {
+      return parseFloat(part.trim());
+    });
+
+    if (parts.length < 3 || parts.slice(0, 3).some(function (part) {
+      return Number.isNaN(part);
+    })) {
+      return null;
+    }
+
+    return {
+      r: Math.max(0, Math.min(255, parts[0])),
+      g: Math.max(0, Math.min(255, parts[1])),
+      b: Math.max(0, Math.min(255, parts[2])),
+      a: parts.length >= 4 && !Number.isNaN(parts[3]) ? Math.max(0, Math.min(1, parts[3])) : 1
+    };
+  }
+
+  function getColorLuminance(color) {
+    if (!color) {
+      return 1;
+    }
+
+    function toLinear(channel) {
+      const normalized = channel / 255;
+      return normalized <= 0.04045
+        ? normalized / 12.92
+        : Math.pow((normalized + 0.055) / 1.055, 2.4);
+    }
+
+    return 0.2126 * toLinear(color.r)
+      + 0.7152 * toLinear(color.g)
+      + 0.0722 * toLinear(color.b);
+  }
+
+  function isTransparentColor(value) {
+    const color = parseRgbColor(value);
+    return !color || color.a <= 0.04;
+  }
+
+  function getOpaqueStyleColor(node, propertyName) {
+    if (!node || !window.getComputedStyle) {
+      return null;
+    }
+
+    const value = window.getComputedStyle(node)[propertyName] || "";
+    const color = parseRgbColor(value);
+    return color && color.a > 0.04 ? color : null;
+  }
+
+  function detectCurrentPageTheme() {
+    const metaThemeColorNode = document.querySelector('meta[name="theme-color"]');
+    const metaThemeColor = parseRgbColor(metaThemeColorNode ? metaThemeColorNode.getAttribute("content") : "");
+    if (metaThemeColor && metaThemeColor.a > 0.04) {
+      const metaLuminance = getColorLuminance(metaThemeColor);
+      if (metaLuminance < 0.24) {
+        return "dark";
+      }
+      if (metaLuminance > 0.76) {
+        return "light";
+      }
+    }
+
+    const themeProbeNodes = [
+      document.querySelector('[data-testid="primaryColumn"]'),
+      document.querySelector('[data-testid="primaryColumn"] section'),
+      document.querySelector("main[role='main']"),
+      document.querySelector('[data-testid="cellInnerDiv"]'),
+      document.body,
+      document.documentElement
+    ];
+    let darkVotes = 0;
+    let lightVotes = 0;
+
+    for (let index = 0; index < themeProbeNodes.length; index += 1) {
+      const node = themeProbeNodes[index];
+      if (!node) {
+        continue;
+      }
+
+      const backgroundColor = getOpaqueStyleColor(node, "backgroundColor");
+      if (backgroundColor) {
+        const backgroundLuminance = getColorLuminance(backgroundColor);
+        if (backgroundLuminance < 0.24) {
+          darkVotes += 2;
+        } else if (backgroundLuminance > 0.76) {
+          lightVotes += 2;
+        }
+      }
+
+      const textColor = getOpaqueStyleColor(node, "color");
+      if (textColor) {
+        const textLuminance = getColorLuminance(textColor);
+        if (textLuminance > 0.68) {
+          darkVotes += 1;
+        } else if (textLuminance < 0.32) {
+          lightVotes += 1;
+        }
+      }
+    }
+
+    if (darkVotes > lightVotes) {
+      return "dark";
+    }
+
+    if (lightVotes > darkVotes) {
+      return "light";
+    }
+
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+
+    return "light";
+  }
+
+  function syncBrowserThemeDataset() {
+    root.dataset.web25Browser = IS_CHROMIUM_BROWSER
+      ? "chromium"
+      : (IS_SAFARI_BROWSER ? "safari" : "other");
+    root.dataset.web25PageTheme = detectCurrentPageTheme();
+  }
 
   function isCurrentPageController() {
     return Boolean(window[PAGE_CONTROLLER_KEY] && window[PAGE_CONTROLLER_KEY].instanceId === INSTANCE_ID);
@@ -221,10 +434,13 @@
     clearTimeout(state.manualRescanTimer);
     clearTimeout(state.manualPersistTimer);
     clearTimeout(state.bottomUiDedupeTimer);
+    clearTimeout(state.replyAiBatchTimer);
     state.scanTimer = null;
     state.manualRescanTimer = null;
     state.manualPersistTimer = null;
     state.bottomUiDedupeTimer = null;
+    state.replyAiBatchTimer = null;
+    state.replyAiBatchInFlight = false;
     state.stabilizeTimers.forEach(function (timerId) {
       clearTimeout(timerId);
     });
@@ -268,6 +484,8 @@
 
     delete root.dataset.web25Booted;
     delete root.dataset.web25Instance;
+    delete root.dataset.web25Browser;
+    delete root.dataset.web25PageTheme;
   }
 
   function destroyPageController(reason) {
@@ -310,6 +528,10 @@
       document.removeEventListener("visibilitychange", state.visibilityListener);
       state.visibilityListener = null;
     }
+    if (state.scrollListener) {
+      window.removeEventListener("scroll", state.scrollListener);
+      state.scrollListener = null;
+    }
     if (state.domReadyListener) {
       document.removeEventListener("DOMContentLoaded", state.domReadyListener);
       state.domReadyListener = null;
@@ -335,6 +557,8 @@
 
     delete root.dataset.web25Booted;
     delete root.dataset.web25Instance;
+    delete root.dataset.web25Browser;
+    delete root.dataset.web25PageTheme;
     root.dataset.web25Stage = reason ? "destroy:" + reason : "destroyed";
 
     if (isCurrentPageController()) {
@@ -405,6 +629,7 @@
   root.dataset.web25SyncReady = "0";
   root.dataset.web25Stage = "boot";
   delete root.dataset.web25Error;
+  syncBrowserThemeDataset();
 
   function ensureAnchorStyleTag() {
     let styleTag = document.getElementById("web25-anchor-style");
@@ -475,20 +700,37 @@
     setScrollAnchoringDisabled(true);
   }
 
-  function buildSummaryText(autoCount, historyCount, manualCount, scannedCount) {
+  function buildSummaryText(autoCount, historyCount, manualCount, scannedCount, aiCount, aiReviewedCount) {
     const parts = [];
     const totalCount = autoCount + historyCount + manualCount;
+    const normalizedAiCount = Math.max(0, Number(aiCount || 0));
+    const normalizedAiReviewedCount = Math.max(0, Number(aiReviewedCount || 0));
+    const localAutoCount = Math.max(0, autoCount - normalizedAiCount);
 
     if (totalCount === 0) {
+      if (normalizedAiReviewedCount > 0) {
+        parts.push("AI 已复审 " + normalizedAiReviewedCount + " 条");
+      }
       if (scannedCount > 0) {
-        return "刚刚看了 " + scannedCount + " 条回复。";
+        parts.push("刚刚看了 " + scannedCount + " 条回复");
+      }
+      if (parts.length > 0) {
+        return parts.join("，") + "。";
       }
 
       return "还在等回复区加载出来。";
     }
 
-    if (autoCount > 0) {
-      parts.push("web2.5 自动下沉 " + autoCount + " 条");
+    if (normalizedAiReviewedCount > 0) {
+      parts.push("AI 已复审 " + normalizedAiReviewedCount + " 条");
+    }
+
+    if (localAutoCount > 0) {
+      parts.push("Colorful Toilet 自动下沉 " + localAutoCount + " 条");
+    }
+
+    if (normalizedAiCount > 0) {
+      parts.push("AI 自动下沉 " + normalizedAiCount + " 条");
     }
 
     if (historyCount > 0) {
@@ -500,6 +742,151 @@
     }
 
     return parts.join("，");
+  }
+
+  function getHiddenSourcePresentation(entry) {
+    const source = entry && entry.hiddenSource ? String(entry.hiddenSource || "") : "auto";
+    if (source === "manual") {
+      return {
+        className: "web25-hidden-badge-manual",
+        label: "你刚标记下沉"
+      };
+    }
+
+    if (source === "history") {
+      return {
+        className: "web25-hidden-badge-history",
+        label: "命中历史标记"
+      };
+    }
+
+    if (source === "ai-global") {
+      return {
+        className: "web25-hidden-badge-ai-global",
+        label: "AI 全局屏蔽"
+      };
+    }
+
+    if (source === "ai") {
+      return {
+        className: "web25-hidden-badge-ai",
+        label: "AI 自动下沉"
+      };
+    }
+
+    return {
+      className: "web25-hidden-badge-auto",
+      label: "Colorful Toilet 自动下沉"
+    };
+  }
+
+  function captureRevealedListScrollPosition() {
+    if (!state.revealedListItemsEl) {
+      return;
+    }
+
+    state.revealedListScrollTop = Math.max(0, Number(state.revealedListItemsEl.scrollTop || 0));
+  }
+
+  function restoreRevealedListScrollPosition() {
+    if (!state.bottomTrayOpen || !state.revealedListItemsEl) {
+      return;
+    }
+
+    requestAnimationFrame(function () {
+      if (!state.revealedListItemsEl) {
+        return;
+      }
+
+      const maxScrollTop = Math.max(
+        0,
+        state.revealedListItemsEl.scrollHeight - state.revealedListItemsEl.clientHeight
+      );
+      const nextScrollTop = Math.max(0, Math.min(Number(state.revealedListScrollTop || 0), maxScrollTop));
+      if (Math.abs(state.revealedListItemsEl.scrollTop - nextScrollTop) > 1) {
+        state.revealedListItemsEl.scrollTop = nextScrollTop;
+      }
+    });
+  }
+
+  function bindRevealedListScrollTracking(node) {
+    if (!node || node.__web25ScrollTrackingBound) {
+      return;
+    }
+
+    node.__web25ScrollTrackingBound = true;
+    node.addEventListener("pointerdown", function () {
+      noteRevealedListInteraction();
+    }, {
+      passive: true
+    });
+    node.addEventListener("wheel", function (event) {
+      noteRevealedListInteraction();
+
+      const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+      if (maxScrollTop <= 0) {
+        return;
+      }
+
+      const deltaY = Number(event.deltaY || 0);
+      const deltaX = Number(event.deltaX || 0);
+      if (Math.abs(deltaX) > Math.abs(deltaY) || Math.abs(deltaY) < 0.25) {
+        return;
+      }
+
+      const nextScrollTop = Math.max(0, Math.min(maxScrollTop, node.scrollTop + deltaY));
+      if (Math.abs(nextScrollTop - node.scrollTop) <= 0.5) {
+        return;
+      }
+
+      node.scrollTop = nextScrollTop;
+      state.revealedListScrollTop = Math.max(0, Number(node.scrollTop || 0));
+      event.preventDefault();
+      event.stopPropagation();
+    }, {
+      passive: false
+    });
+    node.addEventListener("scroll", function () {
+      noteRevealedListInteraction();
+      state.revealedListScrollTop = Math.max(0, Number(node.scrollTop || 0));
+    }, {
+      passive: true
+    });
+  }
+
+  function scheduleDeferredRevealedListRefresh() {
+    clearTimeout(state.revealedListInteractionTimer);
+    state.revealedListInteractionTimer = null;
+
+    if (!state.pendingRevealedListPayload) {
+      return;
+    }
+
+    const delayMs = Math.max(0, Number(state.revealedListInteractionUntil || 0) - Date.now()) + 36;
+    state.revealedListInteractionTimer = setTimeout(function () {
+      state.revealedListInteractionTimer = null;
+      if (state.destroyed) {
+        return;
+      }
+
+      const pendingPayload = state.pendingRevealedListPayload;
+      if (!pendingPayload) {
+        return;
+      }
+
+      state.pendingRevealedListPayload = null;
+      if (pendingPayload.counts) {
+        ensureRevealedList(pendingPayload.counts);
+      }
+      updateBottomCards(Array.isArray(pendingPayload.revealedReplies) ? pendingPayload.revealedReplies : []);
+    }, delayMs);
+  }
+
+  function noteRevealedListInteraction() {
+    state.revealedListInteractionUntil = Date.now() + 900;
+    if (state.pendingRevealedListPayload) {
+      scheduleDeferredRevealedListRefresh();
+    }
   }
 
   function normalizeBackendBaseUrl(value) {
@@ -1600,16 +1987,60 @@
       return "";
     }
 
-    const exactLabel = Array.from(article.querySelectorAll("span, div, a"))
+    function normalizeAdCandidate(value) {
+      return String(value || "").replace(/\s+/g, " ").trim();
+    }
+
+    function matchesOfficialAdLabel(value) {
+      const normalized = normalizeAdCandidate(value);
+      if (!normalized) {
+        return false;
+      }
+
+      return OFFICIAL_AD_LABEL_PATTERNS.some(function (pattern) {
+        return pattern.test(normalized);
+      });
+    }
+
+    function matchesOfficialAdHint(value) {
+      const normalized = normalizeAdCandidate(value);
+      if (!normalized) {
+        return false;
+      }
+
+      return OFFICIAL_AD_HINT_PATTERNS.some(function (pattern) {
+        return pattern.test(normalized);
+      });
+    }
+
+    const exactLabel = Array.from(article.querySelectorAll("span, div, a, button"))
       .map(function (node) {
-        return String(node.innerText || node.textContent || "").trim();
+        return normalizeAdCandidate(node.innerText || node.textContent || "");
       })
       .find(function (text) {
-        return OFFICIAL_AD_LABELS.includes(text);
+        return matchesOfficialAdLabel(text);
       });
 
     if (exactLabel) {
       return exactLabel;
+    }
+
+    const attributeLabel = Array.from(article.querySelectorAll("span, div, a, button, [aria-label], [title]"))
+      .map(function (node) {
+        return {
+          ariaLabel: normalizeAdCandidate(node.getAttribute && node.getAttribute("aria-label")),
+          title: normalizeAdCandidate(node.getAttribute && node.getAttribute("title")),
+          text: normalizeAdCandidate(node.innerText || node.textContent || "")
+        };
+      })
+      .find(function (candidate) {
+        return (candidate.ariaLabel && candidate.ariaLabel.length <= 48 && (matchesOfficialAdLabel(candidate.ariaLabel) || matchesOfficialAdHint(candidate.ariaLabel)))
+          || (candidate.title && candidate.title.length <= 48 && (matchesOfficialAdLabel(candidate.title) || matchesOfficialAdHint(candidate.title)))
+          || (candidate.text && candidate.text.length <= 16 && (matchesOfficialAdLabel(candidate.text) || matchesOfficialAdHint(candidate.text)));
+      });
+
+    if (attributeLabel) {
+      return attributeLabel.ariaLabel || attributeLabel.title || attributeLabel.text || "";
     }
 
     const adLinkHit = Array.from(article.querySelectorAll("a[href]")).some(function (node) {
@@ -1619,7 +2050,7 @@
       });
     });
 
-    return adLinkHit ? "广告" : "";
+    return adLinkHit ? "ad-link" : "";
   }
 
   function getOfficialAdSnapshot(article) {
@@ -1908,17 +2339,65 @@
     });
   }
 
-  function attemptAutoBindSyncKey(force) {
+  function requestBackendText(endpoint, callback, withCredentials, headers) {
+    if (api.runtime && typeof api.runtime.sendMessage === "function") {
+      api.runtime.sendMessage({
+        type: "web25-http-request",
+        endpoint: endpoint,
+        method: "GET",
+        payload: {},
+        credentials: withCredentials ? "include" : "omit",
+        responseType: "text",
+        headers: headers || {}
+      }, function (response) {
+        if (api.runtime && api.runtime.lastError) {
+          callback("");
+          return;
+        }
+        if (!response || !response.ok || typeof response.data !== "string") {
+          callback("");
+          return;
+        }
+        callback(response.data);
+      });
+      return;
+    }
+
+    fetch(endpoint, {
+      method: "GET",
+      mode: "cors",
+      credentials: withCredentials ? "include" : "omit",
+      headers: headers || {},
+      cache: "no-store"
+    }).then(function (response) {
+      return response.ok ? response.text() : "";
+    }).then(function (data) {
+      callback(typeof data === "string" ? data : "");
+    }).catch(function () {
+      callback("");
+    });
+  }
+
+  function attemptAutoBindSyncKey(force, callback) {
     if (state.destroyed || !state.backendBaseUrl || !state.syncKey) {
+      if (typeof callback === "function") {
+        callback(false);
+      }
       return;
     }
 
     const now = Date.now();
-    const syncSignature = `${state.backendBaseUrl}|${state.syncKey}`;
+    const syncSignature = `${state.backendBaseUrl}|${state.syncKey}|${state.deviceId}`;
     if (!force && state.accountBindingInFlight) {
+      if (typeof callback === "function") {
+        callback(false);
+      }
       return;
     }
     if (!force && state.lastAccountBindSignature === syncSignature && now - state.lastAccountBindAttemptAt < 10 * 60 * 1000) {
+      if (typeof callback === "function") {
+        callback(false);
+      }
       return;
     }
 
@@ -1929,26 +2408,55 @@
     requestBackendJson("GET", state.backendBaseUrl + "/api/me", null, function (payload) {
       if (!payload || !payload.ok || !payload.loggedIn || !payload.viewer || !payload.viewer.email) {
         state.accountBindingInFlight = false;
+        if (typeof callback === "function") {
+          callback(false);
+        }
         return;
       }
 
       const viewerSignature = `${syncSignature}|${String(payload.viewer.email || "").trim().toLowerCase()}`;
       if (!force && state.lastSuccessfulAccountBindSignature === viewerSignature && Date.now() - state.lastSuccessfulAccountBindAt < 6 * 60 * 60 * 1000) {
         state.accountBindingInFlight = false;
+        if (typeof callback === "function") {
+          callback(false);
+        }
         return;
       }
 
       requestBackendJson(
         "POST",
         state.backendBaseUrl + "/api/account/bind-sync-key",
-        { syncKey: state.syncKey },
+        {
+          syncKey: state.syncKey,
+          deviceId: state.deviceId
+        },
         function (bindPayload) {
           state.accountBindingInFlight = false;
           if (!bindPayload || !bindPayload.ok) {
+            if (typeof callback === "function") {
+              callback(false);
+            }
             return;
           }
-          state.lastSuccessfulAccountBindSignature = viewerSignature;
+          const nextSyncKey = String(bindPayload.syncKey || state.syncKey || "").trim();
+          const nextDeviceId = String(bindPayload.deviceId || state.deviceId || "").trim();
+          const identityChanged = nextSyncKey !== state.syncKey || nextDeviceId !== state.deviceId;
+          if (identityChanged) {
+            state.syncKey = nextSyncKey;
+            state.deviceId = nextDeviceId;
+            state.lastRemoteSyncAt = 0;
+            root.dataset.web25SyncReady = state.syncKey && state.backendBaseUrl ? "1" : "0";
+            api.storage.local.set({
+              syncKey: state.syncKey,
+              deviceId: state.deviceId
+            });
+          }
+          state.lastAccountBindSignature = `${state.backendBaseUrl}|${state.syncKey}|${state.deviceId}`;
+          state.lastSuccessfulAccountBindSignature = `${state.lastAccountBindSignature}|${String(payload.viewer.email || "").trim().toLowerCase()}`;
           state.lastSuccessfulAccountBindAt = Date.now();
+          if (typeof callback === "function") {
+            callback(identityChanged);
+          }
         },
         true
       );
@@ -1987,7 +2495,9 @@
 
     state.remoteSyncInFlight = true;
     state.lastRemoteSyncAt = now;
-    const endpoint = state.backendBaseUrl + "/api/state?syncKey=" + encodeURIComponent(state.syncKey);
+    const endpoint = state.backendBaseUrl
+      + "/api/state?syncKey=" + encodeURIComponent(state.syncKey)
+      + "&deviceId=" + encodeURIComponent(state.deviceId || "");
     requestBackendJson("GET", endpoint, null, function (payload) {
       state.remoteSyncInFlight = false;
 
@@ -2009,12 +2519,30 @@
       const remoteAllowTexts = Array.isArray(payload.manualAllowKeys) ? payload.manualAllowKeys : [];
       const remoteTemplateRules = Array.isArray(payload.templateRules) ? payload.templateRules : [];
       const remoteRepeatSuspiciousHandles = Array.isArray(payload.repeatSuspiciousHandles) ? payload.repeatSuspiciousHandles : [];
+      const remoteGlobalReplyBlockedHandles = Array.isArray(payload.globalReplyBlockedHandles) ? payload.globalReplyBlockedHandles : [];
       const remoteSidebarControlsEnabled = normalizeSidebarControlsEnabled(
         payload.sidebarControlsEnabled,
         state.sidebarControlsEnabled
       );
+      const nextReplyAiSettingsUpdatedAt = String(payload.replyAiSettingsUpdatedAt || "").trim();
       state.globalTemplateRules = new Set(remoteTemplateRules);
       state.repeatSuspiciousHandles = new Set(remoteRepeatSuspiciousHandles);
+      if (state.replyAiSettingsUpdatedAt && state.replyAiSettingsUpdatedAt !== nextReplyAiSettingsUpdatedAt) {
+        state.replyAiDecisionCache = new Map();
+        state.replyAiInFlightKeys = new Set();
+        state.replyAiQueuedKeys = new Set();
+        state.replyAiPendingQueue = [];
+        clearTimeout(state.replyAiBatchTimer);
+        state.replyAiBatchTimer = null;
+        state.replyAiBatchInFlight = false;
+        state.lastReplyAiBatchSentAt = 0;
+        persistReplyAiDecisionCacheToSession();
+      }
+      state.replyAiSettingsUpdatedAt = nextReplyAiSettingsUpdatedAt;
+      state.globalReplyBlockedHandles = new Set(remoteGlobalReplyBlockedHandles.map(function (item) {
+        return String(item || "").trim().toLowerCase();
+      }).filter(Boolean));
+      state.replyAiEnabled = payload.replyAiEnabled === true;
       if (remoteSidebarControlsEnabled !== state.sidebarControlsEnabled) {
         applySidebarControlsPreference(remoteSidebarControlsEnabled);
         api.storage.local.set({
@@ -2057,9 +2585,24 @@
           state.adHideSyncedKeys = new Set();
           state.adHidePendingKeys = new Set();
           state.globalTemplateRules = new Set();
+          state.globalReplyBlockedHandles = new Set();
+          state.replyAiSettingsUpdatedAt = "";
           state.repeatSuspiciousHandles = new Set();
+          state.replyAiEnabled = false;
+          state.replyAiDecisionCache = new Map();
+          state.replyAiInFlightKeys = new Set();
+          state.replyAiQueuedKeys = new Set();
+          state.replyAiPendingQueue = [];
+          clearTimeout(state.replyAiBatchTimer);
+          state.replyAiBatchTimer = null;
+          state.replyAiBatchInFlight = false;
+          state.lastReplyAiBatchSentAt = 0;
+          state.replyAiSessionCacheKey = "";
+          state.profileSignalCache = new Map();
+          state.profileSignalInFlightKeys = new Set();
           root.dataset.web25MarkingEnabled = state.markingEnabled ? "1" : "0";
           root.dataset.web25SyncReady = state.syncKey && state.backendBaseUrl ? "1" : "0";
+          hydrateReplyAiDecisionCacheFromSession();
 
           const manualHideTexts = Array.from(new Set([]
             .concat(localState && localState.manualHideTexts ? localState.manualHideTexts : [])
@@ -2083,9 +2626,11 @@
           }
 
           applyResolvedManualState(manualHideTexts, manualAllowTexts, function () {
-            syncRemoteManualState(true, function () {
-              attemptAutoBindSyncKey(false);
-              callback();
+            attemptAutoBindSyncKey(true, function (identityChanged) {
+              syncRemoteManualState(identityChanged === true, function () {
+                attemptAutoBindSyncKey(false);
+                callback();
+              });
             });
           });
         });
@@ -2132,6 +2677,16 @@
 
       if (changes.syncKey) {
         state.syncKey = String(changes.syncKey.newValue || "").trim();
+        state.replyAiDecisionCache = new Map();
+        state.replyAiInFlightKeys = new Set();
+        state.replyAiQueuedKeys = new Set();
+        state.replyAiPendingQueue = [];
+        clearTimeout(state.replyAiBatchTimer);
+        state.replyAiBatchTimer = null;
+        state.replyAiBatchInFlight = false;
+        state.lastReplyAiBatchSentAt = 0;
+        state.replyAiSessionCacheKey = "";
+        hydrateReplyAiDecisionCacheFromSession();
       }
 
       if (changes.deviceId) {
@@ -2171,13 +2726,29 @@
     scheduleScanWithDelay(NORMAL_SCAN_DELAY_MS);
   }
 
+  function noteScrollActivity() {
+    if (state.destroyed || !isDetailPage()) {
+      return;
+    }
+
+    state.scrollActivityUntil = Date.now() + SCROLL_IDLE_SCAN_DELAY_MS;
+  }
+
   function scheduleScanWithDelay(delayMs) {
     if (state.destroyed || state.suppressObserver) {
       return;
     }
 
+    const requestedDelay = typeof delayMs === "number" ? delayMs : NORMAL_SCAN_DELAY_MS;
+    const now = Date.now();
+    const minIntervalDelay = Math.max(0, Number(state.lastScanFinishedAt || 0) + MIN_SCAN_INTERVAL_MS - now);
+    const scrollDelay = isDetailPage()
+      ? Math.max(0, Number(state.scrollActivityUntil || 0) - now)
+      : 0;
+    const effectiveDelay = Math.max(requestedDelay, minIntervalDelay, scrollDelay);
+
     clearTimeout(state.scanTimer);
-    state.scanTimer = setTimeout(scanPage, typeof delayMs === "number" ? delayMs : NORMAL_SCAN_DELAY_MS);
+    state.scanTimer = setTimeout(scanPage, effectiveDelay);
   }
 
   function scheduleManualRescan(delayMs) {
@@ -2476,6 +3047,22 @@
       return "pattern:low-information-lure-account";
     }
 
+    if (analysis && analysis.hasShareLinkScam) {
+      return "pattern:share-link-scam";
+    }
+
+    if (analysis && analysis.hasEroticMentionRedirect) {
+      return "pattern:mention-lure-redirect";
+    }
+
+    if (analysis && analysis.hasExplicitEroticBait) {
+      return "pattern:explicit-erotic-bait";
+    }
+
+    if (analysis && analysis.hasSpamTemplateSignal) {
+      return "pattern:spam-template-signal";
+    }
+
     const matchedTerms = Array.from(new Set(SIMILARITY_TERMS.filter(function (term) {
       return normalized.includes(term);
     })));
@@ -2543,6 +3130,120 @@
       templateKeys: Array.isArray(keys.templateKeys) ? keys.templateKeys.slice() : [],
       primaryKey: keys.primaryKey || ""
     };
+  }
+
+  function getCurrentThreadCacheKey() {
+    return extractStatusId(location.pathname) || extractStatusId(location.href) || location.pathname || location.href;
+  }
+
+  function getManualTrayEntryKey(keys, replyText) {
+    if (keys) {
+      return keys.statusKey || keys.primaryKey || keys.textKey || keys.compactTextKey || keys.patternTextKey || keys.normalized || "";
+    }
+
+    const normalizedReply = window.Web25Rules && typeof window.Web25Rules.normalizeText === "function"
+      ? window.Web25Rules.normalizeText(replyText || "")
+      : String(replyText || "").trim();
+    return normalizedReply ? "text:" + normalizedReply : "";
+  }
+
+  function cloneBottomEntry(entry) {
+    if (!entry) {
+      return null;
+    }
+
+    return {
+      stableId: entry.stableId || "",
+      replyText: entry.replyText || "",
+      hiddenSource: entry.hiddenSource === "history" ? "history" : "manual",
+      manualKeys: cloneManualKeys(entry.manualKeys),
+      replyDisplayName: entry.replyDisplayName || "X 用户",
+      replyHandle: entry.replyHandle || ""
+    };
+  }
+
+  function resetManualTrayEntries() {
+    state.manualTrayEntries = new Map();
+    state.manualTrayThreadKey = getCurrentThreadCacheKey();
+  }
+
+  function syncManualTrayThreadKey() {
+    if (!PERSISTENT_MANUAL_TRAY_SUPPORTED) {
+      return;
+    }
+
+    const nextThreadKey = getCurrentThreadCacheKey();
+    if (!nextThreadKey) {
+      return;
+    }
+
+    if (state.manualTrayThreadKey && state.manualTrayThreadKey !== nextThreadKey) {
+      state.manualTrayEntries = new Map();
+    }
+
+    state.manualTrayThreadKey = nextThreadKey;
+  }
+
+  function rememberManualTrayEntry(entry) {
+    if (!PERSISTENT_MANUAL_TRAY_SUPPORTED || !entry || !entry.manualKeys) {
+      return;
+    }
+
+    syncManualTrayThreadKey();
+    const cacheKey = getManualTrayEntryKey(entry.manualKeys, entry.replyText);
+    if (!cacheKey) {
+      return;
+    }
+
+    const nextEntry = cloneBottomEntry(entry);
+    const existingEntry = state.manualTrayEntries.get(cacheKey);
+    if (!nextEntry) {
+      return;
+    }
+
+    if (existingEntry && existingEntry.hiddenSource === "manual") {
+      nextEntry.hiddenSource = "manual";
+    }
+
+    if (!nextEntry.stableId) {
+      nextEntry.stableId = cacheKey;
+    }
+
+    state.manualTrayEntries.set(cacheKey, nextEntry);
+  }
+
+  function forgetManualTrayEntry(keys, replyText) {
+    if (!PERSISTENT_MANUAL_TRAY_SUPPORTED) {
+      return;
+    }
+
+    syncManualTrayThreadKey();
+    const cacheKey = getManualTrayEntryKey(keys, replyText);
+    if (!cacheKey) {
+      return;
+    }
+
+    state.manualTrayEntries.delete(cacheKey);
+  }
+
+  function pruneManualTrayEntries() {
+    if (!PERSISTENT_MANUAL_TRAY_SUPPORTED || !state.manualTrayEntries.size) {
+      return;
+    }
+
+    syncManualTrayThreadKey();
+    Array.from(state.manualTrayEntries.entries()).forEach(function (pair) {
+      const cacheKey = pair[0];
+      const entry = pair[1];
+      if (!entry || !entry.manualKeys) {
+        state.manualTrayEntries.delete(cacheKey);
+        return;
+      }
+
+      if (hasAllowDecisionKey(state.manualAllowTexts, entry.manualKeys) || !hasDecisionKey(state.manualHideTexts, entry.manualKeys)) {
+        state.manualTrayEntries.delete(cacheKey);
+      }
+    });
   }
 
   function hasTemplateRuleMatch(set, keys) {
@@ -3041,6 +3742,7 @@
   }
 
   function syncBottomStateFromHost(host) {
+    captureRevealedListScrollPosition();
     state.bottomHostEl = host || null;
     if (!host) {
       state.summaryEl = null;
@@ -3098,6 +3800,8 @@
     state.summaryEl = summaryToKeep;
     state.revealedListEl = listToKeep;
     state.revealedListItemsEl = listToKeep ? listToKeep.querySelector(".web25-revealed-list-items") : null;
+    bindRevealedListScrollTracking(state.revealedListItemsEl);
+    restoreRevealedListScrollPosition();
   }
 
   function dedupeBottomUi() {
@@ -3242,6 +3946,7 @@
   }
 
   function setBottomTrayOpen(open) {
+    const wasOpen = state.bottomTrayOpen === true;
     state.bottomTrayOpen = Boolean(open);
 
     if (state.bottomHostEl) {
@@ -3255,12 +3960,21 @@
       }
     }
 
-    if (state.bottomTrayOpen) {
+    if (state.bottomTrayOpen && !wasOpen) {
+      state.revealedListScrollTop = 0;
       requestAnimationFrame(function () {
         if (state.revealedListItemsEl) {
           state.revealedListItemsEl.scrollTop = 0;
         }
       });
+    }
+
+    if (!state.bottomTrayOpen) {
+      state.revealedListInteractionUntil = 0;
+      clearTimeout(state.revealedListInteractionTimer);
+      state.revealedListInteractionTimer = null;
+    } else if (state.pendingRevealedListPayload) {
+      scheduleDeferredRevealedListRefresh();
     }
 
   }
@@ -3334,14 +4048,14 @@
 
     if (totalCount === 0) {
       title.textContent = "无下沉";
-      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0);
+      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0, counts.ai || 0, counts.aiReviewed || 0);
       toggleButton.textContent = "查看列表";
       toggleButton.disabled = true;
       toggleButton.classList.add("web25-hidden-summary-toggle-disabled");
       toggleButton.setAttribute("aria-disabled", "true");
     } else {
-      title.textContent = "web2.5 已整理 " + totalCount + " 条回复";
-      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0);
+      title.textContent = "Colorful Toilet 已整理 " + totalCount + " 条回复";
+      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0, counts.ai || 0, counts.aiReviewed || 0);
       toggleButton.textContent = state.bottomTrayOpen ? "收起列表" : "查看列表";
       toggleButton.disabled = false;
       toggleButton.classList.remove("web25-hidden-summary-toggle-disabled");
@@ -3380,12 +4094,13 @@
       state.revealedListEl.appendChild(meta);
       state.revealedListEl.appendChild(items);
       state.revealedListItemsEl = items;
+      bindRevealedListScrollTracking(items);
     }
 
     const title = state.revealedListEl.querySelector(".web25-revealed-list-title");
     const meta = state.revealedListEl.querySelector(".web25-revealed-list-meta");
     title.textContent = "已整理的回复";
-    meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual);
+    meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, 0, counts.ai || 0, counts.aiReviewed || 0);
 
     const host = state.bottomHostEl;
     if (!host) {
@@ -3405,14 +4120,17 @@
       return;
     }
 
+    captureRevealedListScrollPosition();
+
     const signature = revealedReplies.map(function (entry) {
-      return entry.stableId + ":" + entry.hiddenSource;
+      return entry.stableId + ":" + entry.hiddenSource + ":" + String(entry.aiReasonShort || "");
     }).join("|");
 
     if (state.revealedSignature === signature) {
       if (state.revealedListEl) {
         state.revealedListEl.classList.toggle("web25-revealed-list-compact", revealedReplies.length <= 2);
       }
+      restoreRevealedListScrollPosition();
       return;
     }
 
@@ -3425,6 +4143,7 @@
       state.revealedListItemsEl.appendChild(createBottomCard(entry));
     });
     state.revealedSignature = signature;
+    restoreRevealedListScrollPosition();
   }
 
   function removeDock() {
@@ -3611,13 +4330,23 @@
       return;
     }
 
+    syncManualTrayThreadKey();
     const authorMeta = getReplyAuthorMeta(replyArticle);
     const protectedAccount = isProtectedAccount(replyArticle, authorMeta);
     const storedKeys = getStoredManualKeys(keys, protectedAccount, replyText);
+    const manualTrayEntry = {
+      stableId: keys.statusKey || keys.primaryKey || keys.textKey || keys.compactTextKey || keys.patternTextKey || ("manual:" + (replyText || "")),
+      replyText: replyText || "",
+      hiddenSource: "manual",
+      manualKeys: cloneManualKeys(keys),
+      replyDisplayName: authorMeta.displayName,
+      replyHandle: authorMeta.handle
+    };
 
     if (kind === "hide") {
       addDecisionKeys(state.manualHideTexts, storedKeys);
       removeDecisionKeys(state.manualAllowTexts, storedKeys);
+      rememberManualTrayEntry(manualTrayEntry);
       suppressObserverBriefly();
       applyReplyCellVisibility(replyArticle, true, true);
       removeReplyActionsHost(replyArticle);
@@ -3630,6 +4359,7 @@
 
     addAllowDecisionKeys(state.manualAllowTexts, storedKeys);
     removeHideDecisionKeysForAllow(state.manualHideTexts, storedKeys);
+    forgetManualTrayEntry(keys, replyText);
     suppressObserverBriefly();
     applyReplyCellVisibility(replyArticle, false, false);
     if (replyArticle) {
@@ -3649,6 +4379,7 @@
     state.manualHideTexts = new Set();
     state.manualAllowTexts = new Set();
     state.bottomTrayOpen = false;
+    resetManualTrayEntries();
     state.skipNextStorageSyncScan = true;
     persistManualState(function () {
       scanPage();
@@ -3690,7 +4421,7 @@
     const hideButton = document.createElement("button");
     hideButton.type = "button";
     hideButton.className = "web25-action-button web25-action-hide";
-    hideButton.textContent = "标记可疑";
+    hideButton.textContent = "冲走";
     hideButton.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
@@ -3729,6 +4460,718 @@
     };
   }
 
+  function buildReplyAiCacheKey(manualKeys, authorMeta, replyText) {
+    if (manualKeys && manualKeys.statusKey) {
+      return manualKeys.statusKey;
+    }
+
+    const normalizedText = manualKeys && manualKeys.normalized
+      ? manualKeys.normalized
+      : (window.Web25Rules && typeof window.Web25Rules.normalizeText === "function"
+        ? window.Web25Rules.normalizeText(replyText)
+        : String(replyText || "").trim());
+    const handle = authorMeta && authorMeta.handle ? String(authorMeta.handle || "").trim().toLowerCase() : "";
+    if (!handle && !normalizedText) {
+      return "";
+    }
+    return ["reply-ai", handle, normalizedText.slice(0, 240)].join("|");
+  }
+
+  function getReplyAiSessionCacheStorageKey() {
+    if (!state.syncKey) {
+      return "";
+    }
+
+    return REPLY_AI_SESSION_CACHE_PREFIX + ":" + state.syncKey;
+  }
+
+  function persistReplyAiDecisionCacheToSession() {
+    const storageKey = getReplyAiSessionCacheStorageKey();
+    if (!storageKey || typeof sessionStorage === "undefined") {
+      return;
+    }
+
+    try {
+      const entries = Array.from(state.replyAiDecisionCache.entries())
+        .filter(function (entry) {
+          return entry
+            && entry[0]
+            && entry[1]
+            && entry[1].decision
+            && entry[1].decision.isFinal
+            && entry[1].decision.status !== "failed";
+        })
+        .sort(function (left, right) {
+          return Number((right[1] && right[1].updatedAt) || 0) - Number((left[1] && left[1].updatedAt) || 0);
+        })
+        .slice(0, REPLY_AI_SESSION_CACHE_LIMIT)
+        .map(function (entry) {
+          return {
+            cacheKey: entry[0],
+            itemId: Number(entry[1].itemId || 0),
+            updatedAt: Number(entry[1].updatedAt || 0),
+            decision: entry[1].decision
+          };
+        });
+
+      sessionStorage.setItem(storageKey, JSON.stringify(entries));
+      state.replyAiSessionCacheKey = storageKey;
+    } catch (error) {
+      // Ignore session storage quota / access failures.
+    }
+  }
+
+  function hydrateReplyAiDecisionCacheFromSession() {
+    const storageKey = getReplyAiSessionCacheStorageKey();
+    if (!storageKey || typeof sessionStorage === "undefined") {
+      state.replyAiSessionCacheKey = "";
+      return;
+    }
+
+    if (state.replyAiSessionCacheKey === storageKey && state.replyAiDecisionCache.size > 0) {
+      return;
+    }
+
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      state.replyAiSessionCacheKey = storageKey;
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      parsed.forEach(function (entry) {
+        if (!entry || !entry.cacheKey || !entry.decision || !entry.decision.isFinal || entry.decision.status === "failed") {
+          return;
+        }
+
+        state.replyAiDecisionCache.set(String(entry.cacheKey), {
+          itemId: Number(entry.itemId || 0),
+          decision: entry.decision,
+          updatedAt: Number(entry.updatedAt || 0)
+        });
+      });
+    } catch (error) {
+      // Ignore invalid cached payloads.
+    }
+  }
+
+  function normalizeProfilePath(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const parsed = new URL(raw);
+        if (!/^(?:x|twitter)\.com$/i.test(parsed.hostname.replace(/^www\./, ""))) {
+          return "";
+        }
+        return parsed.pathname || "";
+      } catch (error) {
+        return "";
+      }
+    }
+
+    return raw.startsWith("/") ? raw : `/${raw.replace(/^@/, "")}`;
+  }
+
+  function getReplyProfilePath(replyArticle, authorMeta) {
+    const userNameNode = replyArticle ? replyArticle.querySelector('[data-testid="User-Name"]') : null;
+    const candidateLinks = Array.from(userNameNode && userNameNode.querySelectorAll ? userNameNode.querySelectorAll('a[href]') : [])
+      .map(function (node) {
+        return normalizeProfilePath(node.getAttribute("href") || "");
+      })
+      .filter(Boolean);
+
+    const directProfile = candidateLinks.find(function (path) {
+      return /^\/[^/?#]+\/?$/.test(path);
+    });
+    if (directProfile) {
+      return directProfile;
+    }
+
+    const handle = authorMeta && authorMeta.handle ? String(authorMeta.handle || "").trim().replace(/^@/, "") : "";
+    return handle ? `/${handle}` : "";
+  }
+
+  function extractProfileSignalsFromHtml(html, profilePath) {
+    const emptyResult = {
+      profilePath: profilePath || "",
+      bioText: "",
+      signalTags: [],
+      links: [],
+      fetchStatus: "empty",
+      fetchedAt: new Date().toISOString()
+    };
+
+    if (!html || typeof html !== "string") {
+      return emptyResult;
+    }
+
+    let doc = null;
+    try {
+      doc = new DOMParser().parseFromString(html, "text/html");
+    } catch (error) {
+      doc = null;
+    }
+
+    if (!doc) {
+      return Object.assign({}, emptyResult, {
+        fetchStatus: "error"
+      });
+    }
+
+    const metaTexts = [
+      doc.querySelector('meta[property="og:description"]'),
+      doc.querySelector('meta[name="description"]'),
+      doc.querySelector('meta[name="twitter:description"]')
+    ].map(function (node) {
+      return node ? String(node.getAttribute("content") || "").replace(/\s+/g, " ").trim() : "";
+    }).filter(Boolean);
+
+    const bioText = metaTexts
+      .slice()
+      .sort(function (left, right) {
+        return right.length - left.length;
+      })[0] || "";
+
+    const links = Array.from(doc.querySelectorAll('a[href]'))
+      .map(function (node) {
+        return String(node.getAttribute("href") || "").trim();
+      })
+      .filter(function (href) {
+        if (!href || href.startsWith("/") || href.startsWith("#")) {
+          return false;
+        }
+        return /^https?:\/\//i.test(href) && !/https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i.test(href);
+      })
+      .slice(0, 6);
+
+    const combined = [bioText].concat(links).join(" ");
+    const signalTags = [];
+    if (/(?:vx|wx|tg|qq|telegram|电报|飛機|飞机|联系方式|聯繫方式|联系我|聯繫我)/i.test(combined)) {
+      signalTags.push("contact_keyword");
+    }
+    if (/(?:vx|wx|tg|qq)[a-z0-9_-]{3,}|t\.me\/|wa\.me\/|telegram\.me\//i.test(combined)) {
+      signalTags.push("contact_payload");
+    }
+    if (links.length > 0) {
+      signalTags.push("external_link");
+    }
+    if (/(?:看主页|点主页|置顶|简介|资料|签名|自介|搜id|小号|入口)/i.test(combined)) {
+      signalTags.push("profile_redirect");
+    }
+    if (/(?:免费|无偿|同城|搭子|主人|小狗|破处|约炮|福利|资源|频道|群号)/i.test(combined)) {
+      signalTags.push("suspicious_bio");
+    }
+
+    return {
+      profilePath: profilePath || "",
+      bioText: bioText.slice(0, 800),
+      signalTags: Array.from(new Set(signalTags)),
+      links: links,
+      fetchStatus: bioText || links.length || signalTags.length ? "ok" : "empty",
+      fetchedAt: new Date().toISOString()
+    };
+  }
+
+  function shouldFetchReplyProfileSignals(authorMeta, analysis, protectedAccount) {
+    if (!authorMeta || !authorMeta.handle || !state.replyAiEnabled) {
+      return false;
+    }
+
+    const highRiskDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksHighRisk === "function"
+      && window.Web25Rules.displayNameLooksHighRisk(authorMeta.displayName || "")
+    );
+    const lureDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksLure === "function"
+      && window.Web25Rules.displayNameLooksLure(authorMeta.displayName || "")
+    );
+    const suspiciousHandle = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.handleLooksSuspicious === "function"
+      && window.Web25Rules.handleLooksSuspicious(authorMeta.handle || "")
+    );
+    const minimalOrBait = Boolean(
+      analysis
+      && (
+        analysis.hasMinimalTextPayload
+        || analysis.hasLowInformationBadge
+        || analysis.hasLureEmoji
+        || analysis.hasExternalContactPayload
+        || analysis.hasGeoMeetupBait
+        || analysis.hasBaitQuestionShape
+      )
+    );
+
+    if (protectedAccount) {
+      return highRiskDisplayName || (lureDisplayName && minimalOrBait) || Boolean(analysis && analysis.hasExternalContactPayload);
+    }
+
+    return highRiskDisplayName || lureDisplayName || suspiciousHandle || minimalOrBait;
+  }
+
+  function loadReplyProfileSignals(replyArticle, authorMeta, analysis, protectedAccount, callback) {
+    const handleKey = authorMeta && authorMeta.handle ? String(authorMeta.handle || "").trim().toLowerCase() : "";
+    const emptyResult = {
+      profilePath: getReplyProfilePath(replyArticle, authorMeta),
+      bioText: "",
+      signalTags: [],
+      links: [],
+      fetchStatus: "not_requested",
+      fetchedAt: ""
+    };
+
+    if (!shouldFetchReplyProfileSignals(authorMeta, analysis, protectedAccount) || !handleKey) {
+      callback(emptyResult);
+      return;
+    }
+
+    const cached = state.profileSignalCache.get(handleKey);
+    if (cached && Date.now() - Number(cached.cachedAt || 0) < 30 * 60 * 1000) {
+      callback({
+        profilePath: cached.profilePath || emptyResult.profilePath,
+        bioText: cached.bioText || "",
+        signalTags: Array.isArray(cached.signalTags) ? cached.signalTags.slice() : [],
+        links: Array.isArray(cached.links) ? cached.links.slice() : [],
+        fetchStatus: cached.fetchStatus || "ok",
+        fetchedAt: cached.fetchedAt || ""
+      });
+      return;
+    }
+
+    if (state.profileSignalInFlightKeys.has(handleKey)) {
+      callback(emptyResult);
+      return;
+    }
+
+    const profilePath = getReplyProfilePath(replyArticle, authorMeta);
+    if (!profilePath || !state.backendBaseUrl) {
+      callback(emptyResult);
+      return;
+    }
+
+    state.profileSignalInFlightKeys.add(handleKey);
+    requestBackendText(location.origin.replace(/\/+$/, "") + profilePath, function (html) {
+      state.profileSignalInFlightKeys.delete(handleKey);
+      const parsed = extractProfileSignalsFromHtml(html, profilePath);
+      state.profileSignalCache.set(handleKey, Object.assign({
+        cachedAt: Date.now()
+      }, parsed));
+      callback(parsed);
+    }, true, {
+      Accept: "text/html,application/xhtml+xml"
+    });
+  }
+
+  function shouldConsiderReplyAiModeration(replyText, authorMeta, analysis, protectedAccount) {
+    return buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount).shouldQueue;
+  }
+
+  function buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount) {
+    const emptyCandidate = {
+      shouldQueue: false,
+      score: 0
+    };
+
+    if (!state.replyAiEnabled || !state.backendBaseUrl || !state.syncKey || !state.deviceId) {
+      return emptyCandidate;
+    }
+
+    if (!replyText && !(authorMeta && (authorMeta.displayName || authorMeta.handle))) {
+      return emptyCandidate;
+    }
+
+    const highRiskDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksHighRisk === "function"
+      && window.Web25Rules.displayNameLooksHighRisk(authorMeta && authorMeta.displayName ? authorMeta.displayName : "")
+    );
+    const lureDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksLure === "function"
+      && window.Web25Rules.displayNameLooksLure(authorMeta && authorMeta.displayName ? authorMeta.displayName : "")
+    );
+    const suspiciousHandle = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.handleLooksSuspicious === "function"
+      && window.Web25Rules.handleLooksSuspicious(authorMeta && authorMeta.handle ? authorMeta.handle : "")
+    );
+    const hasLongDigitHandle = /\d{6,}/.test(String(authorMeta && authorMeta.handle ? authorMeta.handle : "").toLowerCase());
+    const accountMetadataSignals = highRiskDisplayName
+      || (lureDisplayName && suspiciousHandle)
+      || (lureDisplayName && hasLongDigitHandle)
+      || (suspiciousHandle && hasLongDigitHandle);
+    const analysisSignals = Boolean(
+      accountMetadataSignals
+      || (
+        analysis
+        && (
+        analysis.hasMinimalTextPayload
+        || analysis.hasFragmentedSymbolicReply
+        || analysis.hasLowInformationBadge
+        || analysis.hasLureEmoji
+        || analysis.hasShareLinkScam
+        || analysis.hasAccountMention
+        || analysis.hasExternalContactPayload
+        || analysis.hasGeoMeetupBait
+        || analysis.hasBaitQuestionShape
+        || analysis.hasExplicitEroticBait
+        || analysis.hasSpamTemplateSignal
+        || analysis.hasEroticMentionRedirect
+        || (Array.isArray(analysis.matchedSlots) && analysis.matchedSlots.length > 0)
+        )
+      )
+    );
+    const matchedSlots = Array.isArray(analysis && analysis.matchedSlots) ? analysis.matchedSlots : [];
+    const compactReplyLength = String(analysis && analysis.compact ? analysis.compact : "").length;
+    const shortOrThinReply = compactReplyLength === 0
+      || compactReplyLength <= 12
+      || Boolean(analysis && (
+        analysis.hasMinimalTextPayload
+        || analysis.hasFragmentedSymbolicReply
+        || analysis.hasLowInformationBadge
+      ));
+    let score = 0;
+
+    if (highRiskDisplayName) {
+      score += 4;
+    }
+    if (analysis && analysis.hasExternalContactPayload) {
+      score += 4;
+    }
+    if (matchedSlots.includes("account_redirect")) {
+      score += 3;
+    }
+    if (lureDisplayName) {
+      score += 2;
+    }
+    if (analysis && analysis.hasMinimalTextPayload) {
+      score += 2;
+    }
+    if (analysis && analysis.hasFragmentedSymbolicReply) {
+      score += 2;
+    }
+    if (analysis && analysis.hasLowInformationBadge) {
+      score += 2;
+    }
+    if (analysis && analysis.hasShareLinkScam) {
+      score += 4;
+    }
+    if (analysis && analysis.hasGeoMeetupBait) {
+      score += 2;
+    }
+    if (analysis && analysis.hasExplicitEroticBait) {
+      score += 2;
+    }
+    if (analysis && analysis.hasSpamTemplateSignal) {
+      score += 3;
+    }
+    if (analysis && analysis.hasEroticMentionRedirect) {
+      score += 3;
+    }
+    if (suspiciousHandle) {
+      score += 1;
+    }
+    if (hasLongDigitHandle) {
+      score += 1;
+    }
+    if (accountMetadataSignals) {
+      score += 2;
+    }
+    if (analysis && analysis.hasBaitQuestionShape) {
+      score += 1;
+    }
+    if (analysis && analysis.hasLureEmoji) {
+      score += 1;
+    }
+    if (analysis && analysis.hasAccountMention) {
+      score += 1;
+    }
+    if (matchedSlots.includes("relationship_or_erotic")) {
+      score += 1;
+    }
+    if (matchedSlots.includes("hook") && matchedSlots.includes("meetup")) {
+      score += 1;
+    }
+    if (matchedSlots.length >= 2) {
+      score += 1;
+    }
+    if (compactReplyLength >= 28 && !highRiskDisplayName && !(analysis && analysis.hasExternalContactPayload)) {
+      score -= 1;
+    }
+
+    if (protectedAccount) {
+      return {
+        shouldQueue: highRiskDisplayName
+          || Boolean(analysis && analysis.hasExternalContactPayload)
+          || (lureDisplayName && shortOrThinReply),
+        score: score
+      };
+    }
+
+    const hasStrongTrigger = highRiskDisplayName
+      || Boolean(analysis && analysis.hasShareLinkScam)
+      || Boolean(analysis && analysis.hasExternalContactPayload)
+      || matchedSlots.includes("account_redirect")
+      || Boolean(analysis && analysis.hasEroticMentionRedirect)
+      || (accountMetadataSignals && shortOrThinReply);
+    const hasWeakTriggerCombo = score >= REPLY_AI_BASE_SUSPICION_THRESHOLD && (
+      lureDisplayName
+      || suspiciousHandle
+      || accountMetadataSignals
+      || Boolean(analysis && (
+        analysis.hasMinimalTextPayload
+        || analysis.hasFragmentedSymbolicReply
+        || analysis.hasLowInformationBadge
+        || analysis.hasGeoMeetupBait
+        || analysis.hasBaitQuestionShape
+        || analysis.hasExplicitEroticBait
+        || analysis.hasSpamTemplateSignal
+        || analysis.hasAccountMention
+      ))
+      || matchedSlots.length >= 2
+    );
+
+    return {
+      shouldQueue: Boolean((analysisSignals || accountMetadataSignals) && (hasStrongTrigger || hasWeakTriggerCombo)),
+      score: score
+    };
+  }
+
+  function isReplyHandleGloballyBlocked(authorMeta) {
+    const handle = authorMeta && authorMeta.handle ? String(authorMeta.handle || "").trim().toLowerCase() : "";
+    return Boolean(handle) && state.globalReplyBlockedHandles.has(handle);
+  }
+
+  function requestReplyAiDecisionBatch(snapshot, callback) {
+    requestBackendJson("POST", state.backendBaseUrl + "/api/ai-replies/batch", snapshot, function (payload) {
+      if (!payload || !payload.ok || !Array.isArray(payload.items)) {
+        callback(null);
+        return;
+      }
+      callback(payload);
+    }, false);
+  }
+
+  function loadReplyProfileSignalsAsync(replyArticle, authorMeta, analysis, protectedAccount) {
+    return new Promise(function (resolve) {
+      loadReplyProfileSignals(replyArticle, authorMeta, analysis, protectedAccount, function (profileSignals) {
+        resolve(profileSignals || null);
+      });
+    });
+  }
+
+  function getOldestReplyAiQueuedAt() {
+    if (!state.replyAiPendingQueue.length) {
+      return 0;
+    }
+
+    return state.replyAiPendingQueue.reduce(function (oldest, entry) {
+      const queuedAt = Number(entry && entry.queuedAt ? entry.queuedAt : Date.now());
+      return oldest === 0 ? queuedAt : Math.min(oldest, queuedAt);
+    }, 0);
+  }
+
+  function scheduleReplyAiDecisionQueueDrain(force) {
+    if (state.destroyed || !state.replyAiEnabled || state.replyAiBatchInFlight || !state.replyAiPendingQueue.length) {
+      return;
+    }
+
+    clearTimeout(state.replyAiBatchTimer);
+    state.replyAiBatchTimer = null;
+
+    const now = Date.now();
+    const oldestQueuedAt = getOldestReplyAiQueuedAt();
+    const batchAgeMs = oldestQueuedAt ? Math.max(0, now - oldestQueuedAt) : REPLY_AI_BATCH_FLUSH_DELAY_MS;
+    const waitForFlushMs = Math.max(0, REPLY_AI_BATCH_FLUSH_DELAY_MS - batchAgeMs);
+    const waitForIntervalMs = Math.max(0, REPLY_AI_MIN_BATCH_INTERVAL_MS - (now - Number(state.lastReplyAiBatchSentAt || 0)));
+    const enoughItems = state.replyAiPendingQueue.length >= REPLY_AI_BATCH_MAX_ITEMS;
+    const delayMs = force
+      ? waitForIntervalMs
+      : (enoughItems ? waitForIntervalMs : Math.max(waitForFlushMs, waitForIntervalMs));
+
+    state.replyAiBatchTimer = setTimeout(function () {
+      state.replyAiBatchTimer = null;
+      drainReplyAiDecisionQueue();
+    }, Math.max(0, delayMs));
+  }
+
+  function drainReplyAiDecisionQueue() {
+    if (state.destroyed || !state.replyAiEnabled || state.replyAiBatchInFlight || !state.replyAiPendingQueue.length) {
+      return;
+    }
+
+    const now = Date.now();
+    const oldestQueuedAt = getOldestReplyAiQueuedAt();
+    const batchAgeMs = oldestQueuedAt ? Math.max(0, now - oldestQueuedAt) : REPLY_AI_BATCH_FLUSH_DELAY_MS;
+    const intervalRemainingMs = Math.max(0, REPLY_AI_MIN_BATCH_INTERVAL_MS - (now - Number(state.lastReplyAiBatchSentAt || 0)));
+    if (intervalRemainingMs > 0 || (state.replyAiPendingQueue.length < REPLY_AI_BATCH_MAX_ITEMS && batchAgeMs < REPLY_AI_BATCH_FLUSH_DELAY_MS)) {
+      scheduleReplyAiDecisionQueueDrain(false);
+      return;
+    }
+
+    const batch = [];
+    while (batch.length < REPLY_AI_BATCH_MAX_ITEMS && state.replyAiPendingQueue.length > 0) {
+      const task = state.replyAiPendingQueue.shift();
+      if (!task || !task.cacheKey) {
+        continue;
+      }
+
+      state.replyAiQueuedKeys.delete(task.cacheKey);
+      if (state.replyAiInFlightKeys.has(task.cacheKey)) {
+        continue;
+      }
+      batch.push(task);
+    }
+
+    if (!batch.length) {
+      return;
+    }
+
+    dispatchReplyAiDecisionBatch(batch);
+  }
+
+  function dispatchReplyAiDecisionBatch(tasks) {
+    if (!Array.isArray(tasks) || !tasks.length) {
+      return null;
+    }
+
+    state.replyAiBatchInFlight = true;
+    tasks.forEach(function (task) {
+      state.replyAiInFlightKeys.add(task.cacheKey);
+    });
+
+    Promise.all(tasks.map(function (task) {
+      return loadReplyProfileSignalsAsync(task.replyArticle, task.authorMeta, task.analysis, task.protectedAccount).then(function (profileSignals) {
+        return {
+          task: task,
+          profileSignals: profileSignals || null
+        };
+      });
+    })).then(function (entries) {
+      const threadStatusId = extractStatusId(location.pathname) || extractStatusId(location.href);
+      const mainText = entries[0] && entries[0].task ? entries[0].task.mainText || "" : "";
+      const snapshot = {
+        syncKey: state.syncKey,
+        deviceId: state.deviceId,
+        threadUrl: location.href,
+        threadStatusId: threadStatusId,
+        mainPostText: mainText,
+        items: entries.map(function (entry) {
+          const task = entry.task;
+          const profileSignals = entry.profileSignals;
+          return {
+            clientItemId: task.cacheKey,
+            threadUrl: task.threadUrl || location.href,
+            threadStatusId: task.threadStatusId || threadStatusId,
+            mainPostText: task.mainText || "",
+            replyStatusId: task.manualKeys && task.manualKeys.statusKey ? task.manualKeys.statusKey.replace(/^status:/, "") : "",
+            replyHandle: task.authorMeta && task.authorMeta.handle ? task.authorMeta.handle : "",
+            replyDisplayName: task.authorMeta && task.authorMeta.displayName ? task.authorMeta.displayName : "",
+            replyText: task.replyText || "",
+            accountProtected: task.protectedAccount ? 1 : 0,
+            profilePath: profileSignals && profileSignals.profilePath ? profileSignals.profilePath : "",
+            profileBioText: profileSignals && profileSignals.bioText ? profileSignals.bioText : "",
+            profileSignalTags: profileSignals && Array.isArray(profileSignals.signalTags) ? profileSignals.signalTags : [],
+            profileLinks: profileSignals && Array.isArray(profileSignals.links) ? profileSignals.links : [],
+            profileFetchStatus: profileSignals && profileSignals.fetchStatus ? profileSignals.fetchStatus : "not_requested",
+            profileFetchedAt: profileSignals && profileSignals.fetchedAt ? profileSignals.fetchedAt : ""
+          };
+        })
+      };
+
+      state.lastReplyAiBatchSentAt = Date.now();
+      requestReplyAiDecisionBatch(snapshot, function (payload) {
+        state.replyAiBatchInFlight = false;
+        tasks.forEach(function (task) {
+          state.replyAiInFlightKeys.delete(task.cacheKey);
+        });
+
+        if (payload && Array.isArray(payload.items)) {
+          payload.items.forEach(function (item) {
+            const clientItemId = item && item.clientItemId ? String(item.clientItemId || "") : "";
+            if (!clientItemId || !item.decision) {
+              return;
+            }
+
+            state.replyAiDecisionCache.set(clientItemId, {
+              itemId: Number(item.itemId || 0),
+              decision: item.decision,
+              updatedAt: Date.now()
+            });
+          });
+          persistReplyAiDecisionCacheToSession();
+          scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
+        }
+
+        drainReplyAiDecisionQueue();
+      });
+    }).catch(function () {
+      state.replyAiBatchInFlight = false;
+      tasks.forEach(function (task) {
+        state.replyAiInFlightKeys.delete(task.cacheKey);
+      });
+      scheduleReplyAiDecisionQueueDrain(false);
+    });
+
+    return null;
+  }
+
+  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, protectedAccount, analysis, aiCandidateScore) {
+    const cacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
+    if (!cacheKey) {
+      return null;
+    }
+
+    const cachedDecision = state.replyAiDecisionCache.get(cacheKey);
+    if (cachedDecision && cachedDecision.decision && cachedDecision.decision.isFinal) {
+      return cachedDecision.decision;
+    }
+
+    if (state.replyAiInFlightKeys.has(cacheKey) || state.replyAiQueuedKeys.has(cacheKey)) {
+      return null;
+    }
+
+    const task = {
+      cacheKey: cacheKey,
+      replyArticle: replyArticle,
+      mainText: mainText,
+      replyText: replyText,
+      manualKeys: manualKeys,
+      authorMeta: authorMeta,
+      protectedAccount: protectedAccount,
+      analysis: analysis,
+      aiCandidateScore: Number(aiCandidateScore || 0),
+      threadUrl: location.href,
+      threadStatusId: extractStatusId(location.pathname) || extractStatusId(location.href),
+      queuedAt: Date.now()
+    };
+
+    const insertAt = state.replyAiPendingQueue.findIndex(function (entry) {
+      return Number(entry && entry.aiCandidateScore ? entry.aiCandidateScore : 0) < task.aiCandidateScore;
+    });
+
+    if (insertAt === -1) {
+      state.replyAiPendingQueue.push(task);
+    } else {
+      state.replyAiPendingQueue.splice(insertAt, 0, task);
+    }
+
+    state.replyAiQueuedKeys.add(cacheKey);
+    scheduleReplyAiDecisionQueueDrain(false);
+    return null;
+  }
+
   function findReplyArticleByKeys(keys) {
     if (!keys) {
       return null;
@@ -3758,6 +5201,7 @@
       displayName: entry.replyDisplayName || "X 用户",
       handle: entry.replyHandle || ""
     };
+    const sourcePresentation = getHiddenSourcePresentation(entry);
     const card = document.createElement("div");
     card.className = "web25-bottom-card";
     card.setAttribute("data-web25-owned", "1");
@@ -3781,16 +5225,19 @@
     body.className = "web25-bottom-card-body";
     body.textContent = entry.replyText || "这条回复没有可读取文本";
 
+    let note = null;
+    if (entry && entry.aiReasonShort && (entry.hiddenSource === "ai" || entry.hiddenSource === "ai-global")) {
+      note = document.createElement("div");
+      note.className = "web25-bottom-card-note";
+      note.textContent = entry.aiReasonShort;
+    }
+
     const footer = document.createElement("div");
     footer.className = "web25-bottom-card-footer";
 
     const badge = document.createElement("span");
-    badge.className = "web25-hidden-badge " + (entry.hiddenSource === "manual"
-      ? "web25-hidden-badge-manual"
-      : (entry.hiddenSource === "history" ? "web25-hidden-badge-history" : "web25-hidden-badge-auto"));
-    badge.textContent = entry.hiddenSource === "manual"
-      ? "你刚标记下沉"
-      : (entry.hiddenSource === "history" ? "命中历史标记" : "web2.5 自动下沉");
+    badge.className = "web25-hidden-badge " + sourcePresentation.className;
+    badge.textContent = sourcePresentation.label;
     footer.appendChild(badge);
 
     const allowButton = document.createElement("button");
@@ -3809,6 +5256,9 @@
 
     card.appendChild(header);
     card.appendChild(body);
+    if (note) {
+      card.appendChild(note);
+    }
     card.appendChild(footer);
     return card;
   }
@@ -3818,6 +5268,8 @@
       return;
     }
 
+    syncManualTrayThreadKey();
+    syncBrowserThemeDataset();
     root.dataset.web25LastScan = String(Date.now());
     root.dataset.web25Detail = isDetailPage() ? "1" : "0";
     root.dataset.web25Home = isHomeTimelinePage() ? "1" : "0";
@@ -3880,6 +5332,8 @@
       const mainText = getTweetText(mainArticle);
       let hiddenCount = 0;
       let autoHiddenCount = 0;
+      let aiHiddenCount = 0;
+      let aiReviewedCount = 0;
       let historyHiddenCount = 0;
       let manualHiddenCount = 0;
       const revealedReplies = [];
@@ -3889,6 +5343,9 @@
         replyCell.removeAttribute("data-web25-pending");
         const replyText = getTweetText(replyArticle);
         const manualKeys = getReplyManualKeys(replyArticle, replyText);
+        const analysis = window.Web25Rules && typeof window.Web25Rules.analyzeReplyText === "function"
+          ? window.Web25Rules.analyzeReplyText(replyText)
+          : null;
         const authorMeta = getReplyAuthorMeta(replyArticle);
         const protectedAccount = isProtectedAccount(replyArticle, authorMeta);
         const storedManualKeys = getStoredManualKeys(manualKeys, protectedAccount, replyText);
@@ -3897,12 +5354,37 @@
           manualKeys.accountKey
           && state.repeatSuspiciousHandles.has(manualKeys.accountKey)
         );
+        const aiCacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
+        const aiCandidate = buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount);
+        const cachedAiEntry = aiCacheKey ? state.replyAiDecisionCache.get(aiCacheKey) : null;
+        const cachedAiDecision = cachedAiEntry && cachedAiEntry.decision && cachedAiEntry.decision.isFinal
+          ? cachedAiEntry.decision
+          : null;
+        const failedAiDecision = cachedAiDecision && cachedAiDecision.status === "failed"
+          ? cachedAiDecision
+          : null;
+        const failedAiRetryDue = Boolean(
+          failedAiDecision
+          && cachedAiEntry
+          && (Date.now() - Number(cachedAiEntry.updatedAt || 0) >= REPLY_AI_FAILURE_RETRY_DELAY_MS)
+        );
+        const readyAiDecision = cachedAiDecision && cachedAiDecision.status === "ready"
+          ? cachedAiDecision
+          : null;
         let decision;
         let hiddenSource = null;
         const isAllowed = hasAllowDecisionKey(state.manualAllowTexts, storedManualKeys);
         const hasPinnedHide = replyCell.getAttribute("data-web25-manual-pinned") === "1";
         const hasHistoryHide = hasDecisionKey(state.manualHideTexts, storedManualKeys);
         const isManuallyHidden = !isAllowed && (hasPinnedHide || hasHistoryHide);
+        const isGloballyBlocked = !isAllowed && isReplyHandleGloballyBlocked(authorMeta);
+        const shouldQueueAi = !isAllowed
+          && !hasPinnedHide
+          && !hasHistoryHide
+          && !isGloballyBlocked
+          && Boolean(state.replyAiEnabled && state.backendBaseUrl && state.syncKey && state.deviceId)
+          && Boolean(aiCacheKey)
+          && (!cachedAiDecision || failedAiRetryDue);
 
         if (isAllowed) {
           decision = {
@@ -3924,6 +5406,22 @@
             reasons: ["manual-hide"]
           };
           hiddenSource = "history";
+        } else if (isGloballyBlocked) {
+          decision = {
+            hide: true,
+            score: 100,
+            reasons: ["global-reply-blocklist"]
+          };
+          hiddenSource = "ai-global";
+        } else if (readyAiDecision) {
+          decision = {
+            hide: readyAiDecision.shouldHide === true,
+            score: readyAiDecision.shouldHide === true ? 100 : -10,
+            reasons: ["reply-ai:" + String(readyAiDecision.reasonShort || readyAiDecision.decisionLayer || "checked")]
+          };
+          hiddenSource = readyAiDecision.shouldHide === true
+            ? (readyAiDecision.decisionLayer === "global_blocklist" ? "ai-global" : "ai")
+            : null;
         } else if (AUTO_HIDE_ENABLED && window.Web25Rules && typeof window.Web25Rules.evaluateReply === "function") {
           decision = window.Web25Rules.evaluateReply(replyText, mainText, {
             isVerified: protectedAccount && isVerifiedAccount(replyArticle),
@@ -3959,11 +5457,19 @@
           manualKeys: manualKeys,
           storedManualKeys: storedManualKeys,
           authorMeta: authorMeta,
+          analysis: analysis,
           protectedAccount: protectedAccount,
           isAllowed: isAllowed,
           decision: decision,
           hiddenSource: hiddenSource,
-          isManuallyHidden: isManuallyHidden
+          isManuallyHidden: isManuallyHidden,
+          shouldQueueAi: shouldQueueAi,
+          aiCacheKey: aiCacheKey,
+          aiCandidateScore: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0),
+          aiReady: Boolean(readyAiDecision),
+          aiReasonShort: readyAiDecision && readyAiDecision.shouldHide === true
+            ? String(readyAiDecision.reasonShort || "")
+            : (hiddenSource === "ai-global" ? "命中 AI 共用的高风险账号名单。" : "")
         };
       });
 
@@ -3976,6 +5482,10 @@
         let decision = entry.decision;
         let hiddenSource = entry.hiddenSource;
         const isManuallyHidden = entry.isManuallyHidden;
+
+        if (entry.aiReady) {
+          aiReviewedCount += 1;
+        }
 
         if (decision.hide) {
           replyCell.setAttribute("data-web25-hidden", "1");
@@ -3990,16 +5500,25 @@
             historyHiddenCount += 1;
           } else {
             autoHiddenCount += 1;
+            if (hiddenSource === "ai" || hiddenSource === "ai-global") {
+              aiHiddenCount += 1;
+            }
           }
 
-          revealedReplies.push({
+          const revealedEntry = {
             stableId: manualKeys.statusKey || manualKeys.textKey || manualKeys.compactTextKey || manualKeys.patternTextKey || ("reply:" + hiddenCount + ":" + replyText),
             replyText: replyText,
             hiddenSource: hiddenSource || "auto",
             manualKeys: cloneManualKeys(manualKeys),
             replyDisplayName: authorMeta.displayName,
-            replyHandle: authorMeta.handle
-          });
+            replyHandle: authorMeta.handle,
+            aiReasonShort: entry.aiReasonShort || ""
+          };
+          revealedReplies.push(revealedEntry);
+
+          if (hiddenSource === "manual" || hiddenSource === "history") {
+            rememberManualTrayEntry(revealedEntry);
+          }
 
           if (hiddenSource === "auto") {
             const autoHideSyncKey = buildAutoHideSyncKey(manualKeys);
@@ -4017,10 +5536,61 @@
 
         ensureReplyActions(replyCell, replyArticle, replyText, decision.hide || isManuallyHidden, hiddenSource);
       });
+
+      replySnapshots
+        .filter(function (entry) {
+          return !entry.isAllowed && !entry.isManuallyHidden && entry.shouldQueueAi && entry.aiCacheKey;
+        })
+        .sort(function (left, right) {
+          if (right.aiCandidateScore !== left.aiCandidateScore) {
+            return right.aiCandidateScore - left.aiCandidateScore;
+          }
+          return String(left.replyText || "").length - String(right.replyText || "").length;
+        })
+        .forEach(function (entry) {
+          enqueueReplyAiDecision(
+            entry.replyArticle,
+            mainText,
+            entry.replyText,
+            entry.manualKeys,
+            entry.authorMeta,
+            entry.protectedAccount,
+            entry.analysis,
+            entry.aiCandidateScore
+          );
+        });
       root.dataset.web25Stage = "scan:actions-ready";
+
+      if (PERSISTENT_MANUAL_TRAY_SUPPORTED) {
+        const visibleManualTrayKeys = new Set(revealedReplies.map(function (entry) {
+          return getManualTrayEntryKey(entry.manualKeys, entry.replyText);
+        }).filter(Boolean));
+
+        pruneManualTrayEntries();
+        state.manualTrayEntries.forEach(function (entry, cacheKey) {
+          if (!entry || !entry.manualKeys || visibleManualTrayKeys.has(cacheKey)) {
+            return;
+          }
+
+          const clonedEntry = cloneBottomEntry(entry);
+          if (!clonedEntry) {
+            return;
+          }
+
+          revealedReplies.push(clonedEntry);
+          hiddenCount += 1;
+          if (clonedEntry.hiddenSource === "history") {
+            historyHiddenCount += 1;
+          } else {
+            manualHiddenCount += 1;
+          }
+        });
+      }
 
       const counts = {
         auto: autoHiddenCount,
+        ai: aiHiddenCount,
+        aiReviewed: aiReviewedCount,
         history: historyHiddenCount,
         manual: manualHiddenCount,
         scanned: replies.length
@@ -4033,6 +5603,10 @@
       root.dataset.web25Stage = "scan:summary-ready";
 
       if (hiddenCount === 0) {
+        clearTimeout(state.revealedListInteractionTimer);
+        state.revealedListInteractionTimer = null;
+        state.pendingRevealedListPayload = null;
+        state.revealedListInteractionUntil = 0;
         ensureBottomHost(lastReplyCell || getReplyCell(mainArticle));
         if (state.revealedListEl) {
           state.revealedListEl.remove();
@@ -4052,7 +5626,18 @@
       ensureSummary(counts);
       if (revealedReplies.length > 0) {
         ensureRevealedList(counts);
-        updateBottomCards(revealedReplies);
+        if (state.bottomTrayOpen && Date.now() < Number(state.revealedListInteractionUntil || 0)) {
+          state.pendingRevealedListPayload = {
+            counts: Object.assign({}, counts),
+            revealedReplies: revealedReplies.slice()
+          };
+          scheduleDeferredRevealedListRefresh();
+        } else {
+          state.pendingRevealedListPayload = null;
+          updateBottomCards(revealedReplies);
+        }
+      } else {
+        state.pendingRevealedListPayload = null;
       }
       syncBottomHostVisibility(hiddenCount);
       dedupeBottomUi();
@@ -4063,6 +5648,7 @@
       root.dataset.web25Stage = "scan:error";
       throw error;
     } finally {
+      state.lastScanFinishedAt = Date.now();
       setTimeout(function () {
         state.suppressObserver = false;
       }, 0);
@@ -4220,14 +5806,15 @@
           if (state.destroyed) {
             return;
           }
-          attemptAutoBindSyncKey(false);
-          syncRemoteManualState(false, function (changed) {
-            if (state.destroyed) {
-              return;
-            }
-            if (changed) {
-              scanPage();
-            }
+          attemptAutoBindSyncKey(false, function (identityChanged) {
+            syncRemoteManualState(identityChanged === true, function (changed) {
+              if (state.destroyed) {
+                return;
+              }
+              if (changed) {
+                scanPage();
+              }
+            });
           });
         };
         window.addEventListener("focus", state.focusListener);
@@ -4243,17 +5830,31 @@
             return;
           }
 
-          attemptAutoBindSyncKey(false);
-          syncRemoteManualState(false, function (changed) {
-            if (state.destroyed) {
-              return;
-            }
-            if (changed) {
-              scanPage();
-            }
+          attemptAutoBindSyncKey(false, function (identityChanged) {
+            syncRemoteManualState(identityChanged === true, function (changed) {
+              if (state.destroyed) {
+                return;
+              }
+              if (changed) {
+                scanPage();
+              }
+            });
           });
         };
         document.addEventListener("visibilitychange", state.visibilityListener);
+      }
+
+      if (!state.scrollListener) {
+        state.scrollListener = function () {
+          if (state.destroyed) {
+            return;
+          }
+
+          noteScrollActivity();
+        };
+        window.addEventListener("scroll", state.scrollListener, {
+          passive: true
+        });
       }
 
       state.booted = true;

@@ -1,4 +1,4 @@
-const DEFAULT_API_ORIGIN = "https://web25-public.web25-boris.workers.dev";
+const DEFAULT_API_ORIGIN = "https://colorful-toilet.colorful-toilet.workers.dev";
 
 export default {
   async fetch(request, env) {

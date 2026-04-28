@@ -3,12 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>web2.5 控制台</title>
+    <title>Colorful Toilet 控制台</title>
+    <meta name="theme-color" content="#111111" />
     <meta
       name="description"
-      content="web2.5 控制台会区分全局共享成果和登录后的个人累计数据。"
+      content="Colorful Toilet 控制台会区分全局共享成果和登录后的个人累计数据。"
     />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
+    <link rel="shortcut icon" href="/favicon-32.png?v=3" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
+    <link rel="stylesheet" href="/styles.css?v=2026-04-23-ai-entry-3" />
   </head>
   <body class="console-body">
     <div class="site-shell">
@@ -19,7 +23,7 @@
               <span></span>
             </div>
             <div>
-              <p class="eyebrow">web2.5 console</p>
+              <p class="eyebrow">Colorful Toilet Console</p>
               <h1>全局基础过滤 + 你的个人成果</h1>
             </div>
           </div>
@@ -170,6 +174,78 @@
           </section>
         </section>
 
+        <section class="surface-card review-section hidden" id="aiFeedSection">
+          <div class="surface-head">
+            <div>
+              <p class="eyebrow">回复区 AI 审核</p>
+              <h3>这里管理 AI 开关、接入方式、最近 AI 隐藏记录和全局屏蔽账号</h3>
+            </div>
+            <div class="review-head-actions">
+              <span id="aiFeedCountPill" class="surface-note">本地可配置</span>
+            </div>
+          </div>
+          <p class="review-hint">这里现在统一管理共享 AI 提供商配置。主页帖子 AI、回复区 AI 和后面的整帖审核，都会复用这里保存的 Key、接口地址、模型和补充指令。下面这个开关仍然只控制回复区 AI 审核。</p>
+          <div class="site-toggle-row ai-toggle-row">
+            <input id="aiEnabledToggle" type="checkbox" checked />
+            <div class="site-toggle-copy">
+              <strong>回复区 AI 审核开关</strong>
+              <span>关掉时继续只跑现有硬规则；打开后，AI 会补看名字恶心、正文空洞、可能引导看主页的边界账号。</span>
+            </div>
+            <span id="aiEnabledStatus" class="surface-note">当前开启</span>
+          </div>
+          <div class="ai-integration-grid">
+            <section class="ai-config-card">
+              <p class="eyebrow">AI 提供商接入</p>
+              <label class="ai-term-editor">
+                <span>共享 API Key</span>
+                <input id="aiApiKeyInput" type="password" placeholder="sk-..." />
+              </label>
+              <label class="ai-term-editor">
+                <span>兼容接口地址</span>
+                <input id="aiApiBaseUrlInput" type="text" placeholder="https://api.openai.com/v1 或你的国产模型网关" />
+              </label>
+              <label class="ai-term-editor">
+                <span>模型名称</span>
+                <input id="aiApiModelInput" type="text" placeholder="gpt-5.4-mini / qwen-plus / deepseek-chat" />
+              </label>
+              <p class="ai-config-hint"><code>共享 API Key</code> 是你当前账号的统一鉴权钥匙，<code>兼容接口地址</code> 是调用入口，<code>模型名称</code> 是你想用的具体模型。主页帖子 AI、回复区 AI 和后面的整帖审核都会复用这套配置，不会替别人消耗额度。</p>
+            </section>
+            <section class="ai-config-card">
+              <p class="eyebrow">审核补充指令</p>
+              <label class="ai-term-editor">
+                <span>给 AI 的补充要求</span>
+                <textarea id="aiPromptInput" rows="7" placeholder="比如：正常讨论宁可漏掉，也不要误杀；名字明显色情引流、正文很空、还诱导看主页的账号可以更果断一点。"></textarea>
+              </label>
+            </section>
+          </div>
+          <div class="ai-feed-settings">
+            <div class="ai-feed-toolbar">
+              <button id="saveAiSettingsButton" class="primary-button small-button" type="button">保存共享 AI 设置</button>
+              <span id="aiSettingsStatus" class="surface-note">登录后会保存到你的云端账号</span>
+            </div>
+          </div>
+          <div class="ai-section-columns">
+            <section class="ai-section-column">
+              <div class="surface-head surface-head-mini">
+                <div>
+                  <p class="eyebrow">最近 AI 隐藏记录</p>
+                  <h4>这里专门看 AI 判掉的回复</h4>
+                </div>
+              </div>
+              <div class="review-list ai-feed-list" id="aiFeedList"></div>
+            </section>
+            <section class="ai-section-column">
+              <div class="surface-head surface-head-mini">
+                <div>
+                  <p class="eyebrow">全局屏蔽账号列表</p>
+                  <h4>高置信命中 2 次后，会进入所有用户共用名单</h4>
+                </div>
+              </div>
+              <div class="review-list ai-feed-list" id="globalBlockedAccountsList"></div>
+            </section>
+          </div>
+        </section>
+
         <section class="surface-card review-section" id="adSection">
           <div class="surface-head">
             <div>
@@ -206,7 +282,7 @@
               <div class="review-toolbar-actions">
                 <div class="review-filter-group" id="reviewFilterGroup">
                   <button class="filter-chip active" data-filter="all" type="button">全部</button>
-                  <button class="filter-chip" data-filter="auto" type="button">web2.5 自动</button>
+                  <button class="filter-chip" data-filter="auto" type="button">Colorful Toilet 自动</button>
                   <button class="filter-chip" data-filter="manual" type="button">你的动作</button>
                 </div>
                 <div class="review-filter-group" id="reviewSortGroup">
@@ -221,6 +297,6 @@
       </main>
     </div>
 
-    <script src="/app.js?v=2026-04-22-console-ads-batch-1"></script>
+    <script src="/app.js?v=2026-04-23-ai-entry-3"></script>
   </body>
 </html>

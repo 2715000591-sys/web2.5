@@ -9,3 +9,10 @@ node_modules/
 .env
 backend/data/
 test-results/
+backups/
+.xcodebuild-web25/
+dist/
+.tmp
+site/downloads/*.dmg
+site/downloads/*.zip
+site/downloads/latest.json

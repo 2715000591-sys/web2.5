@@ -3,11 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>web2.5</title>
+    <title>Colorful Toilet</title>
+    <meta name="theme-color" content="#111111" />
     <meta
       name="description"
-      content="web2.5 是你的个人内容控制层。当前最成熟的场景从 X / Safari 开始。"
+      content="下载 Colorful Toilet 插件，登录自己的邮箱，在 X 上使用共享过滤和个人记录。"
     />
+    <meta property="og:image" content="https://colorful-toilet.colorful-toilet.workers.dev/media/toilet-hero-bw.png" />
+    <meta name="twitter:image" content="https://colorful-toilet.colorful-toilet.workers.dev/media/toilet-hero-bw.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
+    <link rel="shortcut icon" href="/favicon-32.png?v=3" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="marketing-body">
@@ -19,45 +25,45 @@
               <span></span>
             </div>
             <div>
-              <p class="eyebrow">web2.5</p>
+              <p class="eyebrow">Colorful Toilet</p>
               <h1>你决定看什么，不看什么。</h1>
             </div>
           </div>
           <div class="topbar-actions">
-            <a class="ghost-button" href="/stable-state.html">稳定状态归档</a>
-            <a class="ghost-button" href="https://github.com/2715000591-sys/web2.5" target="_blank" rel="noreferrer">GitHub 备份</a>
-            <a class="ghost-button" href="#sidebar-feature">右栏精简</a>
-            <a class="ghost-button" href="#updates">更新记录</a>
+            <a class="ghost-button" href="#downloads">下载插件</a>
+            <a class="ghost-button" href="/console/">打开控制台</a>
           </div>
         </nav>
 
         <div class="marketing-hero-grid">
           <section class="hero-copy">
-            <p class="hero-kicker">个人内容控制层</p>
+            <p class="hero-kicker">X 内容整理插件</p>
             <p class="hero-text">
-              web2.5 让你把内容选择权拿回自己手里。当前最成熟的落地场景先从 X / Safari 开始，控制台继续负责累计成果、审查和恢复。
+              下载插件，打开 X，用自己的邮箱登录。个人记录从 0 开始，全局共享过滤会直接生效。
             </p>
             <div class="hero-action-row">
-              <a class="primary-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">当前先体验 X / Safari</a>
+              <a class="primary-button" href="#downloads">下载插件</a>
               <a class="ghost-button" href="/console/">打开控制台</a>
-              <a class="ghost-button" href="/stable-state.html">查看当前稳定状态</a>
             </div>
           </section>
 
           <aside class="hero-panel launch-panel">
-            <div class="panel-label">当前进展</div>
+            <figure class="launch-photo">
+              <img src="/media/toilet-hero-bw.png" alt="黑白品牌头像" />
+            </figure>
+            <div class="panel-label">三步开始</div>
             <div class="stacked-rows compact-rows">
               <div class="stacked-row">
-                <strong>品牌是 web2.5</strong>
-                <p>首页讲产品，控制台讲结果，不再把网站写成单一平台专题页。</p>
+                <strong>1. 下载插件</strong>
+                <p>按你的浏览器选择安装包。</p>
               </div>
               <div class="stacked-row">
-                <strong>当前先从 X / Safari 开始</strong>
-                <p>现在最成熟的入口是 Safari 插件这一条，但它只是当前第一站，不是整个产品的全部。</p>
+                <strong>2. 打开 X</strong>
+                <p>插件会在 x.com 里工作。</p>
               </div>
               <div class="stacked-row">
-                <strong>控制台只看累计成果</strong>
-                <p>自动动作、手动动作、恢复记录和最近动作，都继续留在控制台里看。</p>
+                <strong>3. 登录邮箱</strong>
+                <p>你的统计只跟着你的账号走。</p>
               </div>
             </div>
           </aside>
@@ -65,67 +71,109 @@
       </header>
 
       <main class="page-content">
-        <section class="marketing-section entry-section">
-          <div class="entry-grid">
-            <article class="entry-card">
-              <p class="eyebrow">当前可用</p>
-              <h3>先体验 X / Safari</h3>
-              <p>当前已经成熟的体验先从这一条开始。装好 Safari 扩展，就能在 X 里直接用起来。</p>
-              <div class="entry-actions">
-                <a class="primary-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">安装说明</a>
+        <section class="marketing-section" id="downloads">
+          <div class="section-heading">
+            <p class="eyebrow">下载插件</p>
+            <h2>选择你的浏览器。</h2>
+            <p class="download-section-note">
+              Safari 需要单独安装包。Chrome 和 Edge 用同一个包。
+            </p>
+            <p class="download-version-note">
+              <span class="status-pill mellow" data-web25-download-version>正在读取最新版...</span>
+              <span class="surface-note" data-web25-download-generated-at>正在读取打包时间...</span>
+            </p>
+          </div>
+
+          <div class="download-grid">
+            <article class="entry-card download-card download-card-highlight">
+              <p class="eyebrow">Mac / Safari</p>
+              <h3>Safari 用户点这里</h3>
+              <p>下载后打开安装包，按提示开启 Safari 扩展。</p>
+              <div class="entry-actions download-actions">
+                <a
+                  class="primary-button"
+                  href="/downloads/colorful-toilet-safari.dmg"
+                  data-web25-download-link="safari"
+                  download
+                >下载 Safari 完整版</a>
+                <a
+                  class="ghost-button"
+                  href="/downloads/colorful-toilet-safari.zip"
+                  data-web25-download-link="safariZip"
+                  download
+                >备用压缩包</a>
               </div>
+              <ol class="download-steps">
+                <li>打开下载好的安装包。</li>
+                <li>把 <code>Colorful Toilet.app</code> 拖到 <code>Applications</code>。</li>
+                <li>打开 app，再到 Safari 设置里开启扩展。</li>
+                <li>打开 <code>x.com</code>，用自己的邮箱登录控制台。</li>
+              </ol>
+              <p class="download-note">Safari 不允许网站偷偷自动安装扩展，所以需要你手动开启一次。</p>
             </article>
-            <article class="entry-card">
-              <p class="eyebrow">控制台</p>
-              <h3>登录控制台</h3>
-              <p>全局共享过滤成果和你自己的累计成果，会在登录后分层展开，不再混成一块。</p>
-              <div class="entry-actions">
-                <a class="ghost-button" href="/console/">进入控制台</a>
+
+            <article class="entry-card download-card">
+              <p class="eyebrow">Chrome / Edge</p>
+              <h3>Chrome 或 Edge 点这里</h3>
+              <p>这两个浏览器用同一个插件包。</p>
+              <div class="entry-actions download-actions">
+                <a
+                  class="primary-button"
+                  href="/downloads/colorful-toilet-chrome-edge.zip"
+                  data-web25-download-link="chromeEdge"
+                  download
+                >下载 Chrome / Edge 包</a>
               </div>
+              <ol class="download-steps">
+                <li>下载并解压。</li>
+                <li>打开浏览器的扩展管理页。</li>
+                <li>打开开发者模式，选择刚解压的插件文件夹。</li>
+                <li>打开 <code>x.com</code> 开始使用。</li>
+              </ol>
+              <p class="download-note">以后发布到商店后，这一步还能继续变简单。</p>
             </article>
           </div>
         </section>
 
         <section class="marketing-section" id="sidebar-feature">
           <div class="section-heading">
-            <p class="eyebrow">新能力</p>
-            <h2>右栏精简现在不再是强塞给你，而是一个你自己决定开不开的功能。</h2>
+            <p class="eyebrow">设置</p>
+            <h2>右栏精简可以自己决定。</h2>
           </div>
           <div class="entry-grid">
             <article class="entry-card preference-card preference-card-highlight">
-              <p class="eyebrow">右栏模块关闭按钮</p>
-              <h3>多余模块，交给你自己处理。</h3>
-              <p>开启后，X 右栏的 `有什么新鲜事 / 推荐关注 / 你可能会喜欢 / 相关用户 / Premium / 直播 / 政策链接` 会出现灰色小叉。关掉后不留白框，刷新后重新出现。</p>
+              <p class="eyebrow">X 右栏</p>
+              <h3>想精简就打开。</h3>
+              <p>开启后，X 右栏一些推荐模块旁边会出现关闭按钮。</p>
               <label class="site-toggle-row">
                 <input type="checkbox" data-web25-sidebar-pref-toggle>
                 <span class="site-toggle-copy">
-                  <strong>为我的 web2.5 开启右栏精简</strong>
-                  <span>你可以先在官网决定，也可以稍后在 Safari 插件左上角弹窗里再改。</span>
+                  <strong>开启右栏精简</strong>
+                  <span>登录后会跟着你的账号同步。</span>
                 </span>
               </label>
               <p class="site-toggle-status" data-web25-sidebar-pref-status>
-                当前未登录时，这个勾选会先记在这个浏览器里；登录后会同步到你的插件账号偏好。
+                未登录时会先记在当前浏览器里。
               </p>
               <div class="hero-action-row compact-action-row">
                 <span class="status-pill mellow" data-web25-sidebar-pref-pill>当前偏好：开启</span>
-                <a class="ghost-button" href="https://github.com/2715000591-sys/web2.5/blob/main/docs/run-in-safari.md" target="_blank" rel="noreferrer">安装 Safari 插件</a>
               </div>
             </article>
             <article class="entry-card preference-support-card">
-              <p class="eyebrow">宣传口径</p>
-              <h3>web2.5 不是替你决定，而是把决定权还给你。</h3>
+              <p class="eyebrow">账号记录</p>
+              <h3>朋友用自己的邮箱登录。</h3>
               <div class="preference-points">
                 <div class="preference-point">
-                  <strong>这不是一刀切隐藏</strong>
-                  <p>主时间线、左栏和帖子正文不会被误伤，右栏模块各关各的。</p>
+                  <strong>个人统计从 0 开始</strong>
+                  <p>每个人只看自己的累计记录。</p>
                 </div>
                 <div class="preference-point">
-                  <strong>这不是永久删掉页面的一部分</strong>
-                  <p>当前设计是刷新后重新出现，方便你每次按当下需要决定。</p>
+                  <strong>共享过滤会直接生效</strong>
+                  <p>大家可以共用已经整理出来的过滤能力。</p>
                 </div>
                 <div class="preference-point">
-                  <strong>这不是只能本机偷偷开</strong>
-                  <p>现在官网和 Safari 插件都会有同一个选项，登录后会尽量保持同一偏好。</p>
+                  <strong>换设备也能继续</strong>
+                  <p>登录同一个邮箱，就能找回自己的记录。</p>
                 </div>
               </div>
             </article>
@@ -134,32 +182,21 @@
 
         <section class="marketing-section updates-section" id="updates">
           <div class="section-heading">
-            <p class="eyebrow">当前进展</p>
-            <h2>现在这版已经稳定下来的部分。</h2>
+            <p class="eyebrow">已经支持</p>
+            <h2>现在能做这些事。</h2>
           </div>
           <div class="updates-list">
             <article class="update-item">
-              <strong>Safari 插件已经跑通</strong>
-              <p>标记、自动整理、手动下沉和恢复这条链路已经稳定工作。</p>
+              <strong>整理 X 内容</strong>
+              <p>自动整理、手动处理和恢复都可以用。</p>
             </article>
             <article class="update-item">
-              <strong>右栏精简已经变成可选功能</strong>
-              <p>官网和 Safari 插件弹窗现在都能决定是否开启右栏模块关闭按钮，不再默认强塞给所有人。</p>
+              <strong>个人记录分开</strong>
+              <p>朋友登录自己的邮箱后，统计从 0 开始。</p>
             </article>
             <article class="update-item">
-              <strong>控制台已经只看真实数据</strong>
-              <p>接下来会继续升级成公网登录控制台，把全局共享层和你的个人累计分开展示。</p>
-            </article>
-            <article class="update-item">
-              <strong>GitHub 备份已经就位</strong>
-              <p>当前稳定版本已经上云，后续继续优化网站不会把它弄丢。</p>
-            </article>
-            <article class="update-item update-item-highlight">
-              <strong>当前稳定状态已经正式归档</strong>
-              <p>这次被认可的右栏关闭体验和当前产品稳态，已经同时写进官网和本地交接文档，后续接力不该再把它随手改坏。</p>
-              <div class="entry-actions">
-                <a class="ghost-button" href="/stable-state.html">打开稳定状态归档</a>
-              </div>
+              <strong>共享过滤规则</strong>
+              <p>全局过滤能力会继续一起使用。</p>
             </article>
           </div>
         </section>

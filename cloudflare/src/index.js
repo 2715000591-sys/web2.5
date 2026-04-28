@@ -19,8 +19,51 @@ const AUTO_GLOBAL_EXACT_MIN_HIDES = 2;
 const REPEAT_HANDLE_WINDOW_HOURS = 24;
 const REPEAT_HANDLE_MIN_HIDES = 2;
 const DEFAULT_USER_PREFERENCES = Object.freeze({
-  sidebarControlsEnabled: true
+  sidebarControlsEnabled: true,
+  blockedTopicTerms: []
 });
+const DEFAULT_AI_PROVIDER_BASE_URL = "https://api.openai.com/v1";
+const AI_MODERATION_TASK_TYPES = Object.freeze({
+  HOME_REALTIME_POST: "home_realtime_post",
+  REPLY_REALTIME_MODERATION: "reply_realtime_moderation",
+  FULL_POST_AUDIT: "full_post_audit"
+});
+const AI_PROVIDER_ADAPTER_KEYS = Object.freeze({
+  OPENAI_COMPATIBLE: "openai_compatible",
+  NATIVE_RESERVED: "native_reserved"
+});
+const AI_PROVIDER_COOLDOWN_STEPS_MS = Object.freeze([30000, 120000, 300000, 600000]);
+const AI_PROVIDER_COOLDOWN_JITTER_RATIO = 0.15;
+const TIMELINE_POST_STORAGE_TEXT_LIMIT = 20000;
+const TIMELINE_POST_STORAGE_LINK_LIMIT = 6000;
+const TIMELINE_POST_LIGHT_TEXT_LIMIT = 1800;
+const TIMELINE_POST_LIGHT_LINK_LIMIT = 600;
+const DEFAULT_USER_AI_SETTINGS = Object.freeze({
+  replyAiEnabled: false,
+  providerBaseUrl: DEFAULT_AI_PROVIDER_BASE_URL,
+  model: "gpt-5.4-mini",
+  moderationPrompt: "",
+  apiKeyConfigured: false,
+  apiKeyLast4: "",
+  updatedAt: ""
+});
+const DEFAULT_SESSION_TTL_DAYS = 30;
+const DEFAULT_OTP_MAX_ATTEMPTS = 5;
+const DEFAULT_MAX_AUTH_CODES_PER_EMAIL = 6;
+const DEFAULT_AI_FEED_MODEL = "gpt-5.4-mini";
+const AI_FEED_DEFAULT_LIMIT = 80;
+const AI_FEED_RECLASSIFY_LIMIT = 120;
+const REPLY_AI_DEFAULT_LIMIT = 24;
+const REPLY_AI_RECLASSIFY_LIMIT = 12;
+const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
+const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
+const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
+const REPLY_AI_BATCH_MAX_ITEMS = 6;
+const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
+const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
+const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
+const REPLY_AI_TEMPLATE_REUSE_WINDOW_HOURS = 72;
+const REPLY_AI_ACCOUNT_REUSE_WINDOW_HOURS = 36;
 const GLOBAL_RULE_STATE_CACHE_VERSION = "exclude-test-events-v1";
 const ZERO_WIDTH_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 const COMPACT_PUNCTUATION_PATTERN = /[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g;
@@ -114,6 +157,35 @@ const ACCOUNT_REDIRECT_PATTERNS = [
   /(联系方式|联系我).{0,4}(见|在|放在).{0,4}(主页|置顶|简介|资料|签名|自介)/,
   /(主页|置顶|简介|资料|签名|自介).{0,4}(自取|自拿|自加|自搜)/
 ];
+const ACCOUNT_MENTION_PATTERN = /@[a-z0-9_]{2,20}/ig;
+const EXPLICIT_EROTIC_BAIT_PATTERNS = [
+  /(?:来个|求个|找个|蹲个).{0,2}(处男|单男|主人|小狗|搭子)/,
+  /(主人|小狗).{0,4}(我听你|听你|任你|都听你)/,
+  /(?:她|你|这).{0,3}好涩我不行了/,
+  /日过这个骚货/
+];
+const EROTIC_MENTION_REDIRECT_MARKERS = [
+  "人美胸大极品尤物",
+  "好涩",
+  "真涩",
+  "太涩",
+  "我不行了",
+  "骚货",
+  "骚母",
+  "日过"
+];
+const SPAM_TEMPLATE_PATTERNS = [
+  /主打安全和标准/,
+  /舞蹈生.{0,4}会一字(?:马)?/,
+  /克制又有力量/,
+  /(?:\d{2,3}|一米[五六七八九]).{0,8}身材偏胖.{0,8}喜欢有聊聊.{0,4}香叽/,
+  /人美胸大极品尤物/,
+  /原视频.{0,8}找到(?:啦|了)?/,
+  /出处.{0,8}(找到|一并找到了|也一并找到了)/,
+  /完整(?:版)?的.{0,8}(在|下了|链接|这里|这)/,
+  /i can totally imagine the alluring moment with some toys/i,
+  /alluring moment with some toys/i
+];
 const TEMPLATE_SLOT_DEFINITIONS = [
   {
     id: "hook",
@@ -127,7 +199,7 @@ const TEMPLATE_SLOT_DEFINITIONS = [
   },
   {
     id: "relationship_or_erotic",
-    terms: ["暧昧", "陪伴", "陪聊", "想要", "调教", "小狗", "汪汪", "主人", "搭子", "固定搭子", "固炮", "单男", "破处", "约炮", "骚", "宠你"],
+    terms: ["暧昧", "陪伴", "陪聊", "想要", "调教", "小狗", "汪汪", "主人", "搭子", "固定搭子", "固炮", "单男", "处男", "破处", "约炮", "骚", "宠你"],
     patterns: [/(陪|调教|主人|小狗|搭子|固炮|破处|约炮|骚)/]
   },
   {
@@ -171,12 +243,17 @@ const HIGH_RISK_DISPLAY_NAME_PATTERNS = [
 ];
 const DISPLAY_NAME_MARKETING_TERMS = [
   "免费",
+  "免费约",
   "无偿",
   "线下",
   "同城",
+  "上门",
+  "到家",
+  "处男",
   "日泡",
   "破处",
   "单男",
+  "男单",
   "固炮",
   "约炮",
   "搭子",
@@ -186,9 +263,17 @@ const DISPLAY_NAME_MARKETING_TERMS = [
   "陪聊"
 ];
 const DISPLAY_NAME_LURE_PATTERNS = [
+  /找.{0,3}同城.{0,3}(男单|单男)/,
+  /同城.{0,3}(男单|单男)/,
+  /同城.{0,4}(上门|到家)/,
+  /(上门|到家).{0,4}(同城|可约|可聊|服务)/,
+  /外男.{0,4}(无偿|免费|约|处|破处)/,
+  /处男.{0,4}(免费|无偿|约)/,
+  /免费约/,
   /免费.{0,2}破处/,
   /(?:男|女).{0,2}无偿/,
-  /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日)/,
+  /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
+  /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
   /日泡/,
   /(破处|约炮|单男|固炮|调教|主人|小狗|搭子)/,
   /(主页|置顶|简介|资料|签名|自介).{0,6}(id|号|账号|小号|入口|联系方式|飞机|电报|tg|vx|wx|群|频道)/,
@@ -206,6 +291,12 @@ const SHARE_LINK_PATTERNS = [
 ];
 const SHARE_LINK_SCAM_TERMS = [
   "完整版",
+  "原视频",
+  "出处",
+  "找到了",
+  "一并找到了",
+  "完整的在",
+  "下了哈",
   "网盘",
   "转发在",
   "转发",
@@ -227,6 +318,33 @@ const GEO_MEETUP_BAIT_PATTERNS = [
   /^(?:有|求|蹲).{0,12}(万达广场附近|附近|离得近|同城|线下).{0,3}(人吗|的人吗|的吗|吗|嘛|呢)$/
 ];
 const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
+const PROFILE_CONTACT_PATTERNS = [
+  /(?:vx|wx|tg|qq|telegram|电报|飞机|飞機|频道|群|群号|群號|联系方式|聯繫方式|联系我|聯繫我|联系|聯繫)/i,
+  /https?:\/\/[^\s<>"']+/i,
+  /t\.me\/[^\s<>"']+/i,
+  /wa\.me\/[^\s<>"']+/i
+];
+const REPLY_AI_SAFETY_LABELS = new Set([
+  "adult_solicitation",
+  "lead_gen_spam",
+  "contact_redirect",
+  "scam_or_fraud",
+  "meaningless_bait",
+  "profile_link_risk",
+  "global_blocklist"
+]);
+const REPLY_AI_PROFILE_SIGNAL_LABELS = new Set([
+  "contact_keyword",
+  "contact_payload",
+  "external_link",
+  "profile_redirect",
+  "suspicious_bio"
+]);
+let aiFeedSchemaReadyPromise = null;
+
+function shouldTrustProvisionedAiFeedSchema(env) {
+  return String(env && env.APP_ENV ? env.APP_ENV : "").trim().toLowerCase() === "production";
+}
 
 function buildNonTestModerationEventSql(alias) {
   const prefix = alias ? `${alias}.` : "";
@@ -241,6 +359,48 @@ function buildNonTestModerationEventSql(alias) {
 
 function buildVisibleDeveloperEventSql(eventAlias) {
   return `(${eventAlias}.id IS NULL OR ${buildNonTestModerationEventSql(eventAlias)})`;
+}
+
+function getConfiguredEmailProvider(env) {
+  const resendApiKey = String(env.RESEND_API_KEY || "").trim();
+  if (resendApiKey) {
+    return {
+      kind: "resend",
+      endpoint: "https://api.resend.com/emails",
+      token: resendApiKey
+    };
+  }
+
+  const endpoint = String(env.EMAIL_SEND_ENDPOINT || "").trim();
+  if (!endpoint) {
+    return null;
+  }
+
+  return {
+    kind: "generic",
+    endpoint,
+    token: String(env.EMAIL_SEND_TOKEN || "").trim()
+  };
+}
+
+function hasConfiguredEmailProvider(env) {
+  return Boolean(getConfiguredEmailProvider(env));
+}
+
+function getSessionTtlDays(env) {
+  return Math.max(7, Number(env && env.SESSION_TTL_DAYS ? env.SESSION_TTL_DAYS : DEFAULT_SESSION_TTL_DAYS) || DEFAULT_SESSION_TTL_DAYS);
+}
+
+function getSessionMaxAgeSeconds(env) {
+  return getSessionTtlDays(env) * 24 * 60 * 60;
+}
+
+function getOtpMaxAttempts(env) {
+  return Math.max(3, Number(env && env.OTP_MAX_ATTEMPTS ? env.OTP_MAX_ATTEMPTS : DEFAULT_OTP_MAX_ATTEMPTS) || DEFAULT_OTP_MAX_ATTEMPTS);
+}
+
+function getMaxAuthCodesPerEmail(env) {
+  return Math.max(3, Number(env && env.MAX_AUTH_CODES_PER_EMAIL ? env.MAX_AUTH_CODES_PER_EMAIL : DEFAULT_MAX_AUTH_CODES_PER_EMAIL) || DEFAULT_MAX_AUTH_CODES_PER_EMAIL);
 }
 
 export default {
@@ -279,11 +439,12 @@ async function handleApi(request, env, ctx, url) {
     return json(
       {
         ok: true,
-        service: "web2.5-cloud",
+        service: "colorful-toilet-cloud",
         mode: "cloudflare",
         appUrl: String(env.APP_URL || "").trim() || url.origin,
-        hasEmailProvider: Boolean(String(env.EMAIL_SEND_ENDPOINT || "").trim()),
-        developerLoginEnabled: isDeveloperLoginEnabled(env)
+        hasEmailProvider: hasConfiguredEmailProvider(env),
+        developerLoginEnabled: isDeveloperLoginEnabled(env),
+        publicDebugCodeLoginEnabled: isTruthy(env.ALLOW_PUBLIC_DEBUG_CODE_LOGIN)
       },
       200,
       request,
@@ -304,7 +465,7 @@ async function handleApi(request, env, ctx, url) {
       200,
       request,
       true,
-      buildSessionRefreshHeaders(request, viewer)
+      buildSessionRefreshHeaders(request, viewer, env)
     );
   }
 
@@ -313,7 +474,15 @@ async function handleApi(request, env, ctx, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/preferences") {
-    return handleUpdatePreferences(request, env);
+    return handleUpdatePreferences(request, env, ctx);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/ai-settings") {
+    return handleGetAiSettings(request, env);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ai-settings") {
+    return handleUpdateAiSettings(request, env, ctx);
   }
 
   if (request.method === "POST" && url.pathname === "/api/auth/request-code") {
@@ -325,15 +494,15 @@ async function handleApi(request, env, ctx, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/auth/logout") {
-    return handleLogout(request);
+    return handleLogout(request, env);
   }
 
   if (request.method === "POST" && url.pathname === "/api/account/bind-sync-key") {
-    return handleBindSyncKey(request, env);
+    return handleBindSyncKey(request, env, ctx);
   }
 
   if (request.method === "GET" && url.pathname === "/api/dashboard") {
-    return handleDashboard(request, env, url);
+    return handleDashboard(request, env, ctx, url);
   }
 
   if (request.method === "POST" && url.pathname === "/api/developer/confirm-feed") {
@@ -360,6 +529,33 @@ async function handleApi(request, env, ctx, url) {
     return handlePostEvent(request, env);
   }
 
+  if (request.method === "POST" && url.pathname === "/api/ai-feed/posts") {
+    return handlePostAiFeedPost(request, env, ctx);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ai-replies/posts") {
+    return handlePostAiReplyPost(request, env);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ai-replies/batch") {
+    return handlePostAiReplyBatch(request, env);
+  }
+
+  const aiFeedDecisionMatch = request.method === "GET"
+    ? url.pathname.match(/^\/api\/ai-feed\/posts\/(\d+)\/decision$/)
+    : null;
+  if (aiFeedDecisionMatch) {
+    return handleGetAiFeedPostDecision(request, env, url, Number(aiFeedDecisionMatch[1] || 0));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/ai-feed") {
+    return handleGetAiFeed(request, env, url);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/reply-ai") {
+    return handleGetReplyAiDashboard(request, env, url);
+  }
+
   return json({ ok: false, error: "not-found" }, 404, request, isCredentialedPath(url.pathname));
 }
 
@@ -376,7 +572,28 @@ async function serveAsset(request, env, url) {
   }
 
   const rewritten = new Request(new URL(pathname + url.search, url.origin), request);
-  return env.ASSETS.fetch(rewritten);
+  const response = await env.ASSETS.fetch(rewritten);
+  if (!shouldDisableAssetCache(pathname)) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "no-store, max-age=0");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers
+  });
+}
+
+function shouldDisableAssetCache(pathname) {
+  return pathname === "/index.html"
+    || pathname === "/console.html"
+    || pathname === "/landing.js"
+    || pathname === "/app.js"
+    || pathname === "/styles.css"
+    || pathname === "/downloads/latest.json"
+    || pathname.startsWith("/downloads/");
 }
 
 async function handleRequestCode(request, env) {
@@ -389,6 +606,8 @@ async function handleRequestCode(request, env) {
 
   const resendSeconds = Math.max(30, Number(env.OTP_RESEND_SECONDS || 60) || 60);
   const now = new Date();
+  const nowIso = now.toISOString();
+  await deleteExpiredAuthCodesForEmail(env, email, nowIso);
   const recent = await env.DB.prepare(
     "SELECT created_at FROM auth_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1"
   ).bind(email).first();
@@ -408,12 +627,13 @@ async function handleRequestCode(request, env) {
 
   const code = generateOtp();
   const codeHash = await sha256Hex(code);
-  const createdAt = now.toISOString();
+  const createdAt = nowIso;
   const expiresAt = new Date(now.getTime() + Math.max(5, Number(env.OTP_TTL_MINUTES || 10) || 10) * 60 * 1000).toISOString();
 
   await env.DB.prepare(
     "INSERT INTO auth_codes (id, email, code_hash, created_at, expires_at, used_at, attempt_count) VALUES (?, ?, ?, ?, ?, NULL, 0)"
   ).bind(crypto.randomUUID(), email, codeHash, createdAt, expiresAt).run();
+  await trimAuthCodesForEmail(env, email);
 
   const emailResult = await sendVerificationEmail(env, email, code, { developerEmail });
   if (!emailResult.ok) {
@@ -435,8 +655,9 @@ async function handleRequestCode(request, env) {
       ok: true,
       debugCode: emailResult.debugCode || null,
       developerMode: Boolean(emailResult.developerMode),
+      publicDebugCodeMode: Boolean(emailResult.publicDebugCodeMode),
       message: emailResult.debugCode
-        ? "开发者模式下验证码已生成。"
+        ? (emailResult.publicDebugCodeMode ? "测试阶段验证码已生成。" : "开发者模式下验证码已生成。")
         : "验证码已发送。"
     },
     200,
@@ -454,6 +675,9 @@ async function handleVerifyCode(request, env) {
     return json({ ok: false, error: "missing-fields" }, 400, request, true);
   }
 
+  const nowIso = new Date().toISOString();
+  await deleteExpiredAuthCodesForEmail(env, email, nowIso);
+
   const authRow = await env.DB.prepare(
     "SELECT * FROM auth_codes WHERE email = ? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1"
   ).bind(email).first();
@@ -466,19 +690,61 @@ async function handleVerifyCode(request, env) {
     return json({ ok: false, error: "code-expired" }, 400, request, true);
   }
 
-  const codeHash = await sha256Hex(code);
-  if (codeHash !== String(authRow.code_hash || "")) {
-    await env.DB.prepare(
-      "UPDATE auth_codes SET attempt_count = attempt_count + 1 WHERE id = ?"
-    ).bind(authRow.id).run();
-    return json({ ok: false, error: "code-invalid" }, 400, request, true);
+  const otpMaxAttempts = getOtpMaxAttempts(env);
+  const currentAttemptCount = Number(authRow.attempt_count || 0);
+  if (currentAttemptCount >= otpMaxAttempts) {
+    return json(
+      {
+        ok: false,
+        error: "code-attempts-exhausted",
+        maxAttempts: otpMaxAttempts
+      },
+      429,
+      request,
+      true
+    );
   }
 
-  await env.DB.prepare("UPDATE auth_codes SET used_at = ? WHERE id = ?").bind(new Date().toISOString(), authRow.id).run();
+  const codeHash = await sha256Hex(code);
+  if (codeHash !== String(authRow.code_hash || "")) {
+    const nextAttemptCount = currentAttemptCount + 1;
+    if (nextAttemptCount >= otpMaxAttempts) {
+      await env.DB.prepare(
+        "UPDATE auth_codes SET attempt_count = ?, used_at = ? WHERE id = ?"
+      ).bind(nextAttemptCount, nowIso, authRow.id).run();
+      await trimAuthCodesForEmail(env, email);
+      return json(
+        {
+          ok: false,
+          error: "code-attempts-exhausted",
+          maxAttempts: otpMaxAttempts
+        },
+        429,
+        request,
+        true
+      );
+    }
+
+    await env.DB.prepare(
+      "UPDATE auth_codes SET attempt_count = ? WHERE id = ?"
+    ).bind(nextAttemptCount, authRow.id).run();
+    return json(
+      {
+        ok: false,
+        error: "code-invalid",
+        attemptsRemaining: Math.max(0, otpMaxAttempts - nextAttemptCount)
+      },
+      400,
+      request,
+      true
+    );
+  }
+
+  await env.DB.prepare("UPDATE auth_codes SET used_at = ? WHERE id = ?").bind(nowIso, authRow.id).run();
 
   let user = await env.DB.prepare("SELECT * FROM users WHERE email = ? LIMIT 1").bind(email).first();
   if (!user) {
-    const now = new Date().toISOString();
+    const now = nowIso;
     user = {
       id: crypto.randomUUID(),
       email,
@@ -491,15 +757,17 @@ async function handleVerifyCode(request, env) {
   }
 
   const sessionId = crypto.randomUUID();
-  const createdAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + Math.max(7, Number(env.SESSION_TTL_DAYS || 30) || 30) * 24 * 60 * 60 * 1000).toISOString();
+  const createdAt = nowIso;
+  const expiresAt = new Date(Date.now() + getSessionMaxAgeSeconds(env) * 1000).toISOString();
 
   await env.DB.prepare(
     "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)"
   ).bind(sessionId, user.id, createdAt, expiresAt).run();
+  await trimAuthCodesForEmail(env, email);
+  await deleteExpiredSessions(env, nowIso);
 
   const headers = buildCorsHeaders(request, true);
-  headers.set("Set-Cookie", serializeSessionCookie(sessionId));
+  headers.set("Set-Cookie", serializeSessionCookie(sessionId, env));
 
   return json(
     {
@@ -517,13 +785,17 @@ async function handleVerifyCode(request, env) {
   );
 }
 
-async function handleLogout(request) {
+async function handleLogout(request, env) {
+  const sessionId = readCookie(request, SESSION_COOKIE);
+  if (sessionId) {
+    await deleteSessionById(env, sessionId);
+  }
   const headers = buildCorsHeaders(request, true);
   headers.set("Set-Cookie", clearSessionCookie());
   return json({ ok: true }, 200, request, true, headers);
 }
 
-async function handleBindSyncKey(request, env) {
+async function handleBindSyncKey(request, env, ctx) {
   const viewer = await requireViewer(request, env, true);
   if (!viewer) {
     return json({ ok: false, error: "unauthorized" }, 401, request, true);
@@ -531,28 +803,34 @@ async function handleBindSyncKey(request, env) {
 
   const payload = await readJson(request);
   const syncKey = String(payload.syncKey || "").trim();
+  const deviceId = String(payload.deviceId || "").trim();
   if (!syncKey) {
     return json({ ok: false, error: "missing-sync-key" }, 400, request, true);
   }
 
-  const now = new Date().toISOString();
-  const existing = await env.DB.prepare("SELECT sync_key FROM sync_keys WHERE sync_key = ? LIMIT 1").bind(syncKey).first();
-
-  if (existing) {
-    await env.DB.prepare(
-      "UPDATE sync_keys SET user_id = ?, updated_at = ?, last_seen_at = ? WHERE sync_key = ?"
-    ).bind(viewer.id, now, now, syncKey).run();
-  } else {
-    await env.DB.prepare(
-      "INSERT INTO sync_keys (sync_key, user_id, device_id, created_at, updated_at, last_seen_at) VALUES (?, ?, '', ?, ?, ?)"
-    ).bind(syncKey, viewer.id, now, now, now).run();
+  const bindResult = await bindSyncKeyToUser(env, syncKey, viewer.id, {
+    deviceId
+  });
+  if (ctx && typeof ctx.waitUntil === "function") {
+    ctx.waitUntil(Promise.all([
+      reclassifyRecentTimelinePostsForSyncKey(env, bindResult.syncKey || syncKey),
+      reclassifyRecentReplyAiItemsForSyncKey(env, bindResult.syncKey || syncKey)
+    ]));
   }
 
-  await env.DB.prepare(
-    "UPDATE moderation_events SET user_id = ? WHERE sync_key = ?"
-  ).bind(viewer.id, syncKey).run();
-
-  return json({ ok: true, syncKey }, 200, request, true);
+  return json(
+    {
+      ok: true,
+      syncKey: bindResult.syncKey || syncKey,
+      deviceId: bindResult.deviceId || "",
+      switchedSyncKey: Boolean(bindResult.switchedSyncKey),
+      claimedSyncKeys: Number(bindResult.claimedSyncKeys || 0),
+      claimedEvents: Number(bindResult.claimedEvents || 0)
+    },
+    200,
+    request,
+    true
+  );
 }
 
 async function handlePreferences(request, env) {
@@ -562,43 +840,125 @@ async function handlePreferences(request, env) {
   }
 
   const preferences = await getUserPreferences(env, viewer.id);
-  return json({ ok: true, preferences }, 200, request, true, buildSessionRefreshHeaders(request, viewer));
+  return json({ ok: true, preferences }, 200, request, true, buildSessionRefreshHeaders(request, viewer, env));
 }
 
-async function handleUpdatePreferences(request, env) {
+async function handleUpdatePreferences(request, env, ctx) {
   const viewer = await requireViewer(request, env, true);
   if (!viewer) {
     return json({ ok: false, error: "unauthorized" }, 401, request, true);
   }
 
   const payload = await readJson(request);
-  if (!Object.prototype.hasOwnProperty.call(payload, "sidebarControlsEnabled")) {
-    return json({ ok: false, error: "missing-sidebar-controls-enabled" }, 400, request, true);
+  const hasSidebarControlsEnabled = Object.prototype.hasOwnProperty.call(payload, "sidebarControlsEnabled");
+  const hasBlockedTopicTerms = Object.prototype.hasOwnProperty.call(payload, "blockedTopicTerms");
+  if (!hasSidebarControlsEnabled && !hasBlockedTopicTerms) {
+    return json({ ok: false, error: "missing-preference-patch" }, 400, request, true);
   }
 
   const preferences = await upsertUserPreferences(env, viewer.id, {
-    sidebarControlsEnabled: payload.sidebarControlsEnabled
+    sidebarControlsEnabled: payload.sidebarControlsEnabled,
+    blockedTopicTerms: payload.blockedTopicTerms
   });
-  return json({ ok: true, preferences }, 200, request, true, buildSessionRefreshHeaders(request, viewer));
+  if (ctx && typeof ctx.waitUntil === "function" && hasBlockedTopicTerms) {
+    ctx.waitUntil(reclassifyRecentTimelinePostsForUser(env, viewer.id));
+  }
+  return json({ ok: true, preferences }, 200, request, true, buildSessionRefreshHeaders(request, viewer, env));
 }
 
-async function handleDashboard(request, env, url) {
+async function handleGetAiSettings(request, env) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  const settings = await getUserAiSettings(env, viewer.id);
+  return json({ ok: true, settings }, 200, request, true, buildSessionRefreshHeaders(request, viewer, env));
+}
+
+async function handleUpdateAiSettings(request, env, ctx) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  const payload = await readJson(request);
+  const hasPatch = [
+    "replyAiEnabled",
+    "providerBaseUrl",
+    "model",
+    "moderationPrompt",
+    "apiKey"
+  ].some((key) => Object.prototype.hasOwnProperty.call(payload, key));
+
+  if (!hasPatch) {
+    return json({ ok: false, error: "missing-ai-settings-patch" }, 400, request, true);
+  }
+
+  try {
+    const settings = await upsertUserAiSettings(env, viewer.id, {
+      replyAiEnabled: payload.replyAiEnabled,
+      providerBaseUrl: payload.providerBaseUrl,
+      model: payload.model,
+      moderationPrompt: payload.moderationPrompt,
+      apiKey: payload.apiKey
+    });
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(Promise.all([
+        reclassifyRecentTimelinePostsForUser(env, viewer.id),
+        reclassifyRecentReplyAiItemsForUser(env, viewer.id)
+      ]));
+    }
+    return json({ ok: true, settings }, 200, request, true, buildSessionRefreshHeaders(request, viewer, env));
+  } catch (error) {
+    return json(
+      {
+        ok: false,
+        error: error && error.message ? error.message : "save-ai-settings-failed"
+      },
+      500,
+      request,
+      true,
+      buildSessionRefreshHeaders(request, viewer, env)
+    );
+  }
+}
+
+async function handleDashboard(request, env, ctx, url) {
   const viewer = await requireViewer(request, env, true);
   if (!viewer) {
     return json({ ok: false, error: "unauthorized" }, 401, request, true);
   }
 
   const syncKey = String(url.searchParams.get("syncKey") || "").trim();
+  const deviceId = String(url.searchParams.get("deviceId") || "").trim();
+  let activeSyncKey = syncKey;
   if (syncKey) {
-    await bindSyncKeyToUser(env, syncKey, viewer.id);
+    const bindResult = await bindSyncKeyToUser(env, syncKey, viewer.id, {
+      deviceId
+    });
+    activeSyncKey = String(bindResult && bindResult.syncKey ? bindResult.syncKey : syncKey).trim();
+    if (ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(Promise.all([
+        reclassifyRecentTimelinePostsForSyncKey(env, activeSyncKey || syncKey),
+        reclassifyRecentReplyAiItemsForSyncKey(env, activeSyncKey || syncKey)
+      ]));
+    }
+  } else if (deviceId) {
+    await claimAnonymousDeviceActivityToUser(env, deviceId, viewer.id);
   }
 
-  const [globalStats, personalStats, recent, adEvents, bindings] = await Promise.all([
+  const [globalStats, personalStats, recent, adEvents, bindings, replyAi, activeBinding] = await Promise.all([
     buildStats(env, null),
     buildStats(env, viewer.id),
     buildRecentEvents(env, viewer.id),
     buildRecentAdEvents(env, viewer.id),
-    listBoundSyncKeys(env, viewer.id)
+    listBoundSyncKeys(env, viewer.id),
+    buildReplyAiDashboardPayload(env, viewer.id),
+    resolveActiveBindingForUser(env, viewer.id, {
+      syncKey: activeSyncKey,
+      deviceId
+    })
   ]);
   const preferences = await getUserPreferences(env, viewer.id);
 
@@ -611,13 +971,244 @@ async function handleDashboard(request, env, url) {
       recent,
       adEvents,
       bindings,
+      activeBinding,
       preferences,
+      replyAi,
       developer: null
     },
     200,
     request,
     true,
-    buildSessionRefreshHeaders(request, viewer)
+    buildSessionRefreshHeaders(request, viewer, env)
+  );
+}
+
+async function handlePostAiFeedPost(request, env, ctx) {
+  await ensureAiFeedSchema(env);
+  const payload = normalizeAiPostSnapshotPayload(await readJson(request));
+  if (!payload.syncKey || !payload.deviceId) {
+    return json({ ok: false, error: "missing-sync-identity" }, 400, request, false);
+  }
+
+  if (!payload.statusId && !payload.postText && !payload.authorHandle && !payload.authorDisplayName) {
+    return json({ ok: false, error: "missing-post-identity" }, 400, request, false);
+  }
+
+  const saved = await upsertTimelinePost(env, payload);
+  const existingDecision = saved.postId
+    ? await getTimelineAiDecisionByPostId(env, saved.postId)
+    : null;
+  if (
+    saved.postId
+    && ctx
+    && typeof ctx.waitUntil === "function"
+    && (!saved.deduped || !existingDecision || !isFinalAiDecisionStatus(existingDecision.status))
+  ) {
+    ctx.waitUntil(classifyTimelinePost(env, saved.postId));
+  }
+
+  return json(
+    {
+      ok: true,
+      accepted: true,
+      deduped: Boolean(saved.deduped),
+      postId: Number(saved.postId || 0),
+      decision: buildTimelineAiDecisionPayload(saved.postId, existingDecision)
+    },
+    200,
+    request,
+    false
+  );
+}
+
+async function handlePostAiReplyPost(request, env) {
+  await ensureAiFeedSchema(env);
+  const payload = normalizeReplyAiPayload(await readJson(request));
+  if (!payload.syncKey || !payload.deviceId) {
+    return json({ ok: false, error: "missing-sync-identity" }, 400, request, false);
+  }
+
+  if (!payload.replyStatusId && !payload.replyText && !payload.replyHandle && !payload.replyDisplayName) {
+    return json({ ok: false, error: "missing-reply-identity" }, 400, request, false);
+  }
+
+  const saved = await upsertReplyAiItem(env, payload);
+  const existingDecision = saved.itemId
+    ? await getReplyAiResultByItemId(env, saved.itemId)
+    : null;
+  const decision = saved.itemId && (!saved.deduped || !existingDecision || !isFinalReplyAiDecisionStatus(existingDecision.status) || shouldRetryReplyAiDecision(existingDecision))
+    ? await classifyReplyAiItem(env, saved.itemId)
+    : existingDecision;
+
+  return json(
+    {
+      ok: true,
+      accepted: true,
+      deduped: Boolean(saved.deduped),
+      itemId: Number(saved.itemId || 0),
+      decision: buildReplyAiDecisionPayload(saved.itemId, decision)
+    },
+    200,
+    request,
+    false
+  );
+}
+
+async function handlePostAiReplyBatch(request, env) {
+  await ensureAiFeedSchema(env);
+  const payload = normalizeReplyAiBatchPayload(await readJson(request));
+  if (!payload.syncKey || !payload.deviceId) {
+    return json({ ok: false, error: "missing-sync-identity" }, 400, request, false);
+  }
+
+  if (!Array.isArray(payload.items) || !payload.items.length) {
+    return json({ ok: false, error: "missing-batch-items" }, 400, request, false);
+  }
+
+  const pendingEntries = [];
+  const responseItems = [];
+
+  for (const item of payload.items) {
+    const hasReplyIdentity = Boolean(item.replyStatusId || item.replyText || item.replyHandle || item.replyDisplayName);
+    if (!hasReplyIdentity) {
+      responseItems.push({
+        clientItemId: item.clientItemId,
+        itemId: 0,
+        deduped: false,
+        decision: buildReplyAiDecisionPayload(0, buildDefaultReplyAiDecision({
+          decisionLayer: "failed",
+          reasonShort: "回复信息不足",
+          status: "failed"
+        }))
+      });
+      continue;
+    }
+
+    const saved = await upsertReplyAiItem(env, item);
+    const existingDecision = saved.itemId
+      ? await getReplyAiResultByItemId(env, saved.itemId)
+      : null;
+    if (saved.itemId && existingDecision && isFinalReplyAiDecisionStatus(existingDecision.status) && !shouldRetryReplyAiDecision(existingDecision)) {
+      responseItems.push({
+        clientItemId: item.clientItemId,
+        itemId: Number(saved.itemId || 0),
+        deduped: Boolean(saved.deduped),
+        decision: buildReplyAiDecisionPayload(saved.itemId, existingDecision)
+      });
+      continue;
+    }
+
+    pendingEntries.push({
+      clientItemId: item.clientItemId,
+      itemId: Number(saved.itemId || 0),
+      deduped: Boolean(saved.deduped)
+    });
+  }
+
+  const classified = pendingEntries.length
+    ? await classifyReplyAiItemEntries(env, pendingEntries)
+    : new Map();
+
+  pendingEntries.forEach((entry) => {
+    responseItems.push({
+      clientItemId: entry.clientItemId,
+      itemId: Number(entry.itemId || 0),
+      deduped: Boolean(entry.deduped),
+      decision: buildReplyAiDecisionPayload(entry.itemId, classified.get(entry.clientItemId) || buildReplyAiNotFoundDecision())
+    });
+  });
+
+  return json(
+    {
+      ok: true,
+      accepted: true,
+      items: responseItems
+    },
+    200,
+    request,
+    false
+  );
+}
+
+async function handleGetAiFeedPostDecision(request, env, url, postId) {
+  await ensureAiFeedSchema(env);
+  const normalizedPostId = Number(postId || 0);
+  const syncKey = String(url.searchParams.get("syncKey") || "").trim();
+  const deviceId = String(url.searchParams.get("deviceId") || "").trim();
+  if (!normalizedPostId || !syncKey) {
+    return json({ ok: false, error: "missing-post-identity" }, 400, request, false);
+  }
+
+  const postRow = await getTimelinePostById(env, normalizedPostId);
+  if (!postRow) {
+    return json({ ok: false, error: "post-not-found" }, 404, request, false);
+  }
+
+  if (postRow.syncKey !== syncKey) {
+    return json({ ok: false, error: "post-access-denied" }, 403, request, false);
+  }
+
+  if (deviceId && postRow.deviceId && postRow.deviceId !== deviceId) {
+    return json({ ok: false, error: "device-access-denied" }, 403, request, false);
+  }
+
+  const decision = await getTimelineAiDecisionByPostId(env, normalizedPostId);
+  return json(
+    {
+      ok: true,
+      postId: normalizedPostId,
+      decision: buildTimelineAiDecisionPayload(normalizedPostId, decision)
+    },
+    200,
+    request,
+    false
+  );
+}
+
+async function handleGetAiFeed(request, env, url) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  await ensureAiFeedSchema(env);
+  const limit = Math.max(
+    1,
+    Math.min(
+      160,
+      Number(url.searchParams.get("limit") || AI_FEED_DEFAULT_LIMIT) || AI_FEED_DEFAULT_LIMIT
+    )
+  );
+  const items = await buildAiFeedItems(env, viewer.id, limit);
+
+  return json(
+    {
+      ok: true,
+      items
+    },
+    200,
+    request,
+    true,
+    buildSessionRefreshHeaders(request, viewer, env)
+  );
+}
+
+async function handleGetReplyAiDashboard(request, env, url) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  const payload = await buildReplyAiDashboardPayload(env, viewer.id);
+  return json(
+    {
+      ok: true,
+      replyAi: payload
+    },
+    200,
+    request,
+    true,
+    buildSessionRefreshHeaders(request, viewer, env)
   );
 }
 
@@ -759,10 +1350,12 @@ async function handleState(request, env, url) {
   }
 
   await touchSyncKey(env, syncKey, String(url.searchParams.get("deviceId") || "").trim());
-  const [globalRuleState, personalState, sidebarControlsEnabled] = await Promise.all([
+  const [globalRuleState, personalState, sidebarControlsEnabled, replyAiSettings, globalBlockedAccounts] = await Promise.all([
     buildGlobalRuleState(env),
     buildDerivedStateForSyncKey(env, syncKey),
-    getSidebarControlsEnabledForSyncKey(env, syncKey)
+    getSidebarControlsEnabledForSyncKey(env, syncKey),
+    getUserAiSettingsForSyncKey(env, syncKey),
+    buildGlobalBlockedReplyAccounts(env, 200)
   ]);
 
   const mergedHideKeys = new Set(globalRuleState.manualHideKeys);
@@ -778,7 +1371,12 @@ async function handleState(request, env, url) {
       manualAllowKeys: personalState.manualAllowKeys,
       templateRules: Array.isArray(globalRuleState.templateRules) ? globalRuleState.templateRules : [],
       repeatSuspiciousHandles: Array.isArray(personalState.repeatSuspiciousHandles) ? personalState.repeatSuspiciousHandles : [],
-      sidebarControlsEnabled
+      sidebarControlsEnabled,
+      replyAiEnabled: Boolean(replyAiSettings && replyAiSettings.replyAiEnabled),
+      replyAiSettingsUpdatedAt: replyAiSettings && replyAiSettings.updatedAt
+        ? String(replyAiSettings.updatedAt || "")
+        : "",
+      globalReplyBlockedHandles: globalBlockedAccounts.map((item) => item.replyHandle).filter(Boolean)
     },
     200,
     request,
@@ -1010,22 +1608,205 @@ async function listBoundSyncKeys(env, userId) {
   }));
 }
 
-async function bindSyncKeyToUser(env, syncKey, userId) {
-  if (!syncKey || !userId) {
-    return;
+function createServerSyncKey() {
+  return `sync_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+async function findLatestSyncKeyForUserDevice(env, userId, deviceId) {
+  const normalizedUserId = String(userId || "").trim();
+  const normalizedDeviceId = String(deviceId || "").trim();
+  if (!normalizedUserId) {
+    return null;
   }
+
+  if (normalizedDeviceId) {
+    return env.DB.prepare(
+      `
+        SELECT
+          sync_key,
+          TRIM(COALESCE(device_id, '')) AS device_id,
+          created_at,
+          updated_at,
+          last_seen_at
+        FROM sync_keys
+        WHERE user_id = ?
+          AND TRIM(COALESCE(device_id, '')) = ?
+        ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC
+        LIMIT 1
+      `
+    ).bind(normalizedUserId, normalizedDeviceId).first();
+  }
+
+  return env.DB.prepare(
+    `
+      SELECT
+        sync_key,
+        TRIM(COALESCE(device_id, '')) AS device_id,
+        created_at,
+        updated_at,
+        last_seen_at
+      FROM sync_keys
+      WHERE user_id = ?
+      ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC
+      LIMIT 1
+    `
+  ).bind(normalizedUserId).first();
+}
+
+async function resolveActiveBindingForUser(env, userId, options) {
+  await ensureAiFeedSchema(env);
+  if (!userId) {
+    return null;
+  }
+
+  const normalizedSyncKey = String(options && options.syncKey ? options.syncKey : "").trim();
+  const normalizedDeviceId = String(options && options.deviceId ? options.deviceId : "").trim();
+  let row = null;
+
+  if (normalizedSyncKey) {
+    row = await env.DB.prepare(
+      `
+        SELECT
+          sync_key,
+          TRIM(COALESCE(device_id, '')) AS device_id,
+          created_at,
+          updated_at,
+          last_seen_at
+        FROM sync_keys
+        WHERE user_id = ?
+          AND sync_key = ?
+        LIMIT 1
+      `
+    ).bind(userId, normalizedSyncKey).first();
+  }
+
+  if (!row && normalizedDeviceId) {
+    row = await env.DB.prepare(
+      `
+        SELECT
+          sync_key,
+          TRIM(COALESCE(device_id, '')) AS device_id,
+          created_at,
+          updated_at,
+          last_seen_at
+        FROM sync_keys
+        WHERE user_id = ?
+          AND TRIM(COALESCE(device_id, '')) = ?
+        ORDER BY COALESCE(last_seen_at, updated_at, created_at) DESC
+        LIMIT 1
+      `
+    ).bind(userId, normalizedDeviceId).first();
+  }
+
+  if (!row) {
+    row = await env.DB.prepare(
+      `
+        SELECT
+          sync_key,
+          TRIM(COALESCE(device_id, '')) AS device_id,
+          created_at,
+          updated_at,
+          last_seen_at
+        FROM sync_keys
+        WHERE user_id = ?
+          AND TRIM(COALESCE(sync_key, '')) != ''
+          AND TRIM(sync_key) NOT LIKE 'sync_test_%'
+        ORDER BY
+          CASE WHEN TRIM(COALESCE(device_id, '')) != '' THEN 0 ELSE 1 END ASC,
+          COALESCE(last_seen_at, updated_at, created_at) DESC
+        LIMIT 1
+      `
+    ).bind(userId).first();
+  }
+
+  if (!row || !String(row.sync_key || "").trim()) {
+    return null;
+  }
+
+  return {
+    syncKey: String(row.sync_key || "").trim(),
+    deviceId: String(row.device_id || "").trim(),
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || "",
+    lastSeenAt: row.last_seen_at || ""
+  };
+}
+
+async function bindSyncKeyToUser(env, syncKey, userId, options) {
+  await ensureAiFeedSchema(env);
+  if (!syncKey || !userId) {
+    return {
+      claimedSyncKeys: 0,
+      claimedEvents: 0,
+      deviceId: "",
+      syncKey: String(syncKey || "").trim(),
+      switchedSyncKey: false
+    };
+  }
+
+  const requestedSyncKey = String(syncKey || "").trim();
+  const normalizedDeviceId = String(options && options.deviceId ? options.deviceId : "").trim();
   const now = new Date().toISOString();
-  const existing = await env.DB.prepare("SELECT sync_key FROM sync_keys WHERE sync_key = ? LIMIT 1").bind(syncKey).first();
-  if (existing) {
+  const existing = await env.DB.prepare(
+    "SELECT sync_key, user_id, TRIM(COALESCE(device_id, '')) AS device_id FROM sync_keys WHERE sync_key = ? LIMIT 1"
+  ).bind(requestedSyncKey).first();
+  const existingUserId = String(existing && existing.user_id ? existing.user_id : "").trim();
+  let activeSyncKey = requestedSyncKey;
+  let switchedSyncKey = false;
+
+  if (existingUserId && existingUserId !== userId) {
+    const priorBinding = await findLatestSyncKeyForUserDevice(env, userId, normalizedDeviceId);
+    if (priorBinding && String(priorBinding.sync_key || "").trim()) {
+      activeSyncKey = String(priorBinding.sync_key || "").trim();
+    } else {
+      activeSyncKey = createServerSyncKey();
+    }
+    switchedSyncKey = activeSyncKey !== requestedSyncKey;
+  } else if (!existing) {
+    const priorBinding = await findLatestSyncKeyForUserDevice(env, userId, normalizedDeviceId);
+    if (priorBinding && String(priorBinding.sync_key || "").trim()) {
+      activeSyncKey = String(priorBinding.sync_key || "").trim();
+      switchedSyncKey = activeSyncKey !== requestedSyncKey;
+    }
+  }
+
+  const activeExisting = await env.DB.prepare(
+    "SELECT sync_key FROM sync_keys WHERE sync_key = ? LIMIT 1"
+  ).bind(activeSyncKey).first();
+  if (activeExisting) {
     await env.DB.prepare(
-      "UPDATE sync_keys SET user_id = ?, updated_at = ?, last_seen_at = ? WHERE sync_key = ?"
-    ).bind(userId, now, now, syncKey).run();
+      "UPDATE sync_keys SET user_id = ?, device_id = CASE WHEN ? != '' THEN ? ELSE device_id END, updated_at = ?, last_seen_at = ? WHERE sync_key = ?"
+    ).bind(userId, normalizedDeviceId, normalizedDeviceId, now, now, activeSyncKey).run();
   } else {
     await env.DB.prepare(
-      "INSERT INTO sync_keys (sync_key, user_id, device_id, created_at, updated_at, last_seen_at) VALUES (?, ?, '', ?, ?, ?)"
-    ).bind(syncKey, userId, now, now, now).run();
+      "INSERT INTO sync_keys (sync_key, user_id, device_id, created_at, updated_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)"
+    ).bind(activeSyncKey, userId, normalizedDeviceId, now, now, now).run();
   }
-  await env.DB.prepare("UPDATE moderation_events SET user_id = ? WHERE sync_key = ?").bind(userId, syncKey).run();
+  await env.DB.prepare(
+    "UPDATE moderation_events SET user_id = ? WHERE sync_key = ? AND (user_id IS NULL OR TRIM(user_id) = '' OR user_id = ?)"
+  ).bind(userId, activeSyncKey, userId).run();
+  await env.DB.prepare(
+    "UPDATE timeline_posts SET user_id = ? WHERE sync_key = ? AND (user_id IS NULL OR TRIM(user_id) = '' OR user_id = ?)"
+  ).bind(userId, activeSyncKey, userId).run();
+  await env.DB.prepare(
+    "UPDATE reply_ai_items SET user_id = ? WHERE sync_key = ? AND (user_id IS NULL OR TRIM(user_id) = '' OR user_id = ?)"
+  ).bind(userId, activeSyncKey, userId).run();
+
+  let claimedSyncKeys = 0;
+  let claimedEvents = 0;
+  if (normalizedDeviceId) {
+    const claimed = await claimAnonymousDeviceActivityToUser(env, normalizedDeviceId, userId);
+    claimedSyncKeys = Number(claimed.claimedSyncKeys || 0);
+    claimedEvents = Number(claimed.claimedEvents || 0);
+  }
+
+  return {
+    claimedSyncKeys,
+    claimedEvents,
+    deviceId: normalizedDeviceId,
+    syncKey: activeSyncKey,
+    switchedSyncKey
+  };
 }
 
 function normalizeSidebarControlsEnabled(value, fallback) {
@@ -1053,9 +1834,319 @@ function normalizeSidebarControlsEnabled(value, fallback) {
   return fallback !== false;
 }
 
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(String(value || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function normalizeBlockedTopicTerms(value, fallback) {
+  const source = Array.isArray(value)
+    ? value
+    : (typeof value === "string"
+      ? value.split(/[\n,，]+/g)
+      : (Array.isArray(fallback) ? fallback : []));
+  const seen = new Set();
+  const normalized = [];
+
+  source.forEach((entry) => {
+    const term = String(entry || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const dedupeKey = term.toLowerCase();
+    if (!term || seen.has(dedupeKey)) {
+      return;
+    }
+    seen.add(dedupeKey);
+    normalized.push(term);
+  });
+
+  return normalized.slice(0, 40);
+}
+
+async function ensureAiFeedSchema(env) {
+  if (shouldTrustProvisionedAiFeedSchema(env)) {
+    return;
+  }
+
+  if (!env || !env.DB) {
+    return;
+  }
+
+  if (!aiFeedSchemaReadyPromise) {
+    aiFeedSchemaReadyPromise = ensureAiFeedSchemaUncached(env).catch((error) => {
+      aiFeedSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+
+  await aiFeedSchemaReadyPromise;
+}
+
+async function ensureAiFeedSchemaUncached(env) {
+  const ddlStatements = [
+    `
+      CREATE TABLE IF NOT EXISTS user_ai_settings (
+        user_id TEXT PRIMARY KEY,
+        reply_ai_enabled INTEGER NOT NULL DEFAULT 0,
+        provider_base_url TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        moderation_prompt TEXT NOT NULL DEFAULT '',
+        api_key_ciphertext TEXT NOT NULL DEFAULT '',
+        api_key_last4 TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS timeline_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_key TEXT NOT NULL,
+        user_id TEXT,
+        device_id TEXT,
+        timeline_kind TEXT NOT NULL DEFAULT '',
+        page_url TEXT,
+        status_id TEXT,
+        author_handle TEXT,
+        author_display_name TEXT,
+        post_text TEXT,
+        quote_text TEXT,
+        link_title TEXT,
+        media_mode TEXT NOT NULL DEFAULT 'text',
+        text_sparse INTEGER NOT NULL DEFAULT 0,
+        seen_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        post_fingerprint TEXT
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_timeline_posts_user_seen_at ON timeline_posts(user_id, seen_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_timeline_posts_sync_seen_at ON timeline_posts(sync_key, seen_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_timeline_posts_device_seen_at ON timeline_posts(device_id, seen_at DESC, id DESC)",
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_timeline_posts_post_fingerprint_unique
+      ON timeline_posts(post_fingerprint)
+      WHERE post_fingerprint IS NOT NULL AND TRIM(post_fingerprint) != ''
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS timeline_ai_results (
+        post_id INTEGER PRIMARY KEY,
+        blocked INTEGER NOT NULL DEFAULT 0,
+        matched_blocked_terms_json TEXT NOT NULL DEFAULT '[]',
+        confidence TEXT NOT NULL DEFAULT 'low',
+        reason_short TEXT NOT NULL DEFAULT '',
+        limited_by_video INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'skipped',
+        model TEXT NOT NULL DEFAULT '',
+        raw_response_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_timeline_ai_results_status_updated_at ON timeline_ai_results(status, updated_at DESC)"
+    ,
+    `
+      CREATE TABLE IF NOT EXISTS reply_ai_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sync_key TEXT NOT NULL,
+        user_id TEXT,
+        device_id TEXT,
+        thread_url TEXT,
+        thread_status_id TEXT,
+        reply_status_id TEXT,
+        reply_handle TEXT,
+        reply_display_name TEXT,
+        reply_text TEXT,
+        main_post_text TEXT,
+        account_protected INTEGER NOT NULL DEFAULT 0,
+        profile_path TEXT NOT NULL DEFAULT '',
+        profile_bio_text TEXT NOT NULL DEFAULT '',
+        profile_signal_tags_json TEXT NOT NULL DEFAULT '[]',
+        profile_links_json TEXT NOT NULL DEFAULT '[]',
+        profile_fetch_status TEXT NOT NULL DEFAULT 'not_requested',
+        profile_fetched_at TEXT,
+        created_at TEXT NOT NULL,
+        item_fingerprint TEXT
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_items_user_created_at ON reply_ai_items(user_id, created_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_items_sync_created_at ON reply_ai_items(sync_key, created_at DESC, id DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_items_handle_created_at ON reply_ai_items(reply_handle, created_at DESC, id DESC)",
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_reply_ai_items_fingerprint_unique
+      ON reply_ai_items(item_fingerprint)
+      WHERE item_fingerprint IS NOT NULL AND TRIM(item_fingerprint) != ''
+    `,
+    `
+      CREATE TABLE IF NOT EXISTS reply_ai_results (
+        item_id INTEGER PRIMARY KEY,
+        action TEXT NOT NULL DEFAULT 'allow',
+        decision_layer TEXT NOT NULL DEFAULT 'skipped',
+        matched_safety_labels_json TEXT NOT NULL DEFAULT '[]',
+        matched_profile_signals_json TEXT NOT NULL DEFAULT '[]',
+        confidence TEXT NOT NULL DEFAULT 'low',
+        reason_short TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'skipped',
+        model TEXT NOT NULL DEFAULT '',
+        raw_response_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_results_status_updated_at ON reply_ai_results(status, updated_at DESC)",
+    `
+      CREATE TABLE IF NOT EXISTS reply_ai_account_risk (
+        reply_handle TEXT PRIMARY KEY,
+        total_high_confidence_hide_count INTEGER NOT NULL DEFAULT 0,
+        recent_high_confidence_hide_count INTEGER NOT NULL DEFAULT 0,
+        active_global_block INTEGER NOT NULL DEFAULT 0,
+        first_flagged_at TEXT,
+        last_flagged_at TEXT,
+        global_blocked_at TEXT,
+        last_reason_short TEXT NOT NULL DEFAULT '',
+        last_item_id INTEGER,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_account_risk_global_block ON reply_ai_account_risk(active_global_block, updated_at DESC)"
+    ,
+    `
+      CREATE TABLE IF NOT EXISTS reply_ai_provider_cooldowns (
+        scope_key TEXT PRIMARY KEY,
+        user_id TEXT,
+        provider_base_url TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        cooldown_until TEXT,
+        last_failure_code TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_provider_cooldowns_updated_at ON reply_ai_provider_cooldowns(updated_at DESC)",
+    `
+      CREATE TABLE IF NOT EXISTS ai_provider_cooldowns (
+        scope_key TEXT PRIMARY KEY,
+        user_id TEXT,
+        provider_base_url TEXT NOT NULL DEFAULT '',
+        model TEXT NOT NULL DEFAULT '',
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        cooldown_until TEXT,
+        last_failure_code TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_ai_provider_cooldowns_updated_at ON ai_provider_cooldowns(updated_at DESC)",
+    `
+      CREATE TABLE IF NOT EXISTS moderation_samples (
+        id TEXT PRIMARY KEY,
+        sample_fingerprint TEXT,
+        source_kind TEXT NOT NULL DEFAULT 'moderation_event',
+        source_ref_id TEXT NOT NULL DEFAULT '',
+        user_id TEXT,
+        sync_key TEXT,
+        device_id TEXT,
+        contribution_scope TEXT NOT NULL DEFAULT 'private',
+        surface TEXT NOT NULL DEFAULT 'reply',
+        content_url TEXT,
+        thread_status_id TEXT,
+        reply_status_id TEXT,
+        author_handle TEXT,
+        author_display_name TEXT,
+        primary_text TEXT,
+        context_text TEXT,
+        normalized_text TEXT,
+        compact_text TEXT,
+        account_protected INTEGER NOT NULL DEFAULT 0,
+        feature_keys_json TEXT NOT NULL DEFAULT '[]',
+        safety_labels_json TEXT NOT NULL DEFAULT '[]',
+        quality_status TEXT NOT NULL DEFAULT 'pending',
+        sample_weight INTEGER NOT NULL DEFAULT 1,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    `
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_moderation_samples_fingerprint_unique
+      ON moderation_samples(sample_fingerprint)
+      WHERE sample_fingerprint IS NOT NULL AND TRIM(sample_fingerprint) != ''
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_moderation_samples_scope_status_updated_at ON moderation_samples(contribution_scope, quality_status, updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_moderation_samples_source ON moderation_samples(source_kind, source_ref_id)",
+    "CREATE INDEX IF NOT EXISTS idx_moderation_samples_user_updated_at ON moderation_samples(user_id, updated_at DESC)",
+    `
+      CREATE TABLE IF NOT EXISTS moderation_sample_labels (
+        id TEXT PRIMARY KEY,
+        sample_id TEXT NOT NULL,
+        label_source TEXT NOT NULL DEFAULT 'user_feedback',
+        reviewer_user_id TEXT,
+        reviewer_sync_key TEXT,
+        decision TEXT NOT NULL DEFAULT 'unknown',
+        safety_labels_json TEXT NOT NULL DEFAULT '[]',
+        reason_short TEXT NOT NULL DEFAULT '',
+        confidence TEXT NOT NULL DEFAULT 'low',
+        trust_weight INTEGER NOT NULL DEFAULT 1,
+        model TEXT NOT NULL DEFAULT '',
+        raw_response_json TEXT,
+        created_at TEXT NOT NULL
+      )
+    `,
+    "CREATE INDEX IF NOT EXISTS idx_moderation_sample_labels_sample_created_at ON moderation_sample_labels(sample_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_moderation_sample_labels_decision_created_at ON moderation_sample_labels(decision, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_moderation_sample_labels_reviewer_created_at ON moderation_sample_labels(reviewer_user_id, created_at DESC)",
+    `
+      CREATE TABLE IF NOT EXISTS moderation_rule_candidates (
+        id TEXT PRIMARY KEY,
+        rule_type TEXT NOT NULL,
+        pattern_key TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT 'hide',
+        safety_label TEXT NOT NULL DEFAULT '',
+        description TEXT NOT NULL DEFAULT '',
+        positive_label_count INTEGER NOT NULL DEFAULT 0,
+        negative_label_count INTEGER NOT NULL DEFAULT 0,
+        distinct_user_count INTEGER NOT NULL DEFAULT 0,
+        confidence_score INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'candidate',
+        source_sample_id TEXT,
+        promoted_decision_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        promoted_at TEXT,
+        revoked_at TEXT
+      )
+    `,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_moderation_rule_candidates_type_key_unique ON moderation_rule_candidates(rule_type, pattern_key)",
+    "CREATE INDEX IF NOT EXISTS idx_moderation_rule_candidates_status_score ON moderation_rule_candidates(status, confidence_score DESC, updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_moderation_rule_candidates_sample ON moderation_rule_candidates(source_sample_id, updated_at DESC)"
+  ];
+
+  for (const statement of ddlStatements) {
+    await env.DB.prepare(statement).run();
+  }
+
+  try {
+    await env.DB.prepare(
+      "ALTER TABLE user_preferences ADD COLUMN blocked_topic_terms_json TEXT NOT NULL DEFAULT '[]'"
+    ).run();
+  } catch (error) {
+    if (!isDuplicateColumnError(error, "blocked_topic_terms_json")) {
+      throw error;
+    }
+  }
+}
+
+function isDuplicateColumnError(error, columnName) {
+  const message = String(error && error.message ? error.message : "").toLowerCase();
+  return message.includes("duplicate column") && message.includes(String(columnName || "").toLowerCase());
+}
+
 function buildDefaultUserPreferences() {
   return {
-    sidebarControlsEnabled: DEFAULT_USER_PREFERENCES.sidebarControlsEnabled
+    sidebarControlsEnabled: DEFAULT_USER_PREFERENCES.sidebarControlsEnabled,
+    blockedTopicTerms: DEFAULT_USER_PREFERENCES.blockedTopicTerms.slice()
   };
 }
 
@@ -1068,11 +2159,16 @@ function serializeUserPreferencesRow(row) {
     sidebarControlsEnabled: normalizeSidebarControlsEnabled(
       row.sidebar_controls_enabled,
       DEFAULT_USER_PREFERENCES.sidebarControlsEnabled
+    ),
+    blockedTopicTerms: normalizeBlockedTopicTerms(
+      parseJsonArray(row.blocked_topic_terms_json),
+      DEFAULT_USER_PREFERENCES.blockedTopicTerms
     )
   };
 }
 
 async function getUserPreferences(env, userId) {
+  await ensureAiFeedSchema(env);
   if (!userId) {
     return buildDefaultUserPreferences();
   }
@@ -1080,7 +2176,8 @@ async function getUserPreferences(env, userId) {
   const row = await env.DB.prepare(
     `
       SELECT
-        sidebar_controls_enabled
+        sidebar_controls_enabled,
+        blocked_topic_terms_json
       FROM user_preferences
       WHERE user_id = ?
       LIMIT 1
@@ -1091,6 +2188,7 @@ async function getUserPreferences(env, userId) {
 }
 
 async function upsertUserPreferences(env, userId, patch) {
+  await ensureAiFeedSchema(env);
   if (!userId) {
     return buildDefaultUserPreferences();
   }
@@ -1100,6 +2198,10 @@ async function upsertUserPreferences(env, userId, patch) {
     sidebarControlsEnabled: normalizeSidebarControlsEnabled(
       patch && patch.sidebarControlsEnabled,
       current.sidebarControlsEnabled
+    ),
+    blockedTopicTerms: normalizeBlockedTopicTerms(
+      patch && patch.blockedTopicTerms,
+      current.blockedTopicTerms
     )
   };
   const now = new Date().toISOString();
@@ -1109,16 +2211,19 @@ async function upsertUserPreferences(env, userId, patch) {
       INSERT INTO user_preferences (
         user_id,
         sidebar_controls_enabled,
+        blocked_topic_terms_json,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(user_id) DO UPDATE SET
         sidebar_controls_enabled = excluded.sidebar_controls_enabled,
+        blocked_topic_terms_json = excluded.blocked_topic_terms_json,
         updated_at = excluded.updated_at
     `
   ).bind(
     userId,
     next.sidebarControlsEnabled ? 1 : 0,
+    JSON.stringify(next.blockedTopicTerms),
     now,
     now
   ).run();
@@ -1126,7 +2231,456 @@ async function upsertUserPreferences(env, userId, patch) {
   return next;
 }
 
+function buildDefaultUserAiSettings() {
+  return {
+    replyAiEnabled: DEFAULT_USER_AI_SETTINGS.replyAiEnabled,
+    providerBaseUrl: DEFAULT_USER_AI_SETTINGS.providerBaseUrl,
+    model: DEFAULT_USER_AI_SETTINGS.model,
+    moderationPrompt: DEFAULT_USER_AI_SETTINGS.moderationPrompt,
+    apiKeyConfigured: DEFAULT_USER_AI_SETTINGS.apiKeyConfigured,
+    apiKeyLast4: DEFAULT_USER_AI_SETTINGS.apiKeyLast4,
+    updatedAt: DEFAULT_USER_AI_SETTINGS.updatedAt
+  };
+}
+
+function normalizeAiProviderBaseUrl(value) {
+  const trimmed = String(value || "").trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return DEFAULT_USER_AI_SETTINGS.providerBaseUrl;
+  }
+  return trimmed.endsWith("/responses") ? trimmed.slice(0, -"/responses".length) : trimmed;
+}
+
+function buildResponsesApiEndpoint(baseUrl) {
+  const normalized = normalizeAiProviderBaseUrl(baseUrl);
+  return `${normalized}/responses`;
+}
+
+function buildChatCompletionsApiEndpoint(baseUrl) {
+  const normalized = normalizeAiProviderBaseUrl(baseUrl);
+  return `${normalized}/chat/completions`;
+}
+
+function isGeminiOpenAiCompatibleBaseUrl(baseUrl) {
+  const normalized = normalizeAiProviderBaseUrl(baseUrl);
+  return /generativelanguage\.googleapis\.com/i.test(normalized) && /\/openai$/i.test(normalized);
+}
+
+function normalizeAiModerationTaskType(value, fallback) {
+  const normalized = String(value || fallback || "").trim().toLowerCase();
+  if (Object.values(AI_MODERATION_TASK_TYPES).includes(normalized)) {
+    return normalized;
+  }
+  return String(fallback || AI_MODERATION_TASK_TYPES.REPLY_REALTIME_MODERATION).trim().toLowerCase();
+}
+
+function normalizeAiProviderAdapterKey(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (Object.values(AI_PROVIDER_ADAPTER_KEYS).includes(normalized)) {
+    return normalized;
+  }
+  return AI_PROVIDER_ADAPTER_KEYS.OPENAI_COMPATIBLE;
+}
+
+function normalizeAiProviderResponseMode(baseUrl) {
+  return isGeminiOpenAiCompatibleBaseUrl(baseUrl) ? "chat_completions_json_schema" : "responses_json_schema";
+}
+
+function normalizeAiModel(value) {
+  return String(value || "").trim().slice(0, 120) || DEFAULT_AI_FEED_MODEL;
+}
+
+function normalizeAiAction(value, fallback) {
+  const normalized = String(value || fallback || "").trim().toLowerCase();
+  return normalized === "hide" ? "hide" : "allow";
+}
+
+function normalizeAiModerationResultStatus(value, fallback) {
+  const normalized = String(value || fallback || "").trim().toLowerCase();
+  if (["ready", "failed", "skipped", "pending"].includes(normalized)) {
+    return normalized;
+  }
+  return String(fallback || "skipped").trim().toLowerCase() || "skipped";
+}
+
+function buildDefaultAiModerationResult(overrides) {
+  return Object.assign({
+    action: "allow",
+    confidence: "low",
+    matchedTerms: [],
+    matchedLabels: [],
+    matchedProfileSignals: [],
+    reasonShort: "",
+    status: "skipped",
+    model: "",
+    rawResponseMeta: null
+  }, overrides || {});
+}
+
+function normalizeAiProviderMatchedTerms(value) {
+  const source = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const normalized = [];
+  source.forEach((item) => {
+    const next = String(item || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    const dedupeKey = next.toLowerCase();
+    if (!next || seen.has(dedupeKey)) {
+      return;
+    }
+    seen.add(dedupeKey);
+    normalized.push(next);
+  });
+  return normalized.slice(0, 16);
+}
+
+function normalizeAiModerationResult(source, options) {
+  const settings = options || {};
+  const result = buildDefaultAiModerationResult(source || {});
+  const allowedMatchedTerms = Array.isArray(settings.allowedMatchedTerms) ? settings.allowedMatchedTerms : [];
+  const allowedTermMap = new Map(
+    allowedMatchedTerms.map((term) => [String(term || "").trim().toLowerCase(), String(term || "").trim()])
+  );
+  const matchedTerms = allowedTermMap.size
+    ? normalizeAiProviderMatchedTerms(result.matchedTerms)
+      .map((term) => allowedTermMap.get(term.toLowerCase()) || "")
+      .filter(Boolean)
+    : normalizeAiProviderMatchedTerms(result.matchedTerms);
+
+  return {
+    action: normalizeAiAction(result.action),
+    confidence: ["high", "medium", "low"].includes(String(result.confidence || "").trim().toLowerCase())
+      ? String(result.confidence || "").trim().toLowerCase()
+      : "low",
+    matchedTerms,
+    matchedLabels: normalizeReplyAiStringList(result.matchedLabels, settings.allowedMatchedLabels || null, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(
+      result.matchedProfileSignals,
+      settings.allowedMatchedProfileSignals || null,
+      8
+    ),
+    reasonShort: normalizeAiFeedText(result.reasonShort, 120),
+    status: normalizeAiModerationResultStatus(result.status),
+    model: normalizeAiFeedText(settings.model || result.model, 80),
+    rawResponseMeta: settings.rawResponseMeta || result.rawResponseMeta || null
+  };
+}
+
+function buildAiProviderConfig(settings, overrides) {
+  const source = Object.assign({}, settings || {}, overrides || {});
+  const providerBaseUrl = normalizeAiProviderBaseUrl(
+    Object.prototype.hasOwnProperty.call(source, "providerBaseUrl")
+      ? source.providerBaseUrl
+      : DEFAULT_AI_PROVIDER_BASE_URL
+  );
+  const model = normalizeAiModel(
+    Object.prototype.hasOwnProperty.call(source, "model")
+      ? source.model
+      : DEFAULT_AI_FEED_MODEL
+  );
+  const moderationPrompt = normalizeAiModerationPrompt(
+    Object.prototype.hasOwnProperty.call(source, "moderationPrompt")
+      ? source.moderationPrompt
+      : ""
+  );
+  const apiKey = String(source && source.apiKey ? source.apiKey : "").trim();
+  return {
+    adapterKey: normalizeAiProviderAdapterKey(source.adapterKey),
+    providerBaseUrl,
+    model,
+    moderationPrompt,
+    apiKey,
+    responseMode: normalizeAiProviderResponseMode(providerBaseUrl)
+  };
+}
+
+function buildAiProviderScopeKey(userId, settings) {
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) {
+    return "";
+  }
+
+  const providerConfig = buildAiProviderConfig(settings);
+  return [
+    normalizedUserId,
+    providerConfig.adapterKey,
+    providerConfig.providerBaseUrl,
+    providerConfig.model
+  ].join("|");
+}
+
+function buildAiModerationTask(input) {
+  const source = input || {};
+  const providerConfig = buildAiProviderConfig(source.providerConfig || source.settings || {}, source.providerOverrides);
+  return {
+    taskType: normalizeAiModerationTaskType(source.taskType),
+    providerConfig,
+    schemaName: normalizeAiFeedText(source.schemaName, 120),
+    responseSchema: source.responseSchema || { type: "object", additionalProperties: false, properties: {}, required: [] },
+    developerPrompt: String(source.developerPrompt || "").trim(),
+    userPayloadText: String(source.userPayloadText || "").trim(),
+    metadata: source.metadata && typeof source.metadata === "object" ? source.metadata : {}
+  };
+}
+
+function normalizeAiModerationPrompt(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+$/g, ""))
+    .join("\n")
+    .trim()
+    .slice(0, 4000);
+}
+
+function normalizeAiKeyLast4(value) {
+  const source = String(value || "").trim();
+  return source ? source.slice(-4) : "";
+}
+
+function uint8ArrayToBase64(bytes) {
+  let output = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    output += String.fromCharCode(bytes[index]);
+  }
+  return btoa(output);
+}
+
+function base64ToUint8Array(value) {
+  const binary = atob(String(value || ""));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function getAiSettingsEncryptionSecret(env) {
+  return String(
+    env.USER_AI_SETTINGS_SECRET
+    || env.EMAIL_SEND_TOKEN
+    || env.RESEND_API_KEY
+    || env.OPENAI_API_KEY
+    || ""
+  ).trim();
+}
+
+async function getAiSettingsEncryptionKey(env) {
+  const secret = getAiSettingsEncryptionSecret(env);
+  if (!secret) {
+    throw new Error("missing-ai-settings-secret");
+  }
+
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function encryptAiSettingValue(env, plaintext) {
+  const normalized = String(plaintext || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const key = await getAiSettingsEncryptionKey(env);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuffer = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    new TextEncoder().encode(normalized)
+  );
+  return `${uint8ArrayToBase64(iv)}.${uint8ArrayToBase64(new Uint8Array(cipherBuffer))}`;
+}
+
+async function decryptAiSettingValue(env, ciphertext) {
+  const normalized = String(ciphertext || "").trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const [ivBase64, payloadBase64] = normalized.split(".");
+  if (!ivBase64 || !payloadBase64) {
+    return "";
+  }
+
+  const key = await getAiSettingsEncryptionKey(env);
+  const plainBuffer = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToUint8Array(ivBase64) },
+    key,
+    base64ToUint8Array(payloadBase64)
+  );
+  return new TextDecoder().decode(plainBuffer);
+}
+
+function serializeUserAiSettingsRow(row) {
+  const fallback = buildDefaultUserAiSettings();
+  if (!row) {
+    return fallback;
+  }
+
+  return {
+    replyAiEnabled: normalizeSidebarControlsEnabled(
+      row.reply_ai_enabled,
+      fallback.replyAiEnabled
+    ),
+    providerBaseUrl: normalizeAiProviderBaseUrl(row.provider_base_url || fallback.providerBaseUrl),
+    model: normalizeAiModel(row.model || fallback.model),
+    moderationPrompt: normalizeAiModerationPrompt(row.moderation_prompt || fallback.moderationPrompt),
+    apiKeyConfigured: Boolean(String(row.api_key_ciphertext || "").trim()),
+    apiKeyLast4: normalizeAiKeyLast4(row.api_key_last4 || ""),
+    updatedAt: normalizeAiFeedText(row.updated_at || fallback.updatedAt, 80)
+  };
+}
+
+async function getUserAiSettingsRow(env, userId) {
+  await ensureAiFeedSchema(env);
+  if (!userId) {
+    return null;
+  }
+
+  return env.DB.prepare(
+    `
+      SELECT
+        reply_ai_enabled,
+        provider_base_url,
+        model,
+        moderation_prompt,
+        api_key_ciphertext,
+        api_key_last4,
+        updated_at
+      FROM user_ai_settings
+      WHERE user_id = ?
+      LIMIT 1
+    `
+  ).bind(userId).first();
+}
+
+async function getUserAiSettings(env, userId) {
+  return serializeUserAiSettingsRow(await getUserAiSettingsRow(env, userId));
+}
+
+async function getUserAiSettingsWithSecret(env, userId) {
+  const row = await getUserAiSettingsRow(env, userId);
+  const settings = serializeUserAiSettingsRow(row);
+  const apiKeyCiphertext = row && row.api_key_ciphertext ? String(row.api_key_ciphertext || "").trim() : "";
+  let apiKey = "";
+  if (apiKeyCiphertext) {
+    try {
+      apiKey = await decryptAiSettingValue(env, apiKeyCiphertext);
+    } catch (error) {
+      apiKey = "";
+    }
+  }
+
+  return Object.assign({}, settings, {
+    apiKey
+  });
+}
+
+async function upsertUserAiSettings(env, userId, patch) {
+  await ensureAiFeedSchema(env);
+  if (!userId) {
+    return buildDefaultUserAiSettings();
+  }
+
+  const currentRow = await getUserAiSettingsRow(env, userId);
+  const current = serializeUserAiSettingsRow(currentRow);
+  const currentCiphertext = currentRow && currentRow.api_key_ciphertext ? String(currentRow.api_key_ciphertext || "").trim() : "";
+  const apiKeyProvided = Object.prototype.hasOwnProperty.call(patch || {}, "apiKey");
+  const nextApiKey = apiKeyProvided
+    ? String(patch && patch.apiKey ? patch.apiKey : "").trim()
+    : "";
+  const nextCiphertext = apiKeyProvided
+    ? (nextApiKey ? await encryptAiSettingValue(env, nextApiKey) : "")
+    : currentCiphertext;
+  const next = {
+    replyAiEnabled: normalizeSidebarControlsEnabled(
+      patch && patch.replyAiEnabled,
+      current.replyAiEnabled
+    ),
+    providerBaseUrl: normalizeAiProviderBaseUrl(
+      patch && Object.prototype.hasOwnProperty.call(patch, "providerBaseUrl")
+        ? patch.providerBaseUrl
+        : current.providerBaseUrl
+    ),
+    model: normalizeAiModel(
+      patch && Object.prototype.hasOwnProperty.call(patch, "model")
+        ? patch.model
+        : current.model
+    ),
+    moderationPrompt: normalizeAiModerationPrompt(
+      patch && Object.prototype.hasOwnProperty.call(patch, "moderationPrompt")
+        ? patch.moderationPrompt
+        : current.moderationPrompt
+    ),
+    apiKeyConfigured: Boolean(nextCiphertext),
+    apiKeyLast4: apiKeyProvided ? normalizeAiKeyLast4(nextApiKey) : current.apiKeyLast4
+  };
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `
+      INSERT INTO user_ai_settings (
+        user_id,
+        reply_ai_enabled,
+        provider_base_url,
+        model,
+        moderation_prompt,
+        api_key_ciphertext,
+        api_key_last4,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET
+        reply_ai_enabled = excluded.reply_ai_enabled,
+        provider_base_url = excluded.provider_base_url,
+        model = excluded.model,
+        moderation_prompt = excluded.moderation_prompt,
+        api_key_ciphertext = excluded.api_key_ciphertext,
+        api_key_last4 = excluded.api_key_last4,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    userId,
+    next.replyAiEnabled ? 1 : 0,
+    next.providerBaseUrl,
+    next.model,
+    next.moderationPrompt,
+    nextCiphertext,
+    next.apiKeyLast4,
+    now,
+    now
+  ).run();
+
+  return next;
+}
+
+async function getUserAiSettingsForSyncKey(env, syncKey) {
+  await ensureAiFeedSchema(env);
+  if (!syncKey) {
+    return buildDefaultUserAiSettings();
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT uas.reply_ai_enabled,
+        uas.provider_base_url,
+        uas.model,
+        uas.moderation_prompt,
+        uas.api_key_ciphertext,
+        uas.api_key_last4,
+        uas.updated_at
+      FROM sync_keys sk
+      LEFT JOIN user_ai_settings uas
+        ON uas.user_id = sk.user_id
+      WHERE sk.sync_key = ?
+      LIMIT 1
+    `
+  ).bind(syncKey).first();
+
+  return serializeUserAiSettingsRow(row);
+}
+
 async function getSidebarControlsEnabledForSyncKey(env, syncKey) {
+  await ensureAiFeedSchema(env);
   if (!syncKey) {
     return DEFAULT_USER_PREFERENCES.sidebarControlsEnabled;
   }
@@ -1519,6 +3073,16 @@ async function upsertEvent(env, payload) {
     accountProtected: Number(payload.accountProtected || 0) ? 1 : 0,
     createdAt: new Date().toISOString()
   };
+  eventRow.eventFingerprint = await buildModerationEventFingerprint(eventRow);
+
+  if (eventRow.eventFingerprint) {
+    const existingByFingerprint = await env.DB.prepare(
+      "SELECT id FROM moderation_events WHERE event_fingerprint = ? LIMIT 1"
+    ).bind(eventRow.eventFingerprint).first();
+    if (existingByFingerprint) {
+      return { deduped: true };
+    }
+  }
 
   const existing = await env.DB.prepare(
     `
@@ -1554,43 +3118,57 @@ async function upsertEvent(env, payload) {
     return { deduped: true };
   }
 
-  await env.DB.prepare(
-    `
-      INSERT INTO moderation_events (
-        sync_key,
-        user_id,
-        device_id,
-        event_type,
-        source,
-        thread_url,
-        thread_status_id,
-        reply_status_id,
-        reply_handle,
-        reply_display_name,
-        reply_text,
-        normalized_text,
-        compact_text,
-        account_protected,
-        created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `
-  ).bind(
-    eventRow.syncKey,
-    eventRow.userId,
-    eventRow.deviceId,
-    eventRow.eventType,
-    eventRow.source,
-    eventRow.threadUrl,
-    eventRow.threadStatusId,
-    eventRow.replyStatusId,
-    eventRow.replyHandle,
-    eventRow.replyDisplayName,
-    eventRow.replyText,
-    eventRow.normalizedText,
-    eventRow.compactText,
-    eventRow.accountProtected,
-    eventRow.createdAt
-  ).run();
+  try {
+    await env.DB.prepare(
+      `
+        INSERT INTO moderation_events (
+          sync_key,
+          user_id,
+          device_id,
+          event_type,
+          source,
+          thread_url,
+          thread_status_id,
+          reply_status_id,
+          reply_handle,
+          reply_display_name,
+          reply_text,
+          normalized_text,
+          compact_text,
+          account_protected,
+          created_at,
+          event_fingerprint
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `
+    ).bind(
+      eventRow.syncKey,
+      eventRow.userId,
+      eventRow.deviceId,
+      eventRow.eventType,
+      eventRow.source,
+      eventRow.threadUrl,
+      eventRow.threadStatusId,
+      eventRow.replyStatusId,
+      eventRow.replyHandle,
+      eventRow.replyDisplayName,
+      eventRow.replyText,
+      eventRow.normalizedText,
+      eventRow.compactText,
+      eventRow.accountProtected,
+      eventRow.createdAt,
+      eventRow.eventFingerprint
+    ).run();
+  } catch (error) {
+    if (eventRow.eventFingerprint && isEventFingerprintConflictError(error)) {
+      const existingByFingerprint = await env.DB.prepare(
+        "SELECT id FROM moderation_events WHERE event_fingerprint = ? LIMIT 1"
+      ).bind(eventRow.eventFingerprint).first();
+      if (existingByFingerprint) {
+        return { deduped: true };
+      }
+    }
+    throw error;
+  }
 
   return { deduped: false };
 }
@@ -1610,6 +3188,88 @@ async function touchSyncKey(env, syncKey, deviceId) {
       "INSERT INTO sync_keys (sync_key, user_id, device_id, created_at, updated_at, last_seen_at) VALUES (?, NULL, ?, ?, ?, ?)"
     ).bind(syncKey, deviceId || "", now, now, now).run();
   }
+}
+
+async function claimAnonymousDeviceActivityToUser(env, deviceId, userId) {
+  await ensureAiFeedSchema(env);
+  const normalizedDeviceId = String(deviceId || "").trim();
+  if (!normalizedDeviceId || !userId) {
+    return {
+      claimedSyncKeys: 0,
+      claimedEvents: 0
+    };
+  }
+
+  const syncKeyRow = await env.DB.prepare(
+    `
+      SELECT COUNT(*) AS total_count
+      FROM sync_keys
+      WHERE device_id = ?
+        AND (user_id IS NULL OR TRIM(user_id) = '')
+    `
+  ).bind(normalizedDeviceId).first();
+  const eventRow = await env.DB.prepare(
+    `
+      SELECT COUNT(*) AS total_count
+      FROM moderation_events
+      WHERE device_id = ?
+        AND (user_id IS NULL OR TRIM(user_id) = '')
+    `
+  ).bind(normalizedDeviceId).first();
+
+  const claimedSyncKeys = Number(syncKeyRow && syncKeyRow.total_count ? syncKeyRow.total_count : 0);
+  const claimedEvents = Number(eventRow && eventRow.total_count ? eventRow.total_count : 0);
+  if (!claimedSyncKeys && !claimedEvents) {
+    return {
+      claimedSyncKeys: 0,
+      claimedEvents: 0
+    };
+  }
+
+  const now = new Date().toISOString();
+  if (claimedSyncKeys) {
+    await env.DB.prepare(
+      `
+        UPDATE sync_keys
+        SET user_id = ?, updated_at = ?, last_seen_at = ?
+        WHERE device_id = ?
+          AND (user_id IS NULL OR TRIM(user_id) = '')
+      `
+    ).bind(userId, now, now, normalizedDeviceId).run();
+  }
+
+  if (claimedEvents) {
+    await env.DB.prepare(
+      `
+        UPDATE moderation_events
+        SET user_id = ?
+        WHERE device_id = ?
+          AND (user_id IS NULL OR TRIM(user_id) = '')
+      `
+    ).bind(userId, normalizedDeviceId).run();
+  }
+
+  await env.DB.prepare(
+    `
+      UPDATE timeline_posts
+      SET user_id = ?
+      WHERE device_id = ?
+        AND (user_id IS NULL OR TRIM(user_id) = '')
+    `
+  ).bind(userId, normalizedDeviceId).run();
+  await env.DB.prepare(
+    `
+      UPDATE reply_ai_items
+      SET user_id = ?
+      WHERE device_id = ?
+        AND (user_id IS NULL OR TRIM(user_id) = '')
+    `
+  ).bind(userId, normalizedDeviceId).run();
+
+  return {
+    claimedSyncKeys,
+    claimedEvents
+  };
 }
 
 async function requireViewer(request, env, required) {
@@ -1633,6 +3293,7 @@ async function requireViewer(request, env, required) {
   }
 
   if (new Date(row.expires_at).getTime() < Date.now()) {
+    await deleteSessionById(env, sessionId);
     return null;
   }
 
@@ -1653,7 +3314,23 @@ async function requireDeveloper(request, env) {
 
 async function sendVerificationEmail(env, email, code, options) {
   const developerEmail = Boolean(options && options.developerEmail);
-  if (developerEmail && isTruthy(env.ALLOW_DEVELOPER_DEBUG_CODE)) {
+  const provider = getConfiguredEmailProvider(env);
+  if (!provider && String(env.APP_ENV || "").trim() !== "production") {
+    return {
+      ok: true,
+      debugCode: code
+    };
+  }
+
+  if (!provider && isTruthy(env.ALLOW_PUBLIC_DEBUG_CODE_LOGIN)) {
+    return {
+      ok: true,
+      debugCode: code,
+      publicDebugCodeMode: true
+    };
+  }
+
+  if (!provider && developerEmail && isTruthy(env.ALLOW_DEVELOPER_DEBUG_CODE)) {
     return {
       ok: true,
       debugCode: code,
@@ -1661,15 +3338,7 @@ async function sendVerificationEmail(env, email, code, options) {
     };
   }
 
-  const endpoint = String(env.EMAIL_SEND_ENDPOINT || "").trim();
-  if (!endpoint && String(env.APP_ENV || "").trim() !== "production") {
-    return {
-      ok: true,
-      debugCode: code
-    };
-  }
-
-  if (!endpoint) {
+  if (!provider) {
     return {
       ok: false,
       detail: "missing-email-provider"
@@ -1677,17 +3346,17 @@ async function sendVerificationEmail(env, email, code, options) {
   }
 
   const payload = {
-    from: String(env.EMAIL_FROM || "no-reply@web25.local").trim(),
+    from: String(env.EMAIL_FROM || "no-reply@colorful-toilet.local").trim(),
     to: email,
-    subject: "web2.5 登录验证码",
-    text: `你的 web2.5 登录验证码是 ${code}，10 分钟内有效。`
+    subject: "Colorful Toilet 登录验证码",
+    text: `你的 Colorful Toilet 登录验证码是 ${code}，10 分钟内有效。`
   };
   const headers = { "Content-Type": "application/json" };
-  if (String(env.EMAIL_SEND_TOKEN || "").trim()) {
-    headers.Authorization = `Bearer ${String(env.EMAIL_SEND_TOKEN || "").trim()}`;
+  if (provider.token) {
+    headers.Authorization = `Bearer ${provider.token}`;
   }
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(provider.endpoint, {
     method: "POST",
     headers,
     body: JSON.stringify(payload)
@@ -1695,8 +3364,55 @@ async function sendVerificationEmail(env, email, code, options) {
 
   return {
     ok: response.ok,
-    detail: response.ok ? "sent" : `status-${response.status}`
+    detail: response.ok ? provider.kind : `status-${response.status}`
   };
+}
+
+async function deleteExpiredAuthCodesForEmail(env, email, nowIso) {
+  if (!email) {
+    return;
+  }
+
+  await env.DB.prepare(
+    "DELETE FROM auth_codes WHERE email = ? AND expires_at < ?"
+  ).bind(email, nowIso || new Date().toISOString()).run();
+}
+
+async function trimAuthCodesForEmail(env, email) {
+  if (!email) {
+    return;
+  }
+
+  const keepCount = getMaxAuthCodesPerEmail(env);
+  await env.DB.prepare(
+    `
+      DELETE FROM auth_codes
+      WHERE email = ?
+        AND id NOT IN (
+          SELECT id
+          FROM auth_codes
+          WHERE email = ?
+          ORDER BY created_at DESC
+          LIMIT ?
+        )
+    `
+  ).bind(email, email, keepCount).run();
+}
+
+async function deleteExpiredSessions(env, nowIso) {
+  await env.DB.prepare(
+    "DELETE FROM sessions WHERE expires_at < ?"
+  ).bind(nowIso || new Date().toISOString()).run();
+}
+
+async function deleteSessionById(env, sessionId) {
+  if (!sessionId) {
+    return;
+  }
+
+  await env.DB.prepare(
+    "DELETE FROM sessions WHERE id = ?"
+  ).bind(sessionId).run();
 }
 
 function generateOtp() {
@@ -1709,6 +3425,2694 @@ async function sha256Hex(value) {
   const data = new TextEncoder().encode(String(value || ""));
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash)).map((item) => item.toString(16).padStart(2, "0")).join("");
+}
+
+async function buildModerationEventFingerprint(eventRow) {
+  const syncKey = String(eventRow && eventRow.syncKey ? eventRow.syncKey : "").trim();
+  const eventType = String(eventRow && eventRow.eventType ? eventRow.eventType : "").trim();
+  if (!syncKey || !eventType) {
+    return "";
+  }
+
+  const replyStatusId = String(eventRow && eventRow.replyStatusId ? eventRow.replyStatusId : "").trim();
+  const threadStatusId = String(eventRow && eventRow.threadStatusId ? eventRow.threadStatusId : "").trim();
+  const normalizedText = String(eventRow && eventRow.normalizedText ? eventRow.normalizedText : "").trim();
+  const replyHandle = String(eventRow && eventRow.replyHandle ? eventRow.replyHandle : "").trim();
+
+  const identity = replyStatusId
+    ? ["reply-status", syncKey, eventType, replyStatusId]
+    : threadStatusId
+      ? ["thread-status", syncKey, eventType, threadStatusId, normalizedText, replyHandle]
+      : ["text-handle", syncKey, eventType, normalizedText, replyHandle];
+
+  return sha256Hex(JSON.stringify(identity));
+}
+
+function normalizeAiFeedText(value, maxLength) {
+  const normalized = String(value || "")
+    .replace(ZERO_WIDTH_PATTERN, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!maxLength || maxLength <= 0) {
+    return normalized;
+  }
+  return normalized.slice(0, maxLength);
+}
+
+function normalizeAiComparableText(value) {
+  return normalizeAiFeedText(value, 4000)
+    .toLowerCase()
+    .replace(/[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g, "")
+    .replace(EMOJI_PATTERN, "")
+    .replace(/\s+/g, "");
+}
+
+function normalizeTimelineKind(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return "unknown";
+  }
+  if (normalized === "following" || normalized.includes("following") || normalized.includes("正在关注")) {
+    return "following";
+  }
+  if (normalized === "for_you" || normalized === "foryou" || normalized.includes("for you") || normalized.includes("为你")) {
+    return "for_you";
+  }
+  return "unknown";
+}
+
+function normalizeMediaMode(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "image" || normalized === "video" || normalized === "mixed") {
+    return normalized;
+  }
+  return "text";
+}
+
+function normalizeAiHandle(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  const handle = normalized.startsWith("@") ? normalized : `@${normalized}`;
+  return handle.toLowerCase().slice(0, 80);
+}
+
+function normalizeSeenAt(value) {
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function normalizeAiPostSnapshotPayload(payload) {
+  const source = payload || {};
+  const postText = normalizeAiFeedText(source.postText, TIMELINE_POST_STORAGE_TEXT_LIMIT);
+  const quoteText = normalizeAiFeedText(source.quoteText, TIMELINE_POST_STORAGE_TEXT_LIMIT);
+  const linkTitle = normalizeAiFeedText(source.linkTitle, TIMELINE_POST_STORAGE_LINK_LIMIT);
+  return {
+    syncKey: String(source.syncKey || "").trim(),
+    deviceId: String(source.deviceId || "").trim(),
+    timelineKind: normalizeTimelineKind(source.timelineKind),
+    pageUrl: normalizeAiFeedText(source.pageUrl, 1200),
+    statusId: String(source.statusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
+    authorHandle: normalizeAiHandle(source.authorHandle),
+    authorDisplayName: normalizeAiFeedText(source.authorDisplayName, 200),
+    postText,
+    quoteText,
+    linkTitle,
+    mediaMode: normalizeMediaMode(source.mediaMode),
+    textSparse: Boolean(source.textSparse) || [postText, quoteText, linkTitle].join(" ").trim().length < 32,
+    seenAt: normalizeSeenAt(source.seenAt)
+  };
+}
+
+function buildTimelinePostLightAiView(postRow) {
+  const source = postRow || {};
+  return {
+    timelineKind: normalizeTimelineKind(source.timelineKind),
+    pageUrl: normalizeAiFeedText(source.pageUrl, 1200),
+    statusId: String(source.statusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
+    authorHandle: normalizeAiHandle(source.authorHandle),
+    authorDisplayName: normalizeAiFeedText(source.authorDisplayName, 200),
+    postText: normalizeAiFeedText(source.postText, TIMELINE_POST_LIGHT_TEXT_LIMIT),
+    quoteText: normalizeAiFeedText(source.quoteText, TIMELINE_POST_LIGHT_TEXT_LIMIT),
+    linkTitle: normalizeAiFeedText(source.linkTitle, TIMELINE_POST_LIGHT_LINK_LIMIT),
+    mediaMode: normalizeMediaMode(source.mediaMode),
+    textSparse: Boolean(source.textSparse)
+  };
+}
+
+function buildTimelinePostFullAiView(postRow) {
+  const source = postRow || {};
+  return {
+    timelineKind: normalizeTimelineKind(source.timelineKind),
+    pageUrl: normalizeAiFeedText(source.pageUrl, 1200),
+    statusId: String(source.statusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
+    authorHandle: normalizeAiHandle(source.authorHandle),
+    authorDisplayName: normalizeAiFeedText(source.authorDisplayName, 200),
+    postText: normalizeAiFeedText(source.postText, TIMELINE_POST_STORAGE_TEXT_LIMIT),
+    quoteText: normalizeAiFeedText(source.quoteText, TIMELINE_POST_STORAGE_TEXT_LIMIT),
+    linkTitle: normalizeAiFeedText(source.linkTitle, TIMELINE_POST_STORAGE_LINK_LIMIT),
+    mediaMode: normalizeMediaMode(source.mediaMode),
+    textSparse: Boolean(source.textSparse),
+    seenAt: normalizeAiFeedText(source.seenAt, 80),
+    createdAt: normalizeAiFeedText(source.createdAt, 80)
+  };
+}
+
+function collectTimelineBlockedTopicCandidates(postRow, blockedTopicTerms) {
+  const normalizedTerms = normalizeBlockedTopicTerms(blockedTopicTerms);
+  if (!normalizedTerms.length) {
+    return [];
+  }
+
+  const source = postRow || {};
+  const searchableText = [
+    source.postText,
+    source.quoteText,
+    source.linkTitle,
+    source.authorDisplayName,
+    source.authorHandle
+  ].filter(Boolean).join(" ");
+  const lowerText = String(searchableText || "").toLowerCase();
+  const comparableText = normalizeAiComparableText(searchableText);
+
+  return normalizedTerms
+    .filter((term) => {
+      const normalizedTerm = String(term || "").trim();
+      if (!normalizedTerm) {
+        return false;
+      }
+      const comparableTerm = normalizeAiComparableText(normalizedTerm);
+      return lowerText.includes(normalizedTerm.toLowerCase())
+        || (comparableTerm && comparableText.includes(comparableTerm));
+    })
+    .sort((left, right) => right.length - left.length)
+    .slice(0, 8);
+}
+
+function buildTimelineHomeAiDecisionSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      action: {
+        type: "string",
+        enum: ["hide", "allow"]
+      },
+      matchedTerms: {
+        type: "array",
+        items: {
+          type: "string"
+        }
+      },
+      confidence: {
+        type: "string",
+        enum: ["high", "medium", "low"]
+      },
+      reasonShort: {
+        type: "string"
+      },
+      status: {
+        type: "string",
+        enum: ["ready", "failed", "skipped"]
+      }
+    },
+    required: ["action", "matchedTerms", "confidence", "reasonShort", "status"]
+  };
+}
+
+function buildTimelineHomeAiProviderPrompt(settings, options) {
+  const isFullAudit = Boolean(options && options.isFullAudit);
+  return [
+    isFullAudit
+      ? "You audit one X post using its complete captured context for a blocked-topic decision."
+      : "You classify one X home timeline post using a lightweight realtime view for a blocked-topic decision.",
+    "Only hide when the post is clearly about one or more blocked topics.",
+    "If confidence is low, return action allow.",
+    "matchedTerms must only include exact strings from candidateBlockedTopicTerms.",
+    "reasonShort must stay brief.",
+    settings && settings.moderationPrompt
+      ? `Additional operator guidance: ${settings.moderationPrompt}`
+      : ""
+  ].filter(Boolean).join(" ");
+}
+
+function buildTimelineHomeRealtimeTask(postRow, settings, candidateBlockedTopicTerms) {
+  return buildAiModerationTask({
+    taskType: AI_MODERATION_TASK_TYPES.HOME_REALTIME_POST,
+    providerConfig: settings,
+    schemaName: "timeline_post_decision",
+    responseSchema: buildTimelineHomeAiDecisionSchema(),
+    developerPrompt: buildTimelineHomeAiProviderPrompt(settings, { isFullAudit: false }),
+    userPayloadText: JSON.stringify({
+      candidateBlockedTopicTerms: normalizeBlockedTopicTerms(candidateBlockedTopicTerms),
+      post: buildTimelinePostLightAiView(postRow)
+    }),
+    metadata: {
+      reasoningEffort: "minimal"
+    }
+  });
+}
+
+function buildTimelineFullPostAuditTask(postRow, settings, blockedTopicTerms) {
+  return buildAiModerationTask({
+    taskType: AI_MODERATION_TASK_TYPES.FULL_POST_AUDIT,
+    providerConfig: settings,
+    schemaName: "timeline_full_post_audit",
+    responseSchema: buildTimelineHomeAiDecisionSchema(),
+    developerPrompt: buildTimelineHomeAiProviderPrompt(settings, { isFullAudit: true }),
+    userPayloadText: JSON.stringify({
+      candidateBlockedTopicTerms: normalizeBlockedTopicTerms(blockedTopicTerms),
+      post: buildTimelinePostFullAiView(postRow)
+    }),
+    metadata: {
+      reasoningEffort: "low"
+    }
+  });
+}
+
+async function buildTimelinePostFingerprint(postRow) {
+  const syncKey = String(postRow && postRow.syncKey ? postRow.syncKey : "").trim();
+  if (!syncKey) {
+    return "";
+  }
+
+  const statusId = String(postRow && postRow.statusId ? postRow.statusId : "").trim();
+  if (statusId) {
+    return sha256Hex(JSON.stringify(["timeline-status", syncKey, statusId]));
+  }
+
+  const authorHandle = String(postRow && postRow.authorHandle ? postRow.authorHandle : "").trim().toLowerCase();
+  const normalizedPostText = normalizeAiComparableText(postRow && postRow.postText ? postRow.postText : "");
+  if (!authorHandle && !normalizedPostText) {
+    return "";
+  }
+
+  return sha256Hex(JSON.stringify([
+    "timeline-fallback",
+    syncKey,
+    authorHandle,
+    normalizedPostText.slice(0, 800)
+  ]));
+}
+
+function buildDefaultAiDecision(overrides) {
+  return Object.assign({
+    blocked: false,
+    matchedBlockedTerms: [],
+    confidence: "low",
+    reasonShort: "",
+    limitedByVideo: false,
+    status: "skipped",
+    model: ""
+  }, overrides || {});
+}
+
+function isFinalAiDecisionStatus(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "ready" || normalized === "failed" || normalized === "skipped";
+}
+
+function buildTimelineAiDecisionPayload(postId, decision) {
+  const source = decision
+    ? buildDefaultAiDecision(decision)
+    : {
+      blocked: false,
+      matchedBlockedTerms: [],
+      confidence: "low",
+      reasonShort: "",
+      limitedByVideo: false,
+      status: "pending",
+      model: ""
+    };
+
+  const status = decision
+    ? String(source.status || "skipped")
+    : "pending";
+
+  return {
+    postId: Number(postId || 0),
+    blocked: Boolean(source.blocked),
+    matchedBlockedTerms: normalizeBlockedTopicTerms(source.matchedBlockedTerms),
+    confidence: String(source.confidence || "low"),
+    reasonShort: normalizeAiFeedText(source.reasonShort, 120),
+    limitedByVideo: Boolean(source.limitedByVideo),
+    status,
+    model: normalizeAiFeedText(source.model, 80),
+    isFinal: isFinalAiDecisionStatus(status)
+  };
+}
+
+function normalizeTimelineAiDecision(decision, blockedTopicTerms, model, rawResponseMeta) {
+  const normalized = normalizeAiModerationResult(decision, {
+    allowedMatchedTerms: normalizeBlockedTopicTerms(blockedTopicTerms),
+    model,
+    rawResponseMeta
+  });
+  const blocked = normalized.action === "hide"
+    && normalized.matchedTerms.length > 0
+    && (normalized.confidence === "high" || normalized.confidence === "medium")
+    && normalized.status === "ready";
+
+  return {
+    blocked,
+    matchedBlockedTerms: normalized.matchedTerms,
+    confidence: normalized.confidence,
+    reasonShort: normalized.reasonShort,
+    limitedByVideo: false,
+    status: normalized.status,
+    model: normalized.model,
+    rawResponseJson: normalized.rawResponseMeta || null
+  };
+}
+
+async function upsertTimelinePost(env, payload) {
+  await ensureAiFeedSchema(env);
+  await touchSyncKey(env, payload.syncKey, payload.deviceId);
+
+  const userBinding = await env.DB.prepare(
+    "SELECT user_id FROM sync_keys WHERE sync_key = ? LIMIT 1"
+  ).bind(payload.syncKey).first();
+
+  const postRow = {
+    syncKey: payload.syncKey,
+    userId: userBinding && userBinding.user_id ? userBinding.user_id : null,
+    deviceId: payload.deviceId,
+    timelineKind: payload.timelineKind,
+    pageUrl: payload.pageUrl,
+    statusId: payload.statusId,
+    authorHandle: payload.authorHandle,
+    authorDisplayName: payload.authorDisplayName,
+    postText: payload.postText,
+    quoteText: payload.quoteText,
+    linkTitle: payload.linkTitle,
+    mediaMode: payload.mediaMode,
+    textSparse: payload.textSparse ? 1 : 0,
+    seenAt: payload.seenAt,
+    createdAt: new Date().toISOString()
+  };
+  postRow.postFingerprint = await buildTimelinePostFingerprint(postRow);
+
+  if (postRow.postFingerprint) {
+    const existing = await env.DB.prepare(
+      "SELECT id FROM timeline_posts WHERE post_fingerprint = ? LIMIT 1"
+    ).bind(postRow.postFingerprint).first();
+    if (existing) {
+      return {
+        deduped: true,
+        postId: Number(existing.id || 0)
+      };
+    }
+  }
+
+  const result = await env.DB.prepare(
+    `
+      INSERT INTO timeline_posts (
+        sync_key,
+        user_id,
+        device_id,
+        timeline_kind,
+        page_url,
+        status_id,
+        author_handle,
+        author_display_name,
+        post_text,
+        quote_text,
+        link_title,
+        media_mode,
+        text_sparse,
+        seen_at,
+        created_at,
+        post_fingerprint
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+  ).bind(
+    postRow.syncKey,
+    postRow.userId,
+    postRow.deviceId,
+    postRow.timelineKind,
+    postRow.pageUrl,
+    postRow.statusId,
+    postRow.authorHandle,
+    postRow.authorDisplayName,
+    postRow.postText,
+    postRow.quoteText,
+    postRow.linkTitle,
+    postRow.mediaMode,
+    postRow.textSparse,
+    postRow.seenAt,
+    postRow.createdAt,
+    postRow.postFingerprint
+  ).run();
+
+  return {
+    deduped: false,
+    postId: Number(result && result.meta && result.meta.last_row_id ? result.meta.last_row_id : 0)
+  };
+}
+
+async function getTimelinePostById(env, postId) {
+  if (!postId) {
+    return null;
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        id,
+        sync_key,
+        user_id,
+        device_id,
+        timeline_kind,
+        page_url,
+        status_id,
+        author_handle,
+        author_display_name,
+        post_text,
+        quote_text,
+        link_title,
+        media_mode,
+        text_sparse,
+        seen_at,
+        created_at
+      FROM timeline_posts
+      WHERE id = ?
+      LIMIT 1
+    `
+  ).bind(postId).first();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: Number(row.id || 0),
+    syncKey: row.sync_key || "",
+    userId: row.user_id || "",
+    deviceId: row.device_id || "",
+    timelineKind: row.timeline_kind || "unknown",
+    pageUrl: row.page_url || "",
+    statusId: row.status_id || "",
+    authorHandle: row.author_handle || "",
+    authorDisplayName: row.author_display_name || "",
+    postText: row.post_text || "",
+    quoteText: row.quote_text || "",
+    linkTitle: row.link_title || "",
+    mediaMode: normalizeMediaMode(row.media_mode),
+    textSparse: Number(row.text_sparse || 0) === 1,
+    seenAt: row.seen_at || "",
+    createdAt: row.created_at || ""
+  };
+}
+
+async function upsertTimelineAiResult(env, postId, decision) {
+  await ensureAiFeedSchema(env);
+  if (!postId) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const normalized = Object.assign(buildDefaultAiDecision(), decision || {});
+  await env.DB.prepare(
+    `
+      INSERT INTO timeline_ai_results (
+        post_id,
+        blocked,
+        matched_blocked_terms_json,
+        confidence,
+        reason_short,
+        limited_by_video,
+        status,
+        model,
+        raw_response_json,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(post_id) DO UPDATE SET
+        blocked = excluded.blocked,
+        matched_blocked_terms_json = excluded.matched_blocked_terms_json,
+        confidence = excluded.confidence,
+        reason_short = excluded.reason_short,
+        limited_by_video = excluded.limited_by_video,
+        status = excluded.status,
+        model = excluded.model,
+        raw_response_json = excluded.raw_response_json,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    postId,
+    normalized.blocked ? 1 : 0,
+    JSON.stringify(normalized.matchedBlockedTerms || []),
+    normalized.confidence || "low",
+    normalized.reasonShort || "",
+    normalized.limitedByVideo ? 1 : 0,
+    normalized.status || "skipped",
+    normalized.model || "",
+    normalized.rawResponseJson ? JSON.stringify(normalized.rawResponseJson).slice(0, 12000) : null,
+    now,
+    now
+  ).run();
+}
+
+async function getTimelineAiDecisionByPostId(env, postId) {
+  await ensureAiFeedSchema(env);
+  if (!postId) {
+    return null;
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        blocked,
+        matched_blocked_terms_json,
+        confidence,
+        reason_short,
+        limited_by_video,
+        status,
+        model
+      FROM timeline_ai_results
+      WHERE post_id = ?
+      LIMIT 1
+    `
+  ).bind(postId).first();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    blocked: Number(row.blocked || 0) === 1,
+    matchedBlockedTerms: normalizeBlockedTopicTerms(parseJsonArray(row.matched_blocked_terms_json)),
+    confidence: String(row.confidence || "low"),
+    reasonShort: row.reason_short || "",
+    limitedByVideo: Number(row.limited_by_video || 0) === 1,
+    status: String(row.status || "skipped"),
+    model: row.model || ""
+  };
+}
+
+function extractOpenAiOutputText(responseJson) {
+  if (responseJson && typeof responseJson.output_text === "string" && responseJson.output_text.trim()) {
+    return responseJson.output_text.trim();
+  }
+
+  const output = Array.isArray(responseJson && responseJson.output) ? responseJson.output : [];
+  const textParts = [];
+  output.forEach((item) => {
+    const contents = Array.isArray(item && item.content) ? item.content : [];
+    contents.forEach((content) => {
+      if (content && typeof content.text === "string" && content.text.trim()) {
+        textParts.push(content.text.trim());
+      }
+    });
+  });
+
+  return textParts.join("\n").trim();
+}
+
+function extractChatCompletionOutputText(responseJson) {
+  const choices = Array.isArray(responseJson && responseJson.choices) ? responseJson.choices : [];
+  const message = choices[0] && choices[0].message ? choices[0].message : null;
+  if (!message) {
+    return "";
+  }
+
+  if (typeof message.content === "string" && message.content.trim()) {
+    return message.content.trim();
+  }
+
+  const contentItems = Array.isArray(message.content) ? message.content : [];
+  const textParts = [];
+  contentItems.forEach((item) => {
+    if (item && typeof item.text === "string" && item.text.trim()) {
+      textParts.push(item.text.trim());
+    }
+  });
+  return textParts.join("\n").trim();
+}
+
+function shouldFallbackOpenAiCompatibleResponsesToChat(status) {
+  return [400, 404, 405, 415, 422, 501].includes(Number(status || 0));
+}
+
+async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort, extraResponseMeta) {
+  const providerConfig = moderationTask.providerConfig;
+  const response = await fetch(buildChatCompletionsApiEndpoint(providerConfig.providerBaseUrl), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${providerConfig.apiKey}`
+    },
+    body: JSON.stringify({
+      model: providerConfig.model,
+      reasoning_effort: reasoningEffort === "minimal" ? "low" : reasoningEffort,
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: moderationTask.developerPrompt
+        },
+        {
+          role: "user",
+          content: moderationTask.userPayloadText
+        }
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: moderationTask.schemaName,
+          strict: true,
+          schema: moderationTask.responseSchema
+        }
+      }
+    })
+  });
+
+  let responseJson = {};
+  try {
+    responseJson = await response.json();
+  } catch (error) {
+    responseJson = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(`ai-provider-status-${response.status}`);
+  }
+
+  const outputText = extractChatCompletionOutputText(responseJson);
+  if (!outputText) {
+    throw new Error("ai-provider-empty-output");
+  }
+
+  return {
+    parsed: JSON.parse(outputText),
+    model: providerConfig.model,
+    responseMeta: Object.assign({
+      adapterKey: providerConfig.adapterKey,
+      responseMode: "chat_completions_json_schema",
+      id: responseJson && responseJson.id ? responseJson.id : "",
+      outputText
+    }, extraResponseMeta || {})
+  };
+}
+
+async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffort, allowChatFallback) {
+  const providerConfig = moderationTask.providerConfig;
+  const response = await fetch(buildResponsesApiEndpoint(providerConfig.providerBaseUrl), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${providerConfig.apiKey}`
+    },
+    body: JSON.stringify({
+      model: providerConfig.model,
+      store: false,
+      reasoning: {
+        effort: reasoningEffort
+      },
+      input: [
+        {
+          role: "developer",
+          content: [
+            {
+              type: "input_text",
+              text: moderationTask.developerPrompt
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: moderationTask.userPayloadText
+            }
+          ]
+        }
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: moderationTask.schemaName,
+          strict: true,
+          schema: moderationTask.responseSchema
+        }
+      }
+    })
+  });
+
+  let responseJson = {};
+  try {
+    responseJson = await response.json();
+  } catch (error) {
+    responseJson = {};
+  }
+
+  if (!response.ok) {
+    if (allowChatFallback && shouldFallbackOpenAiCompatibleResponsesToChat(response.status)) {
+      return {
+        unsupported: true,
+        status: response.status,
+        responseJson
+      };
+    }
+    throw new Error(`ai-provider-status-${response.status}`);
+  }
+
+  const outputText = extractOpenAiOutputText(responseJson);
+  if (!outputText) {
+    throw new Error("ai-provider-empty-output");
+  }
+
+  return {
+    parsed: JSON.parse(outputText),
+    model: providerConfig.model,
+    responseMeta: {
+      adapterKey: providerConfig.adapterKey,
+      responseMode: "responses_json_schema",
+      id: responseJson && responseJson.id ? responseJson.id : "",
+      outputText
+    }
+  };
+}
+
+async function requestOpenAiCompatibleStructuredJson(task) {
+  const moderationTask = buildAiModerationTask(task);
+  const providerConfig = moderationTask.providerConfig;
+  const reasoningEffort = normalizeAiFeedText(
+    moderationTask.metadata && moderationTask.metadata.reasoningEffort
+      ? moderationTask.metadata.reasoningEffort
+      : "low",
+    20
+  ) || "low";
+
+  if (providerConfig.responseMode === "chat_completions_json_schema") {
+    return requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort);
+  }
+
+  const responsesResult = await requestOpenAiCompatibleViaResponses(
+    moderationTask,
+    reasoningEffort,
+    true
+  );
+  if (!responsesResult || !responsesResult.unsupported) {
+    return responsesResult;
+  }
+
+  return requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort, {
+    fallbackFrom: "responses_json_schema",
+    fallbackStatus: Number(responsesResult.status || 0)
+  });
+}
+
+const AI_PROVIDER_ADAPTERS = Object.freeze({
+  [AI_PROVIDER_ADAPTER_KEYS.OPENAI_COMPATIBLE]: {
+    key: AI_PROVIDER_ADAPTER_KEYS.OPENAI_COMPATIBLE,
+    requestStructuredJson: requestOpenAiCompatibleStructuredJson
+  },
+  [AI_PROVIDER_ADAPTER_KEYS.NATIVE_RESERVED]: {
+    key: AI_PROVIDER_ADAPTER_KEYS.NATIVE_RESERVED,
+    requestStructuredJson: async function unsupportedAiProviderAdapter() {
+      throw new Error("ai-provider-adapter-not-implemented");
+    }
+  }
+});
+
+function resolveAiProviderAdapter(providerConfig) {
+  const config = buildAiProviderConfig(providerConfig || {});
+  return AI_PROVIDER_ADAPTERS[config.adapterKey] || AI_PROVIDER_ADAPTERS[AI_PROVIDER_ADAPTER_KEYS.OPENAI_COMPATIBLE];
+}
+
+async function requestAiModerationTaskFromProvider(task) {
+  const moderationTask = buildAiModerationTask(task);
+  const adapter = resolveAiProviderAdapter(moderationTask.providerConfig);
+  return adapter.requestStructuredJson(moderationTask);
+}
+
+function buildTimelineAiCooldownFailedDecision(settings, cooldownRow, fallbackReason) {
+  const remainingMs = getAiProviderCooldownRemainingMs(cooldownRow);
+  const remainingSeconds = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  return buildDefaultAiDecision({
+    reasonShort: fallbackReason
+      || (remainingSeconds > 0
+        ? `AI 限流冷却中，约 ${remainingSeconds} 秒后自动重试`
+        : "AI 限流冷却中，稍后自动重试"),
+    status: "failed",
+    model: settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL,
+    rawResponseJson: cooldownRow
+      ? {
+        cooldownUntil: cooldownRow.cooldown_until || "",
+        failureCount: Number(cooldownRow.failure_count || 0)
+      }
+      : null
+  });
+}
+
+function buildTimelineAiStaticDecision(postRow, blockedTopicTerms, candidateBlockedTopicTerms, settings) {
+  if (!postRow || !postRow.userId) {
+    return buildDefaultAiDecision({
+      reasonShort: "等待账号绑定",
+      status: "skipped"
+    });
+  }
+
+  if (!normalizeBlockedTopicTerms(blockedTopicTerms).length) {
+    return buildDefaultAiDecision({
+      reasonShort: "未设置屏蔽词",
+      status: "skipped"
+    });
+  }
+
+  const visibleText = [postRow.postText, postRow.quoteText, postRow.linkTitle].filter(Boolean).join(" ").trim();
+  const limitedByVideo = Boolean(postRow.textSparse) && (postRow.mediaMode === "video" || postRow.mediaMode === "mixed");
+  if (!visibleText && !postRow.authorDisplayName && !postRow.authorHandle) {
+    return buildDefaultAiDecision({
+      reasonShort: "正文信息不足",
+      status: "skipped"
+    });
+  }
+
+  if (limitedByVideo) {
+    return buildDefaultAiDecision({
+      reasonShort: "视频为主，默认放过",
+      limitedByVideo: true,
+      status: "skipped"
+    });
+  }
+
+  if (!normalizeBlockedTopicTerms(candidateBlockedTopicTerms).length) {
+    return buildDefaultAiDecision({
+      reasonShort: "未命中候选词",
+      status: "skipped",
+      model: settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL
+    });
+  }
+
+  if (!String(settings && settings.apiKey ? settings.apiKey : "").trim()) {
+    return buildDefaultAiDecision({
+      reasonShort: "未配置用户 AI Key",
+      status: "skipped",
+      model: settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL
+    });
+  }
+
+  return null;
+}
+
+async function requestTimelineHomeAiDecisionFromProvider(settings, postRow, candidateBlockedTopicTerms) {
+  const task = buildTimelineHomeRealtimeTask(postRow, settings, candidateBlockedTopicTerms);
+  const response = await requestAiModerationTaskFromProvider(task);
+  return normalizeTimelineAiDecision(
+    response.parsed,
+    candidateBlockedTopicTerms,
+    response.model,
+    response.responseMeta
+  );
+}
+
+async function requestTimelineFullPostAuditFromProvider(settings, postRow, blockedTopicTerms) {
+  const task = buildTimelineFullPostAuditTask(postRow, settings, blockedTopicTerms);
+  const response = await requestAiModerationTaskFromProvider(task);
+  return normalizeTimelineAiDecision(
+    response.parsed,
+    blockedTopicTerms,
+    response.model,
+    response.responseMeta
+  );
+}
+
+async function classifyTimelinePost(env, postId) {
+  await ensureAiFeedSchema(env);
+  const postRow = await getTimelinePostById(env, postId);
+  if (!postRow) {
+    return;
+  }
+
+  const preferences = await getUserPreferences(env, postRow.userId);
+  const blockedTopicTerms = normalizeBlockedTopicTerms(preferences.blockedTopicTerms);
+  const settings = postRow.userId
+    ? await getUserAiSettingsWithSecret(env, postRow.userId)
+    : buildAiProviderConfig({});
+  const candidateBlockedTopicTerms = collectTimelineBlockedTopicCandidates(postRow, blockedTopicTerms);
+  const staticDecision = buildTimelineAiStaticDecision(postRow, blockedTopicTerms, candidateBlockedTopicTerms, settings);
+  if (staticDecision) {
+    await upsertTimelineAiResult(env, postId, staticDecision);
+    return;
+  }
+
+  const scopeKey = buildAiProviderScopeKey(postRow.userId, settings);
+  const cooldownRow = await getAiProviderCooldownRow(env, scopeKey);
+  if (isAiProviderCoolingDown(cooldownRow)) {
+    await upsertTimelineAiResult(env, postId, buildTimelineAiCooldownFailedDecision(settings, cooldownRow));
+    return;
+  }
+
+  try {
+    const decision = await requestTimelineHomeAiDecisionFromProvider(settings, postRow, candidateBlockedTopicTerms);
+    await clearAiProviderCooldown(env, scopeKey, postRow, settings);
+    await upsertTimelineAiResult(env, postId, decision);
+  } catch (error) {
+    const errorMessage = error && error.message ? String(error.message) : String(error);
+    const retryableProviderFailure = /ai-provider-status-(429|500|502|503|504|529)/i.test(errorMessage);
+    const cooldownState = retryableProviderFailure
+      ? await recordAiProviderFailure(
+        env,
+        scopeKey,
+        postRow,
+        settings,
+        errorMessage.match(/ai-provider-status-\d+/i)
+          ? String(errorMessage.match(/ai-provider-status-\d+/i)[0] || "")
+          : "provider-failure"
+      )
+      : null;
+    await upsertTimelineAiResult(env, postId, buildDefaultAiDecision({
+      reasonShort: retryableProviderFailure ? "AI 限流，稍后自动重试" : "AI 判读失败",
+      status: "failed",
+      model: settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL,
+      rawResponseJson: retryableProviderFailure
+        ? {
+          cooldownUntil: cooldownState && cooldownState.cooldown_until ? cooldownState.cooldown_until : "",
+          failureCount: cooldownState && cooldownState.failure_count ? Number(cooldownState.failure_count || 0) : 0,
+          error: errorMessage
+        }
+        : {
+          error: errorMessage
+        }
+    }));
+  }
+}
+
+async function reclassifyRecentTimelinePostsForSyncKey(env, syncKey) {
+  await ensureAiFeedSchema(env);
+  const normalizedSyncKey = String(syncKey || "").trim();
+  if (!normalizedSyncKey) {
+    return;
+  }
+
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT id
+      FROM timeline_posts
+      WHERE sync_key = ?
+      ORDER BY seen_at DESC, id DESC
+      LIMIT ?
+    `
+  ).bind(normalizedSyncKey, AI_FEED_RECLASSIFY_LIMIT).all();
+
+  for (const row of results) {
+    const postId = Number(row && row.id ? row.id : 0);
+    if (postId) {
+      await classifyTimelinePost(env, postId);
+    }
+  }
+}
+
+async function reclassifyRecentTimelinePostsForUser(env, userId) {
+  await ensureAiFeedSchema(env);
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT tp.id
+      FROM timeline_posts tp
+      WHERE tp.user_id = ?
+      ORDER BY tp.seen_at DESC, tp.id DESC
+      LIMIT ?
+    `
+  ).bind(normalizedUserId, AI_FEED_RECLASSIFY_LIMIT).all();
+
+  for (const row of results) {
+    const postId = Number(row && row.id ? row.id : 0);
+    if (postId) {
+      await classifyTimelinePost(env, postId);
+    }
+  }
+}
+
+async function reclassifyRecentReplyAiItemsForSyncKey(env, syncKey) {
+  await ensureAiFeedSchema(env);
+  const normalizedSyncKey = String(syncKey || "").trim();
+  if (!normalizedSyncKey) {
+    return;
+  }
+
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT rai.id
+      FROM reply_ai_items rai
+      LEFT JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.sync_key = ?
+        AND (rar.status IS NULL OR rar.status != 'ready')
+      ORDER BY rai.created_at DESC, rai.id DESC
+      LIMIT ?
+    `
+  ).bind(normalizedSyncKey, REPLY_AI_RECLASSIFY_LIMIT).all();
+
+  for (const row of results) {
+    const itemId = Number(row && row.id ? row.id : 0);
+    if (itemId) {
+      await classifyReplyAiItem(env, itemId);
+    }
+  }
+}
+
+async function reclassifyRecentReplyAiItemsForUser(env, userId) {
+  await ensureAiFeedSchema(env);
+  const normalizedUserId = String(userId || "").trim();
+  if (!normalizedUserId) {
+    return;
+  }
+
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT rai.id
+      FROM reply_ai_items rai
+      LEFT JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.user_id = ?
+        AND (rar.status IS NULL OR rar.status != 'ready')
+      ORDER BY rai.created_at DESC, rai.id DESC
+      LIMIT ?
+    `
+  ).bind(normalizedUserId, REPLY_AI_RECLASSIFY_LIMIT).all();
+
+  for (const row of results) {
+    const itemId = Number(row && row.id ? row.id : 0);
+    if (itemId) {
+      await classifyReplyAiItem(env, itemId);
+    }
+  }
+}
+
+async function buildAiFeedItems(env, userId, limit) {
+  await ensureAiFeedSchema(env);
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        tp.id,
+        tp.timeline_kind,
+        tp.page_url,
+        tp.status_id,
+        tp.author_handle,
+        tp.author_display_name,
+        tp.post_text,
+        tp.quote_text,
+        tp.link_title,
+        tp.media_mode,
+        tp.text_sparse,
+        tp.seen_at,
+        tar.blocked,
+        tar.matched_blocked_terms_json,
+        tar.confidence,
+        tar.reason_short,
+        tar.limited_by_video,
+        tar.status,
+        tar.model
+      FROM timeline_posts tp
+      LEFT JOIN timeline_ai_results tar
+        ON tar.post_id = tp.id
+      WHERE tp.user_id = ?
+        AND COALESCE(tar.blocked, 0) = 0
+        AND COALESCE(tar.status, 'skipped') IN ('ready', 'failed', 'skipped')
+      ORDER BY tp.seen_at DESC, tp.id DESC
+      LIMIT ?
+    `
+  ).bind(userId, limit).all();
+
+  return results.map((row) => ({
+    id: Number(row.id || 0),
+    timelineKind: row.timeline_kind || "unknown",
+    pageUrl: row.page_url || "",
+    statusId: row.status_id || "",
+    authorHandle: row.author_handle || "",
+    authorDisplayName: row.author_display_name || "",
+    postText: row.post_text || "",
+    quoteText: row.quote_text || "",
+    linkTitle: row.link_title || "",
+    mediaMode: normalizeMediaMode(row.media_mode),
+    textSparse: Number(row.text_sparse || 0) === 1,
+    seenAt: row.seen_at || "",
+    ai: {
+      blocked: Number(row.blocked || 0) === 1,
+      matchedBlockedTerms: normalizeBlockedTopicTerms(parseJsonArray(row.matched_blocked_terms_json)),
+      confidence: String(row.confidence || "low"),
+      reasonShort: row.reason_short || "",
+      limitedByVideo: Number(row.limited_by_video || 0) === 1,
+      status: String(row.status || "skipped"),
+      model: row.model || ""
+    }
+  }));
+}
+
+function normalizeReplyAiStringList(value, allowedSet, maxItems) {
+  const source = Array.isArray(value) ? value : [];
+  const seen = new Set();
+  const normalized = [];
+  source.forEach((item) => {
+    const next = String(item || "").trim();
+    if (!next) {
+      return;
+    }
+    const normalizedKey = next.toLowerCase();
+    if ((allowedSet && !allowedSet.has(normalizedKey) && !allowedSet.has(next)) || seen.has(normalizedKey)) {
+      return;
+    }
+    seen.add(normalizedKey);
+    normalized.push(allowedSet && allowedSet.has(normalizedKey) ? normalizedKey : next);
+  });
+  return normalized.slice(0, maxItems || 8);
+}
+
+function normalizeReplyAiProfileLinks(value) {
+  return Array.isArray(value)
+    ? value
+      .map((item) => normalizeAiFeedText(item, 300))
+      .filter(Boolean)
+      .slice(0, 6)
+    : [];
+}
+
+function normalizeReplyAiProfileFetchStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["not_requested", "ok", "empty", "error", "skipped"].includes(normalized)) {
+    return normalized;
+  }
+  return "not_requested";
+}
+
+function normalizeReplyAiPayload(payload) {
+  const source = payload || {};
+  return {
+    syncKey: String(source.syncKey || "").trim(),
+    deviceId: String(source.deviceId || "").trim(),
+    threadUrl: normalizeAiFeedText(source.threadUrl, 1200),
+    threadStatusId: String(source.threadStatusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
+    replyStatusId: String(source.replyStatusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
+    replyHandle: normalizeAiHandle(source.replyHandle),
+    replyDisplayName: normalizeAiFeedText(source.replyDisplayName, 200),
+    replyText: normalizeAiFeedText(source.replyText, 1200),
+    mainPostText: normalizeAiFeedText(source.mainPostText, 1200),
+    accountProtected: Number(source.accountProtected || 0) === 1,
+    profilePath: normalizeAiFeedText(source.profilePath, 240),
+    profileBioText: normalizeAiFeedText(source.profileBioText, 320),
+    profileSignalTags: normalizeReplyAiStringList(source.profileSignalTags, REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    profileLinks: normalizeReplyAiProfileLinks(source.profileLinks),
+    profileFetchStatus: normalizeReplyAiProfileFetchStatus(source.profileFetchStatus),
+    profileFetchedAt: normalizeAiFeedText(source.profileFetchedAt, 80),
+    createdAt: new Date().toISOString()
+  };
+}
+
+function normalizeReplyAiClientItemId(value, fallback) {
+  const normalized = String(value || fallback || "").trim().slice(0, 160);
+  return normalized || String(fallback || "").trim().slice(0, 160);
+}
+
+function normalizeReplyAiBatchPayload(payload) {
+  const source = payload || {};
+  const syncKey = String(source.syncKey || "").trim();
+  const deviceId = String(source.deviceId || "").trim();
+  const sharedThreadUrl = normalizeAiFeedText(source.threadUrl, 1200);
+  const sharedThreadStatusId = String(source.threadStatusId || "").trim().replace(/[^\d]/g, "").slice(0, 32);
+  const sharedMainPostText = normalizeAiFeedText(source.mainPostText, 1200);
+  const rawItems = Array.isArray(source.items) ? source.items : [];
+
+  return {
+    syncKey,
+    deviceId,
+    items: rawItems.slice(0, REPLY_AI_BATCH_MAX_ITEMS).map((item, index) => {
+      const normalized = normalizeReplyAiPayload(Object.assign({}, item || {}, {
+        syncKey,
+        deviceId,
+        threadUrl: Object.prototype.hasOwnProperty.call(item || {}, "threadUrl")
+          ? item.threadUrl
+          : sharedThreadUrl,
+        threadStatusId: Object.prototype.hasOwnProperty.call(item || {}, "threadStatusId")
+          ? item.threadStatusId
+          : sharedThreadStatusId,
+        mainPostText: Object.prototype.hasOwnProperty.call(item || {}, "mainPostText")
+          ? item.mainPostText
+          : sharedMainPostText
+      }));
+
+      return Object.assign({}, normalized, {
+        clientItemId: normalizeReplyAiClientItemId(item && item.clientItemId, `batch-item-${index + 1}`)
+      });
+    })
+  };
+}
+
+async function buildReplyAiItemFingerprint(itemRow) {
+  const syncKey = String(itemRow && itemRow.syncKey ? itemRow.syncKey : "").trim();
+  if (!syncKey) {
+    return "";
+  }
+
+  const replyStatusId = String(itemRow && itemRow.replyStatusId ? itemRow.replyStatusId : "").trim();
+  if (replyStatusId) {
+    return sha256Hex(JSON.stringify(["reply-ai-status", syncKey, replyStatusId]));
+  }
+
+  const threadStatusId = String(itemRow && itemRow.threadStatusId ? itemRow.threadStatusId : "").trim();
+  const replyHandle = String(itemRow && itemRow.replyHandle ? itemRow.replyHandle : "").trim().toLowerCase();
+  const replyText = normalizeAiComparableText(itemRow && itemRow.replyText ? itemRow.replyText : "");
+  if (!threadStatusId && !replyHandle && !replyText) {
+    return "";
+  }
+
+  return sha256Hex(JSON.stringify([
+    "reply-ai-fallback",
+    syncKey,
+    threadStatusId,
+    replyHandle,
+    replyText.slice(0, 800)
+  ]));
+}
+
+function buildDefaultReplyAiDecision(overrides) {
+  return Object.assign({
+    action: "allow",
+    decisionLayer: "skipped",
+    matchedSafetyLabels: [],
+    matchedProfileSignals: [],
+    confidence: "low",
+    reasonShort: "",
+    status: "skipped",
+    model: ""
+  }, overrides || {});
+}
+
+function cloneReplyAiDecision(decision, overrides) {
+  return buildDefaultReplyAiDecision(Object.assign({}, decision || {}, overrides || {}));
+}
+
+function isFinalReplyAiDecisionStatus(status) {
+  const normalized = String(status || "").trim().toLowerCase();
+  return normalized === "ready" || normalized === "failed" || normalized === "skipped";
+}
+
+function shouldRetryReplyAiDecision(decision) {
+  if (!decision || String(decision.status || "").trim().toLowerCase() !== "failed") {
+    return false;
+  }
+
+  const updatedAtMs = decision && decision.updatedAt ? Date.parse(decision.updatedAt) : 0;
+  if (!updatedAtMs) {
+    return true;
+  }
+
+  return Date.now() - updatedAtMs >= REPLY_AI_FAILURE_RETRY_DELAY_MS;
+}
+
+function buildReplyAiDecisionPayload(itemId, decision) {
+  const source = decision
+    ? buildDefaultReplyAiDecision(decision)
+    : buildDefaultReplyAiDecision({ status: "pending" });
+  const status = decision ? String(source.status || "skipped") : "pending";
+  const action = String(source.action || "allow").trim().toLowerCase() === "hide" ? "hide" : "allow";
+  return {
+    itemId: Number(itemId || 0),
+    action,
+    decisionLayer: normalizeAiFeedText(source.decisionLayer || "skipped", 40),
+    matchedSafetyLabels: normalizeReplyAiStringList(source.matchedSafetyLabels, REPLY_AI_SAFETY_LABELS, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(source.matchedProfileSignals, REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    confidence: ["high", "medium", "low"].includes(String(source.confidence || "").trim().toLowerCase())
+      ? String(source.confidence || "").trim().toLowerCase()
+      : "low",
+    reasonShort: normalizeAiFeedText(source.reasonShort, 120),
+    status,
+    model: normalizeAiFeedText(source.model, 80),
+    isFinal: isFinalReplyAiDecisionStatus(status),
+    shouldHide: action === "hide" && status === "ready"
+  };
+}
+
+function normalizeReplyAiDecision(decision, model, rawResponseJson) {
+  const normalized = normalizeAiModerationResult(decision, {
+    allowedMatchedLabels: REPLY_AI_SAFETY_LABELS,
+    allowedMatchedProfileSignals: REPLY_AI_PROFILE_SIGNAL_LABELS,
+    model,
+    rawResponseMeta: rawResponseJson
+  });
+  const shouldHide = normalized.action === "hide"
+    && normalized.status === "ready"
+    && normalized.confidence === "high"
+    && normalized.matchedLabels.length > 0;
+
+  return {
+    action: shouldHide ? "hide" : "allow",
+    decisionLayer: "ai",
+    matchedSafetyLabels: normalized.matchedLabels,
+    matchedProfileSignals: normalized.matchedProfileSignals,
+    confidence: normalized.confidence,
+    reasonShort: normalized.reasonShort,
+    status: normalized.status,
+    model: normalized.model,
+    rawResponseJson: normalized.rawResponseMeta || null
+  };
+}
+
+async function upsertReplyAiItem(env, payload) {
+  await ensureAiFeedSchema(env);
+  await touchSyncKey(env, payload.syncKey, payload.deviceId);
+
+  const userBinding = await env.DB.prepare(
+    "SELECT user_id FROM sync_keys WHERE sync_key = ? LIMIT 1"
+  ).bind(payload.syncKey).first();
+
+  const itemRow = {
+    syncKey: payload.syncKey,
+    userId: userBinding && userBinding.user_id ? userBinding.user_id : null,
+    deviceId: payload.deviceId,
+    threadUrl: payload.threadUrl,
+    threadStatusId: payload.threadStatusId,
+    replyStatusId: payload.replyStatusId,
+    replyHandle: payload.replyHandle,
+    replyDisplayName: payload.replyDisplayName,
+    replyText: payload.replyText,
+    mainPostText: payload.mainPostText,
+    accountProtected: payload.accountProtected ? 1 : 0,
+    profilePath: payload.profilePath,
+    profileBioText: payload.profileBioText,
+    profileSignalTagsJson: JSON.stringify(payload.profileSignalTags || []),
+    profileLinksJson: JSON.stringify(payload.profileLinks || []),
+    profileFetchStatus: payload.profileFetchStatus,
+    profileFetchedAt: payload.profileFetchedAt || "",
+    createdAt: new Date().toISOString()
+  };
+  itemRow.itemFingerprint = await buildReplyAiItemFingerprint(itemRow);
+
+  if (itemRow.itemFingerprint) {
+    const existing = await env.DB.prepare(
+      "SELECT id FROM reply_ai_items WHERE item_fingerprint = ? LIMIT 1"
+    ).bind(itemRow.itemFingerprint).first();
+    if (existing) {
+      const existingId = Number(existing.id || 0);
+      if (existingId) {
+        await env.DB.prepare(
+          `
+            UPDATE reply_ai_items
+            SET
+              profile_path = CASE WHEN ? != '' THEN ? ELSE profile_path END,
+              profile_bio_text = CASE WHEN ? != '' THEN ? ELSE profile_bio_text END,
+              profile_signal_tags_json = CASE WHEN ? != '[]' THEN ? ELSE profile_signal_tags_json END,
+              profile_links_json = CASE WHEN ? != '[]' THEN ? ELSE profile_links_json END,
+              profile_fetch_status = CASE WHEN ? != 'not_requested' THEN ? ELSE profile_fetch_status END,
+              profile_fetched_at = CASE WHEN ? != '' THEN ? ELSE profile_fetched_at END
+            WHERE id = ?
+          `
+        ).bind(
+          itemRow.profilePath,
+          itemRow.profilePath,
+          itemRow.profileBioText,
+          itemRow.profileBioText,
+          itemRow.profileSignalTagsJson,
+          itemRow.profileSignalTagsJson,
+          itemRow.profileLinksJson,
+          itemRow.profileLinksJson,
+          itemRow.profileFetchStatus,
+          itemRow.profileFetchStatus,
+          itemRow.profileFetchedAt,
+          itemRow.profileFetchedAt,
+          existingId
+        ).run();
+      }
+      return {
+        deduped: true,
+        itemId: existingId
+      };
+    }
+  }
+
+  const result = await env.DB.prepare(
+    `
+      INSERT INTO reply_ai_items (
+        sync_key,
+        user_id,
+        device_id,
+        thread_url,
+        thread_status_id,
+        reply_status_id,
+        reply_handle,
+        reply_display_name,
+        reply_text,
+        main_post_text,
+        account_protected,
+        profile_path,
+        profile_bio_text,
+        profile_signal_tags_json,
+        profile_links_json,
+        profile_fetch_status,
+        profile_fetched_at,
+        created_at,
+        item_fingerprint
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+  ).bind(
+    itemRow.syncKey,
+    itemRow.userId,
+    itemRow.deviceId,
+    itemRow.threadUrl,
+    itemRow.threadStatusId,
+    itemRow.replyStatusId,
+    itemRow.replyHandle,
+    itemRow.replyDisplayName,
+    itemRow.replyText,
+    itemRow.mainPostText,
+    itemRow.accountProtected,
+    itemRow.profilePath,
+    itemRow.profileBioText,
+    itemRow.profileSignalTagsJson,
+    itemRow.profileLinksJson,
+    itemRow.profileFetchStatus,
+    itemRow.profileFetchedAt || null,
+    itemRow.createdAt,
+    itemRow.itemFingerprint
+  ).run();
+
+  return {
+    deduped: false,
+    itemId: Number(result && result.meta && result.meta.last_row_id ? result.meta.last_row_id : 0)
+  };
+}
+
+async function getReplyAiItemById(env, itemId) {
+  await ensureAiFeedSchema(env);
+  if (!itemId) {
+    return null;
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        id,
+        sync_key,
+        user_id,
+        device_id,
+        thread_url,
+        thread_status_id,
+        reply_status_id,
+        reply_handle,
+        reply_display_name,
+        reply_text,
+        main_post_text,
+        account_protected,
+        profile_path,
+        profile_bio_text,
+        profile_signal_tags_json,
+        profile_links_json,
+        profile_fetch_status,
+        profile_fetched_at,
+        created_at
+      FROM reply_ai_items
+      WHERE id = ?
+      LIMIT 1
+    `
+  ).bind(itemId).first();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: Number(row.id || 0),
+    syncKey: row.sync_key || "",
+    userId: row.user_id || "",
+    deviceId: row.device_id || "",
+    threadUrl: row.thread_url || "",
+    threadStatusId: row.thread_status_id || "",
+    replyStatusId: row.reply_status_id || "",
+    replyHandle: row.reply_handle || "",
+    replyDisplayName: row.reply_display_name || "",
+    replyText: row.reply_text || "",
+    mainPostText: row.main_post_text || "",
+    accountProtected: Number(row.account_protected || 0) === 1,
+    profilePath: row.profile_path || "",
+    profileBioText: row.profile_bio_text || "",
+    profileSignalTags: normalizeReplyAiStringList(parseJsonArray(row.profile_signal_tags_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    profileLinks: normalizeReplyAiProfileLinks(parseJsonArray(row.profile_links_json)),
+    profileFetchStatus: normalizeReplyAiProfileFetchStatus(row.profile_fetch_status),
+    profileFetchedAt: row.profile_fetched_at || "",
+    createdAt: row.created_at || ""
+  };
+}
+
+async function upsertReplyAiResult(env, itemId, decision) {
+  await ensureAiFeedSchema(env);
+  if (!itemId) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const normalized = Object.assign(buildDefaultReplyAiDecision(), decision || {});
+  await env.DB.prepare(
+    `
+      INSERT INTO reply_ai_results (
+        item_id,
+        action,
+        decision_layer,
+        matched_safety_labels_json,
+        matched_profile_signals_json,
+        confidence,
+        reason_short,
+        status,
+        model,
+        raw_response_json,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(item_id) DO UPDATE SET
+        action = excluded.action,
+        decision_layer = excluded.decision_layer,
+        matched_safety_labels_json = excluded.matched_safety_labels_json,
+        matched_profile_signals_json = excluded.matched_profile_signals_json,
+        confidence = excluded.confidence,
+        reason_short = excluded.reason_short,
+        status = excluded.status,
+        model = excluded.model,
+        raw_response_json = excluded.raw_response_json,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    itemId,
+    normalized.action === "hide" ? "hide" : "allow",
+    normalizeAiFeedText(normalized.decisionLayer, 40) || "ai",
+    JSON.stringify(normalizeReplyAiStringList(normalized.matchedSafetyLabels, REPLY_AI_SAFETY_LABELS, 8)),
+    JSON.stringify(normalizeReplyAiStringList(normalized.matchedProfileSignals, REPLY_AI_PROFILE_SIGNAL_LABELS, 8)),
+    ["high", "medium", "low"].includes(String(normalized.confidence || "").trim().toLowerCase())
+      ? String(normalized.confidence || "").trim().toLowerCase()
+      : "low",
+    normalizeAiFeedText(normalized.reasonShort, 120),
+    ["ready", "failed", "skipped"].includes(String(normalized.status || "").trim().toLowerCase())
+      ? String(normalized.status || "").trim().toLowerCase()
+      : "skipped",
+    normalizeAiFeedText(normalized.model, 80),
+    normalized.rawResponseJson ? JSON.stringify(normalized.rawResponseJson).slice(0, 12000) : null,
+    now,
+    now
+  ).run();
+}
+
+async function getReplyAiResultByItemId(env, itemId) {
+  await ensureAiFeedSchema(env);
+  if (!itemId) {
+    return null;
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT
+        action,
+        decision_layer,
+        matched_safety_labels_json,
+        matched_profile_signals_json,
+        confidence,
+        reason_short,
+        status,
+        model,
+        raw_response_json,
+        updated_at
+      FROM reply_ai_results
+      WHERE item_id = ?
+      LIMIT 1
+    `
+  ).bind(itemId).first();
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    action: row.action || "allow",
+    decisionLayer: row.decision_layer || "skipped",
+    matchedSafetyLabels: normalizeReplyAiStringList(parseJsonArray(row.matched_safety_labels_json), REPLY_AI_SAFETY_LABELS, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(parseJsonArray(row.matched_profile_signals_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    confidence: String(row.confidence || "low"),
+    reasonShort: row.reason_short || "",
+    status: String(row.status || "skipped"),
+    model: row.model || "",
+    rawResponseJson: row.raw_response_json || "",
+    updatedAt: row.updated_at || ""
+  };
+}
+
+function buildReplyAiProviderScopeKey(userId, settings) {
+  return buildAiProviderScopeKey(userId, settings);
+}
+
+async function getAiProviderCooldownRow(env, scopeKey) {
+  await ensureAiFeedSchema(env);
+  const normalizedScopeKey = String(scopeKey || "").trim();
+  if (!normalizedScopeKey) {
+    return null;
+  }
+
+  return env.DB.prepare(
+    `
+      SELECT
+        scope_key,
+        user_id,
+        provider_base_url,
+        model,
+        failure_count,
+        cooldown_until,
+        last_failure_code,
+        updated_at
+      FROM ai_provider_cooldowns
+      WHERE scope_key = ?
+      LIMIT 1
+    `
+  ).bind(normalizedScopeKey).first();
+}
+
+function getAiProviderCooldownRemainingMs(cooldownRow) {
+  if (!cooldownRow || !cooldownRow.cooldown_until) {
+    return 0;
+  }
+
+  const cooldownUntilMs = Date.parse(String(cooldownRow.cooldown_until || ""));
+  if (!cooldownUntilMs) {
+    return 0;
+  }
+
+  return Math.max(0, cooldownUntilMs - Date.now());
+}
+
+function isAiProviderCoolingDown(cooldownRow) {
+  return getAiProviderCooldownRemainingMs(cooldownRow) > 0;
+}
+
+function buildReplyAiCooldownFailedDecision(settings, cooldownRow, fallbackReason) {
+  const remainingMs = getAiProviderCooldownRemainingMs(cooldownRow);
+  const remainingSeconds = remainingMs > 0 ? Math.ceil(remainingMs / 1000) : 0;
+  const reasonShort = fallbackReason
+    || (remainingSeconds > 0
+      ? `AI 限流冷却中，约 ${remainingSeconds} 秒后自动重试`
+      : "AI 限流冷却中，稍后自动重试");
+
+  return buildDefaultReplyAiDecision({
+    decisionLayer: "failed",
+    reasonShort,
+    status: "failed",
+    model: settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL,
+    rawResponseJson: cooldownRow
+      ? {
+        cooldownUntil: cooldownRow.cooldown_until || "",
+        failureCount: Number(cooldownRow.failure_count || 0)
+      }
+      : null
+  });
+}
+
+async function clearAiProviderCooldown(env, scopeKey, itemRow, settings) {
+  await ensureAiFeedSchema(env);
+  const normalizedScopeKey = String(scopeKey || "").trim();
+  if (!normalizedScopeKey) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  await env.DB.prepare(
+    `
+      INSERT INTO ai_provider_cooldowns (
+        scope_key,
+        user_id,
+        provider_base_url,
+        model,
+        failure_count,
+        cooldown_until,
+        last_failure_code,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, 0, NULL, '', ?, ?)
+      ON CONFLICT(scope_key) DO UPDATE SET
+        user_id = excluded.user_id,
+        provider_base_url = excluded.provider_base_url,
+        model = excluded.model,
+        failure_count = 0,
+        cooldown_until = NULL,
+        last_failure_code = '',
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    normalizedScopeKey,
+    itemRow && itemRow.userId ? itemRow.userId : null,
+    normalizeAiProviderBaseUrl(settings && settings.providerBaseUrl ? settings.providerBaseUrl : DEFAULT_AI_PROVIDER_BASE_URL),
+    normalizeAiModel(settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL),
+    now,
+    now
+  ).run();
+}
+
+async function recordAiProviderFailure(env, scopeKey, itemRow, settings, failureCode) {
+  await ensureAiFeedSchema(env);
+  const normalizedScopeKey = String(scopeKey || "").trim();
+  if (!normalizedScopeKey) {
+    return null;
+  }
+
+  const existing = await getAiProviderCooldownRow(env, normalizedScopeKey);
+  const nextFailureCount = Math.max(1, Number(existing && existing.failure_count ? existing.failure_count : 0) + 1);
+  const stepIndex = Math.min(AI_PROVIDER_COOLDOWN_STEPS_MS.length - 1, Math.max(0, nextFailureCount - 1));
+  const baseDelayMs = Number(AI_PROVIDER_COOLDOWN_STEPS_MS[stepIndex] || REPLY_AI_FAILURE_RETRY_DELAY_MS);
+  const jitterRatio = 1 + ((Math.random() * 2) - 1) * AI_PROVIDER_COOLDOWN_JITTER_RATIO;
+  const cooldownMs = Math.max(5000, Math.round(baseDelayMs * jitterRatio));
+  const cooldownUntil = new Date(Date.now() + cooldownMs).toISOString();
+  const now = new Date().toISOString();
+
+  await env.DB.prepare(
+    `
+      INSERT INTO ai_provider_cooldowns (
+        scope_key,
+        user_id,
+        provider_base_url,
+        model,
+        failure_count,
+        cooldown_until,
+        last_failure_code,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(scope_key) DO UPDATE SET
+        user_id = excluded.user_id,
+        provider_base_url = excluded.provider_base_url,
+        model = excluded.model,
+        failure_count = excluded.failure_count,
+        cooldown_until = excluded.cooldown_until,
+        last_failure_code = excluded.last_failure_code,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    normalizedScopeKey,
+    itemRow && itemRow.userId ? itemRow.userId : null,
+    normalizeAiProviderBaseUrl(settings && settings.providerBaseUrl ? settings.providerBaseUrl : DEFAULT_AI_PROVIDER_BASE_URL),
+    normalizeAiModel(settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL),
+    nextFailureCount,
+    cooldownUntil,
+    normalizeAiFeedText(failureCode, 40),
+    existing && existing.updated_at ? existing.updated_at : now,
+    now
+  ).run();
+
+  return {
+    scope_key: normalizedScopeKey,
+    failure_count: nextFailureCount,
+    cooldown_until: cooldownUntil
+  };
+}
+
+async function listRecentReplyAiHistoryForHandle(env, replyHandle, limit) {
+  await ensureAiFeedSchema(env);
+  const normalizedHandle = normalizeAiHandle(replyHandle);
+  if (!normalizedHandle) {
+    return [];
+  }
+
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        rai.id,
+        rai.reply_text,
+        rai.created_at,
+        rar.action,
+        rar.decision_layer,
+        rar.matched_safety_labels_json,
+        rar.matched_profile_signals_json,
+        rar.confidence,
+        rar.reason_short,
+        rar.status,
+        rar.model,
+        rar.updated_at
+      FROM reply_ai_items rai
+      JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.reply_handle = ?
+        AND rar.status = 'ready'
+      ORDER BY rar.updated_at DESC, rai.id DESC
+      LIMIT ?
+    `
+  ).bind(normalizedHandle, Math.max(1, Number(limit || REPLY_AI_BATCH_HISTORY_LIMIT) || REPLY_AI_BATCH_HISTORY_LIMIT)).all();
+
+  return results.map((row) => ({
+    id: Number(row.id || 0),
+    replyText: row.reply_text || "",
+    createdAt: row.created_at || "",
+    action: row.action || "allow",
+    decisionLayer: row.decision_layer || "ai",
+    matchedSafetyLabels: normalizeReplyAiStringList(parseJsonArray(row.matched_safety_labels_json), REPLY_AI_SAFETY_LABELS, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(parseJsonArray(row.matched_profile_signals_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    confidence: String(row.confidence || "low"),
+    reasonShort: row.reason_short || "",
+    status: String(row.status || "ready"),
+    model: row.model || "",
+    updatedAt: row.updated_at || ""
+  }));
+}
+
+function isReplyAiHistoryRowWithinWindow(row, windowMs) {
+  if (!row || !windowMs) {
+    return false;
+  }
+
+  const updatedAtMs = row.updatedAt ? Date.parse(row.updatedAt) : 0;
+  return Boolean(updatedAtMs) && (Date.now() - updatedAtMs <= windowMs);
+}
+
+function buildReplyAiReusedDecision(historyRow, decisionLayer, reasonShort) {
+  return buildDefaultReplyAiDecision({
+    action: historyRow && historyRow.action === "hide" ? "hide" : "allow",
+    decisionLayer: decisionLayer || "reuse",
+    matchedSafetyLabels: historyRow && Array.isArray(historyRow.matchedSafetyLabels) ? historyRow.matchedSafetyLabels.slice() : [],
+    matchedProfileSignals: historyRow && Array.isArray(historyRow.matchedProfileSignals) ? historyRow.matchedProfileSignals.slice() : [],
+    confidence: historyRow && historyRow.confidence ? historyRow.confidence : "low",
+    reasonShort: normalizeAiFeedText(reasonShort || (historyRow && historyRow.reasonShort ? historyRow.reasonShort : ""), 120),
+    status: "ready",
+    model: historyRow && historyRow.model ? historyRow.model : ""
+  });
+}
+
+async function findReusableReplyAiDecision(env, itemRow, riskRow) {
+  const handle = normalizeAiHandle(itemRow && itemRow.replyHandle ? itemRow.replyHandle : "");
+  if (!handle || !itemRow || itemRow.accountProtected) {
+    return null;
+  }
+
+  const normalizedReplyText = normalizeAiComparableText(itemRow.replyText).slice(0, 800);
+  const templateKey = buildTemplateRuleAnalysis(itemRow.replyText).templateKey;
+  const heuristicSummary = buildReplyAiHeuristicSummary(itemRow, riskRow);
+  const historyRows = await listRecentReplyAiHistoryForHandle(env, handle, REPLY_AI_BATCH_HISTORY_LIMIT);
+  let latestHighConfidenceHideRow = null;
+
+  for (const row of historyRows) {
+    if (!latestHighConfidenceHideRow && row.action === "hide" && row.confidence === "high") {
+      latestHighConfidenceHideRow = row;
+    }
+
+    const historyNormalizedReply = normalizeAiComparableText(row.replyText).slice(0, 800);
+    if (normalizedReplyText && historyNormalizedReply === normalizedReplyText) {
+      if (row.action === "hide" && row.confidence === "high"
+        && isReplyAiHistoryRowWithinWindow(row, REPLY_AI_HIDE_REUSE_WINDOW_DAYS * 24 * 60 * 60 * 1000)) {
+        return buildReplyAiReusedDecision(row, "reuse_exact_hide", "命中同账号同文案复用");
+      }
+
+      if (row.action === "allow"
+        && isReplyAiHistoryRowWithinWindow(row, REPLY_AI_ALLOW_REUSE_WINDOW_HOURS * 60 * 60 * 1000)) {
+        return buildReplyAiReusedDecision(row, "reuse_exact_allow", "命中同账号同文案复用");
+      }
+    }
+
+    if (!templateKey || row.action !== "hide" || row.confidence !== "high") {
+      continue;
+    }
+
+    const historyTemplateKey = buildTemplateRuleAnalysis(row.replyText).templateKey;
+    if (historyTemplateKey !== templateKey) {
+      continue;
+    }
+
+    if (!isReplyAiHistoryRowWithinWindow(row, REPLY_AI_TEMPLATE_REUSE_WINDOW_HOURS * 60 * 60 * 1000)) {
+      continue;
+    }
+
+    if (
+      heuristicSummary.accountMetadataRisk
+      || heuristicSummary.shortOrThinReply
+      || heuristicSummary.hasSpamTemplateSignal
+      || heuristicSummary.hasEroticMentionRedirect
+      || heuristicSummary.hasExplicitEroticBait
+      || heuristicSummary.hasGeoMeetupBait
+      || heuristicSummary.hasBaitQuestionShape
+      || heuristicSummary.hasShareLinkScam
+    ) {
+      return buildReplyAiReusedDecision(row, "reuse_template_hide", "命中同账号同模板复用");
+    }
+  }
+
+  if (
+    latestHighConfidenceHideRow
+    && Number(riskRow && riskRow.recent_high_confidence_hide_count ? riskRow.recent_high_confidence_hide_count : 0) > 0
+    && isReplyAiHistoryRowWithinWindow(latestHighConfidenceHideRow, REPLY_AI_ACCOUNT_REUSE_WINDOW_HOURS * 60 * 60 * 1000)
+    && heuristicSummary.accountMetadataRisk
+    && (
+      heuristicSummary.shortOrThinReply
+      || heuristicSummary.hasSpamTemplateSignal
+      || heuristicSummary.hasEroticMentionRedirect
+      || heuristicSummary.hasExplicitEroticBait
+      || heuristicSummary.hasGeoMeetupBait
+      || heuristicSummary.hasBaitQuestionShape
+      || heuristicSummary.hasShareLinkScam
+    )
+  ) {
+    return buildReplyAiReusedDecision(latestHighConfidenceHideRow, "reuse_account_hide", "命中高风险账号短期复用");
+  }
+
+  return null;
+}
+
+async function getReplyAiAccountRiskRow(env, replyHandle) {
+  await ensureAiFeedSchema(env);
+  const normalizedHandle = normalizeAiHandle(replyHandle);
+  if (!normalizedHandle) {
+    return null;
+  }
+
+  return env.DB.prepare(
+    `
+      SELECT
+        reply_handle,
+        total_high_confidence_hide_count,
+        recent_high_confidence_hide_count,
+        active_global_block,
+        first_flagged_at,
+        last_flagged_at,
+        global_blocked_at,
+        last_reason_short,
+        last_item_id,
+        updated_at
+      FROM reply_ai_account_risk
+      WHERE reply_handle = ?
+      LIMIT 1
+    `
+  ).bind(normalizedHandle).first();
+}
+
+async function isReplyHandleGloballyBlocked(env, replyHandle) {
+  const row = await getReplyAiAccountRiskRow(env, replyHandle);
+  return Boolean(row && Number(row.active_global_block || 0) === 1);
+}
+
+async function refreshReplyAiAccountRisk(env, itemRow, decision) {
+  await ensureAiFeedSchema(env);
+  const handle = normalizeAiHandle(itemRow && itemRow.replyHandle ? itemRow.replyHandle : "");
+  if (!handle || !itemRow || itemRow.accountProtected) {
+    return null;
+  }
+
+  const existing = await getReplyAiAccountRiskRow(env, handle);
+  const cutoffIso = new Date(Date.now() - (REPLY_AI_STRIKE_WINDOW_DAYS * 24 * 60 * 60 * 1000)).toISOString();
+  const totalRow = await env.DB.prepare(
+    `
+      SELECT COUNT(*) AS total_count
+      FROM reply_ai_items rai
+      JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.reply_handle = ?
+        AND rai.account_protected = 0
+        AND rar.status = 'ready'
+        AND rar.action = 'hide'
+        AND rar.confidence = 'high'
+    `
+  ).bind(handle).first();
+  const recentRow = await env.DB.prepare(
+    `
+      SELECT COUNT(*) AS total_count
+      FROM reply_ai_items rai
+      JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.reply_handle = ?
+        AND rai.account_protected = 0
+        AND rai.created_at >= ?
+        AND rar.status = 'ready'
+        AND rar.action = 'hide'
+        AND rar.confidence = 'high'
+    `
+  ).bind(handle, cutoffIso).first();
+  const latestRow = await env.DB.prepare(
+    `
+      SELECT rai.id, rai.created_at, rar.reason_short
+      FROM reply_ai_items rai
+      JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.reply_handle = ?
+        AND rai.account_protected = 0
+        AND rar.status = 'ready'
+        AND rar.action = 'hide'
+        AND rar.confidence = 'high'
+      ORDER BY rai.created_at DESC, rai.id DESC
+      LIMIT 1
+    `
+  ).bind(handle).first();
+
+  const totalCount = Number(totalRow && totalRow.total_count ? totalRow.total_count : 0);
+  const recentCount = Number(recentRow && recentRow.total_count ? recentRow.total_count : 0);
+  const shouldBlock = Boolean(existing && Number(existing.active_global_block || 0) === 1)
+    || recentCount >= REPLY_AI_GLOBAL_BLOCK_THRESHOLD;
+  const now = new Date().toISOString();
+  const firstFlaggedAt = existing && existing.first_flagged_at
+    ? existing.first_flagged_at
+    : (latestRow && latestRow.created_at ? latestRow.created_at : now);
+  const lastFlaggedAt = latestRow && latestRow.created_at ? latestRow.created_at : now;
+  const globalBlockedAt = shouldBlock
+    ? (existing && existing.global_blocked_at ? existing.global_blocked_at : now)
+    : null;
+
+  await env.DB.prepare(
+    `
+      INSERT INTO reply_ai_account_risk (
+        reply_handle,
+        total_high_confidence_hide_count,
+        recent_high_confidence_hide_count,
+        active_global_block,
+        first_flagged_at,
+        last_flagged_at,
+        global_blocked_at,
+        last_reason_short,
+        last_item_id,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(reply_handle) DO UPDATE SET
+        total_high_confidence_hide_count = excluded.total_high_confidence_hide_count,
+        recent_high_confidence_hide_count = excluded.recent_high_confidence_hide_count,
+        active_global_block = excluded.active_global_block,
+        first_flagged_at = excluded.first_flagged_at,
+        last_flagged_at = excluded.last_flagged_at,
+        global_blocked_at = excluded.global_blocked_at,
+        last_reason_short = excluded.last_reason_short,
+        last_item_id = excluded.last_item_id,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    handle,
+    totalCount,
+    recentCount,
+    shouldBlock ? 1 : 0,
+    firstFlaggedAt,
+    lastFlaggedAt,
+    globalBlockedAt,
+    normalizeAiFeedText((decision && decision.reasonShort) || (latestRow && latestRow.reason_short) || "", 120),
+    itemRow.id || (latestRow && latestRow.id ? Number(latestRow.id || 0) : null),
+    now
+  ).run();
+
+  return {
+    replyHandle: handle,
+    totalHighConfidenceHideCount: totalCount,
+    recentHighConfidenceHideCount: recentCount,
+    activeGlobalBlock: shouldBlock,
+    globalBlockedAt
+  };
+}
+
+function buildReplyAiHeuristicSummary(itemRow, riskRow) {
+  const replyText = String(itemRow && itemRow.replyText ? itemRow.replyText : "");
+  const displayName = String(itemRow && itemRow.replyDisplayName ? itemRow.replyDisplayName : "");
+  const handle = String(itemRow && itemRow.replyHandle ? itemRow.replyHandle : "");
+  const rawHandle = handle.replace(/^@/, "");
+  const normalizedReply = normalizeRuleText(replyText);
+  const compactReply = buildCompactRuleText(replyText);
+  const emojiCount = Array.from(String(replyText || "").matchAll(EMOJI_PATTERN)).length;
+  const payloadText = normalizedReply
+    .replace(EMOJI_PATTERN, "")
+    .replace(COMPACT_PUNCTUATION_PATTERN, "")
+    .replace(/[$￥¥€£]/g, "")
+    .replace(/\s+/g, "");
+  const hasMinimalTextPayload = emojiCount > 0 && Array.from(payloadText).length <= 1;
+  const hasFragmentedSymbolicReply = looksLikeFragmentedSymbolicReply(replyText);
+  const hasLowInformationBadge = looksLikeLowInformationBadge(replyText);
+  const hasLongDigitHandle = /\d{6,}/.test(rawHandle);
+  const suspiciousHandle = handleLooksSuspicious(handle);
+  const lureDisplayName = displayNameLooksLure(displayName);
+  const highRiskDisplayName = displayNameLooksHighRisk(displayName);
+  const hasShareLinkScam = looksLikeShareLinkScam(replyText);
+  const hasGeoMeetupBait = looksLikeGeoMeetupBait(replyText);
+  const hasBaitQuestionShape = looksLikeBaitQuestionShape(replyText);
+  const hasExplicitEroticBait = looksLikeExplicitEroticBait(replyText);
+  const hasEroticMentionRedirect = looksLikeEroticMentionRedirect(replyText);
+  const hasSpamTemplateSignal = looksLikeSpamTemplateSignal(replyText);
+  const accountMetadataRisk = highRiskDisplayName
+    || (lureDisplayName && suspiciousHandle)
+    || (lureDisplayName && hasLongDigitHandle)
+    || (suspiciousHandle && hasLongDigitHandle);
+  const shortOrThinReply = compactReply.length === 0
+    || compactReply.length <= 12
+    || hasMinimalTextPayload
+    || hasFragmentedSymbolicReply
+    || hasLowInformationBadge;
+  const evidenceNotes = [];
+
+  if (highRiskDisplayName) {
+    evidenceNotes.push("display name itself contains high-risk drug/abuse language");
+  } else if (lureDisplayName) {
+    evidenceNotes.push("display name has lure/solicitation wording");
+  }
+  if (suspiciousHandle) {
+    evidenceNotes.push("handle shape looks disposable or marketing-oriented");
+  }
+  if (hasLongDigitHandle) {
+    evidenceNotes.push("handle contains a long digit run");
+  }
+  if (hasFragmentedSymbolicReply) {
+    evidenceNotes.push("reply is fragmented emoji/symbol noise rather than normal conversation");
+  }
+  if (hasLowInformationBadge) {
+    evidenceNotes.push("reply is extremely low-information");
+  }
+  if (hasMinimalTextPayload) {
+    evidenceNotes.push("reply text payload is nearly empty");
+  }
+  if (hasShareLinkScam) {
+    evidenceNotes.push("reply contains a share-link scam pattern");
+  }
+  if (hasExplicitEroticBait || hasEroticMentionRedirect) {
+    evidenceNotes.push("reply includes erotic bait or redirects attention to another account");
+  }
+  if (hasSpamTemplateSignal) {
+    evidenceNotes.push("reply matches a known spam template");
+  }
+  if (hasGeoMeetupBait || hasBaitQuestionShape) {
+    evidenceNotes.push("reply shape resembles meetup/contact bait");
+  }
+  if (Number(riskRow && riskRow.total_high_confidence_hide_count ? riskRow.total_high_confidence_hide_count : 0) > 0) {
+    evidenceNotes.push("this account already has prior high-confidence AI hides");
+  }
+
+  return {
+    highRiskDisplayName,
+    lureDisplayName,
+    suspiciousHandle,
+    hasLongDigitHandle,
+    accountMetadataRisk,
+    hasMinimalTextPayload,
+    hasFragmentedSymbolicReply,
+    hasLowInformationBadge,
+    shortOrThinReply,
+    hasShareLinkScam,
+    hasGeoMeetupBait,
+    hasBaitQuestionShape,
+    hasExplicitEroticBait,
+    hasEroticMentionRedirect,
+    hasSpamTemplateSignal,
+    evidenceNotes
+  };
+}
+
+function buildReplyAiDecisionSchema() {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      action: {
+        type: "string",
+        enum: ["hide", "allow"]
+      },
+      matchedLabels: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: Array.from(REPLY_AI_SAFETY_LABELS).filter((item) => item !== "global_blocklist")
+        }
+      },
+      matchedProfileSignals: {
+        type: "array",
+        items: {
+          type: "string",
+          enum: Array.from(REPLY_AI_PROFILE_SIGNAL_LABELS)
+        }
+      },
+      confidence: {
+        type: "string",
+        enum: ["high", "medium", "low"]
+      },
+      reasonShort: {
+        type: "string"
+      },
+      status: {
+        type: "string",
+        enum: ["ready", "failed", "skipped"]
+      }
+    },
+    required: [
+      "action",
+      "matchedLabels",
+      "matchedProfileSignals",
+      "confidence",
+      "reasonShort",
+      "status"
+    ]
+  };
+}
+
+function buildReplyAiBatchDecisionSchema() {
+  const decisionSchema = buildReplyAiDecisionSchema();
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      decisions: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          properties: Object.assign({}, decisionSchema.properties, {
+            clientItemId: {
+              type: "string"
+            }
+          }),
+          required: ["clientItemId"].concat(decisionSchema.required)
+        }
+      }
+    },
+    required: ["decisions"]
+  };
+}
+
+function buildReplyAiProviderPrompt(settings, options) {
+  const isBatch = Boolean(options && options.isBatch);
+  return [
+    isBatch
+      ? "You are the primary moderation decision-maker for multiple independent X replies."
+      : "You are the primary moderation decision-maker for a single X reply.",
+    "Hide only when the reply is clearly spammy, sexual solicitation, contact redirect, scam, meaningless bait, or dangerous profile-link risk.",
+    "You must evaluate account metadata as first-class evidence, not just reply text.",
+    "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
+    "Combined weak signals across name, handle, reply text, profile, and prior risk history can justify a high-confidence hide when they clearly form a lure/spam pattern.",
+    "Do not ignore suspicious names or suspicious handles merely because the reply text itself is short.",
+    "Profile bio and profile links are auxiliary evidence only and must never be the sole reason to hide normal discussion.",
+    "Protected accounts (followed or verified) should be treated more leniently and only hidden when the evidence is very strong.",
+    "If confidence is not high, return action allow.",
+    "Use matchedLabels only from the provided enum.",
+    "Use matchedProfileSignals only from the provided enum.",
+    isBatch
+      ? "Return exactly one decision for every clientItemId in the batch, and preserve each clientItemId exactly."
+      : "",
+    settings && settings.moderationPrompt
+      ? `Additional operator guidance: ${settings.moderationPrompt}`
+      : ""
+  ].filter(Boolean).join(" ");
+}
+
+function buildReplyAiProviderInputItem(clientItemId, itemRow, riskRow) {
+  return {
+    clientItemId: normalizeReplyAiClientItemId(clientItemId, itemRow && itemRow.id ? `reply-ai-${itemRow.id}` : "reply-ai-item"),
+    reply: {
+      threadUrl: itemRow.threadUrl,
+      threadStatusId: itemRow.threadStatusId,
+      replyStatusId: itemRow.replyStatusId,
+      replyHandle: itemRow.replyHandle,
+      replyDisplayName: itemRow.replyDisplayName,
+      replyText: itemRow.replyText,
+      mainPostText: itemRow.mainPostText,
+      accountProtected: Boolean(itemRow.accountProtected)
+    },
+    profile: {
+      path: itemRow.profilePath,
+      bioText: itemRow.profileBioText,
+      signalTags: itemRow.profileSignalTags,
+      links: itemRow.profileLinks,
+      fetchStatus: itemRow.profileFetchStatus
+    },
+    heuristics: buildReplyAiHeuristicSummary(itemRow, riskRow),
+    history: {
+      priorHighConfidenceHideCount: Number(riskRow && riskRow.total_high_confidence_hide_count ? riskRow.total_high_confidence_hide_count : 0),
+      recentHighConfidenceHideCount: Number(riskRow && riskRow.recent_high_confidence_hide_count ? riskRow.recent_high_confidence_hide_count : 0),
+      alreadyOnGlobalBlocklist: Boolean(riskRow && Number(riskRow.active_global_block || 0) === 1)
+    }
+  };
+}
+
+async function requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow) {
+  const response = await requestAiModerationTaskFromProvider(buildAiModerationTask({
+    taskType: AI_MODERATION_TASK_TYPES.REPLY_REALTIME_MODERATION,
+    providerConfig: settings,
+    schemaName: "reply_moderation_decision",
+    responseSchema: buildReplyAiDecisionSchema(),
+    developerPrompt: buildReplyAiProviderPrompt(settings, { isBatch: false }),
+    userPayloadText: JSON.stringify(buildReplyAiProviderInputItem("single-item", itemRow, riskRow)),
+    metadata: {
+      reasoningEffort: "low"
+    }
+  }));
+
+  return normalizeReplyAiDecision(response.parsed, response.model, response.responseMeta);
+}
+
+async function requestReplyAiBatchDecisionsFromProvider(env, settings, batchEntries) {
+  const expectedClientIds = new Set();
+  const items = batchEntries.map((entry) => {
+    const clientItemId = normalizeReplyAiClientItemId(
+      entry && entry.clientItemId,
+      entry && entry.itemRow && entry.itemRow.id ? `reply-ai-${entry.itemRow.id}` : "reply-ai-item"
+    );
+    expectedClientIds.add(clientItemId);
+    return buildReplyAiProviderInputItem(clientItemId, entry.itemRow, entry.riskRow);
+  });
+  const response = await requestAiModerationTaskFromProvider(buildAiModerationTask({
+    taskType: AI_MODERATION_TASK_TYPES.REPLY_REALTIME_MODERATION,
+    providerConfig: settings,
+    schemaName: "reply_moderation_batch",
+    responseSchema: buildReplyAiBatchDecisionSchema(),
+    developerPrompt: buildReplyAiProviderPrompt(settings, { isBatch: true }),
+    userPayloadText: JSON.stringify({ items }),
+    metadata: {
+      reasoningEffort: "low"
+    }
+  }));
+  const decisionRows = response && response.parsed && Array.isArray(response.parsed.decisions)
+    ? response.parsed.decisions
+    : [];
+  const decisionMap = new Map();
+
+  decisionRows.forEach((row) => {
+    const clientItemId = normalizeReplyAiClientItemId(row && row.clientItemId, "");
+    if (!clientItemId || !expectedClientIds.has(clientItemId) || decisionMap.has(clientItemId)) {
+      return;
+    }
+
+    decisionMap.set(clientItemId, normalizeReplyAiDecision(row, response.model, {
+      id: response.responseMeta && response.responseMeta.id ? response.responseMeta.id : "",
+      outputText: response.responseMeta && response.responseMeta.outputText ? response.responseMeta.outputText : "",
+      clientItemId
+    }));
+  });
+
+  return decisionMap;
+}
+
+function buildReplyAiNotFoundDecision() {
+  return buildDefaultReplyAiDecision({
+    status: "failed",
+    decisionLayer: "failed",
+    reasonShort: "样本不存在"
+  });
+}
+
+function buildReplyAiStaticDecision(itemRow, settings) {
+  if (!itemRow) {
+    return buildReplyAiNotFoundDecision();
+  }
+
+  if (!itemRow.userId) {
+    return buildDefaultReplyAiDecision({
+      decisionLayer: "skipped",
+      reasonShort: "等待账号绑定",
+      status: "skipped"
+    });
+  }
+
+  if (!settings.replyAiEnabled) {
+    return buildDefaultReplyAiDecision({
+      decisionLayer: "skipped",
+      reasonShort: "回复区 AI 审核已关闭",
+      status: "skipped"
+    });
+  }
+
+  if (!String(settings.apiKey || "").trim()) {
+    return buildDefaultReplyAiDecision({
+      decisionLayer: "skipped",
+      reasonShort: "未配置用户 AI Key",
+      status: "skipped",
+      model: settings.model
+    });
+  }
+
+  if (!itemRow.replyText && !itemRow.replyDisplayName && !itemRow.replyHandle) {
+    return buildDefaultReplyAiDecision({
+      decisionLayer: "skipped",
+      reasonShort: "回复信息不足",
+      status: "skipped",
+      model: settings.model
+    });
+  }
+
+  return null;
+}
+
+function buildReplyAiBlockedDecision() {
+  return buildDefaultReplyAiDecision({
+    action: "hide",
+    decisionLayer: "global_blocklist",
+    matchedSafetyLabels: ["global_blocklist"],
+    confidence: "high",
+    reasonShort: "命中全局账号屏蔽名单",
+    status: "ready",
+    model: ""
+  });
+}
+
+async function finalizeReplyAiDecision(env, itemRow, decision) {
+  if (!itemRow || !itemRow.id) {
+    return decision;
+  }
+
+  await upsertReplyAiResult(env, itemRow.id, decision);
+  if (decision.status === "ready" && decision.action === "hide" && decision.confidence === "high") {
+    await refreshReplyAiAccountRisk(env, itemRow, decision);
+  }
+  return decision;
+}
+
+async function classifyReplyAiItemEntries(env, entries) {
+  await ensureAiFeedSchema(env);
+  const normalizedEntries = Array.isArray(entries)
+    ? entries.map((entry, index) => ({
+      clientItemId: normalizeReplyAiClientItemId(entry && entry.clientItemId, `reply-ai-entry-${index + 1}`),
+      itemId: Number(entry && entry.itemId ? entry.itemId : 0)
+    }))
+    : [];
+  const results = new Map();
+  const settingsCache = new Map();
+  const riskCache = new Map();
+  const providerGroups = new Map();
+
+  for (const entry of normalizedEntries) {
+    const itemRow = await getReplyAiItemById(env, entry.itemId);
+    if (!itemRow) {
+      results.set(entry.clientItemId, buildReplyAiNotFoundDecision());
+      continue;
+    }
+
+    itemRow.id = entry.itemId;
+
+    if (await isReplyHandleGloballyBlocked(env, itemRow.replyHandle)) {
+      const blockedDecision = await finalizeReplyAiDecision(env, itemRow, buildReplyAiBlockedDecision());
+      results.set(entry.clientItemId, blockedDecision);
+      continue;
+    }
+
+    let settings = settingsCache.get(itemRow.userId || "");
+    if (!settings) {
+      settings = await getUserAiSettingsWithSecret(env, itemRow.userId);
+      settingsCache.set(itemRow.userId || "", settings);
+    }
+
+    const staticDecision = buildReplyAiStaticDecision(itemRow, settings);
+    if (staticDecision) {
+      results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, staticDecision));
+      continue;
+    }
+
+    const handleKey = normalizeAiHandle(itemRow.replyHandle);
+    let riskRow = handleKey ? riskCache.get(handleKey) : null;
+    if (handleKey && typeof riskRow === "undefined") {
+      riskRow = await getReplyAiAccountRiskRow(env, handleKey);
+      riskCache.set(handleKey, riskRow || null);
+    }
+
+    const reusedDecision = await findReusableReplyAiDecision(env, itemRow, riskRow || null);
+    if (reusedDecision) {
+      results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, reusedDecision));
+      continue;
+    }
+
+    const scopeKey = buildReplyAiProviderScopeKey(itemRow.userId, settings);
+    const groupKey = scopeKey || `user:${itemRow.userId || "missing"}:${settings.model || DEFAULT_AI_FEED_MODEL}`;
+    const group = providerGroups.get(groupKey) || {
+      scopeKey,
+      settings,
+      entries: []
+    };
+    group.entries.push({
+      clientItemId: entry.clientItemId,
+      itemRow,
+      riskRow: riskRow || null
+    });
+    providerGroups.set(groupKey, group);
+  }
+
+  for (const group of providerGroups.values()) {
+    const firstItemRow = group.entries[0] && group.entries[0].itemRow ? group.entries[0].itemRow : null;
+    const cooldownRow = await getAiProviderCooldownRow(env, group.scopeKey);
+    if (isAiProviderCoolingDown(cooldownRow)) {
+      for (const entry of group.entries) {
+        const failedDecision = await finalizeReplyAiDecision(
+          env,
+          entry.itemRow,
+          buildReplyAiCooldownFailedDecision(group.settings, cooldownRow)
+        );
+        results.set(entry.clientItemId, failedDecision);
+      }
+      continue;
+    }
+
+    try {
+      const decisionMap = group.entries.length <= 1
+        ? new Map([
+          [
+            group.entries[0].clientItemId,
+            await requestReplyAiDecisionFromProvider(
+              env,
+              group.settings,
+              group.entries[0].itemRow,
+              group.entries[0].riskRow
+            )
+          ]
+        ])
+        : await requestReplyAiBatchDecisionsFromProvider(env, group.settings, group.entries);
+
+      await clearAiProviderCooldown(env, group.scopeKey, firstItemRow, group.settings);
+
+      for (const entry of group.entries) {
+        const providerDecision = decisionMap.get(entry.clientItemId);
+        const nextDecision = providerDecision
+          ? providerDecision
+          : buildDefaultReplyAiDecision({
+            decisionLayer: "failed",
+            reasonShort: "AI 批量结果不完整",
+            status: "failed",
+            model: group.settings.model
+          });
+        const finalized = await finalizeReplyAiDecision(env, entry.itemRow, nextDecision);
+        results.set(entry.clientItemId, finalized);
+      }
+    } catch (error) {
+      const errorMessage = error && error.message ? String(error.message) : String(error);
+      const retryableProviderFailure = /ai-provider-status-(429|500|502|503|504|529)/i.test(errorMessage);
+      const cooldownState = retryableProviderFailure
+        ? await recordAiProviderFailure(
+          env,
+          group.scopeKey,
+          firstItemRow,
+          group.settings,
+          errorMessage.match(/ai-provider-status-\d+/i)
+            ? String(errorMessage.match(/ai-provider-status-\d+/i)[0] || "")
+            : "provider-failure"
+        )
+        : null;
+
+      for (const entry of group.entries) {
+        const failedDecision = await finalizeReplyAiDecision(
+          env,
+          entry.itemRow,
+          retryableProviderFailure
+            ? buildReplyAiCooldownFailedDecision(group.settings, cooldownState, "AI 限流，稍后自动重试")
+            : buildDefaultReplyAiDecision({
+              decisionLayer: "failed",
+              reasonShort: "AI 判读失败",
+              status: "failed",
+              model: group.settings.model,
+              rawResponseJson: {
+                error: errorMessage
+              }
+            })
+        );
+        results.set(entry.clientItemId, failedDecision);
+      }
+    }
+  }
+
+  return results;
+}
+
+async function classifyReplyAiItem(env, itemId) {
+  const clientItemId = `reply-ai-single-${Number(itemId || 0)}`;
+  const results = await classifyReplyAiItemEntries(env, [{
+    clientItemId,
+    itemId: Number(itemId || 0)
+  }]);
+  return results.get(clientItemId) || buildReplyAiNotFoundDecision();
+}
+
+async function buildRecentReplyAiHides(env, userId, limit) {
+  await ensureAiFeedSchema(env);
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        rai.id,
+        rai.thread_url,
+        rai.thread_status_id,
+        rai.reply_status_id,
+        rai.reply_handle,
+        rai.reply_display_name,
+        rai.reply_text,
+        rai.main_post_text,
+        rai.profile_fetch_status,
+        rar.action,
+        rar.decision_layer,
+        rar.matched_safety_labels_json,
+        rar.matched_profile_signals_json,
+        rar.confidence,
+        rar.reason_short,
+        rar.status,
+        rar.model,
+        rar.updated_at
+      FROM reply_ai_items rai
+      JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.user_id = ?
+        AND rar.status = 'ready'
+        AND rar.action = 'hide'
+      ORDER BY rar.updated_at DESC, rai.id DESC
+      LIMIT ?
+    `
+  ).bind(userId, limit).all();
+
+  return results.map((row) => ({
+    id: Number(row.id || 0),
+    threadUrl: row.thread_url || "",
+    threadStatusId: row.thread_status_id || "",
+    replyStatusId: row.reply_status_id || "",
+    replyHandle: row.reply_handle || "",
+    replyDisplayName: row.reply_display_name || "",
+    replyText: row.reply_text || "",
+    mainPostText: row.main_post_text || "",
+    profileFetchStatus: row.profile_fetch_status || "not_requested",
+    action: row.action || "allow",
+    decisionLayer: row.decision_layer || "ai",
+    matchedSafetyLabels: normalizeReplyAiStringList(parseJsonArray(row.matched_safety_labels_json), REPLY_AI_SAFETY_LABELS, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(parseJsonArray(row.matched_profile_signals_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    confidence: row.confidence || "low",
+    reasonShort: row.reason_short || "",
+    status: row.status || "skipped",
+    model: row.model || "",
+    updatedAt: row.updated_at || ""
+  }));
+}
+
+async function buildGlobalBlockedReplyAccounts(env, limit) {
+  await ensureAiFeedSchema(env);
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        reply_handle,
+        total_high_confidence_hide_count,
+        recent_high_confidence_hide_count,
+        global_blocked_at,
+        last_reason_short,
+        updated_at
+      FROM reply_ai_account_risk
+      WHERE active_global_block = 1
+      ORDER BY updated_at DESC, reply_handle ASC
+      LIMIT ?
+    `
+  ).bind(limit).all();
+
+  return results.map((row) => ({
+    replyHandle: row.reply_handle || "",
+    totalHighConfidenceHideCount: Number(row.total_high_confidence_hide_count || 0),
+    recentHighConfidenceHideCount: Number(row.recent_high_confidence_hide_count || 0),
+    globalBlockedAt: row.global_blocked_at || "",
+    lastReasonShort: row.last_reason_short || "",
+    updatedAt: row.updated_at || ""
+  }));
+}
+
+async function buildReplyAiDashboardPayload(env, userId) {
+  await ensureAiFeedSchema(env);
+  const [settings, recentHides, globalBlockedAccounts] = await Promise.all([
+    getUserAiSettings(env, userId),
+    buildRecentReplyAiHides(env, userId, REPLY_AI_DEFAULT_LIMIT),
+    buildGlobalBlockedReplyAccounts(env, REPLY_AI_DEFAULT_LIMIT)
+  ]);
+
+  return {
+    settings,
+    recentHides,
+    globalBlockedAccounts,
+    stats: {
+      recentHideCount: recentHides.length,
+      globalBlockedAccountCount: globalBlockedAccounts.length
+    }
+  };
+}
+
+function isEventFingerprintConflictError(error) {
+  const message = String(error && error.message ? error.message : "").toLowerCase();
+  return message.includes("unique") && message.includes("event_fingerprint");
 }
 
 function normalizeEmail(value) {
@@ -2347,7 +6751,10 @@ function isCredentialedPath(pathname) {
   return pathname.startsWith("/api/auth/")
     || pathname === "/api/me"
     || pathname === "/api/preferences"
+    || pathname === "/api/ai-settings"
     || pathname === "/api/dashboard"
+    || pathname === "/api/ai-feed"
+    || pathname === "/api/reply-ai"
     || pathname === "/api/account/bind-sync-key"
     || pathname === "/api/developer/confirm-feed"
     || pathname === "/api/developer/dismiss-feed"
@@ -2409,7 +6816,7 @@ function readCookie(request, name) {
   return "";
 }
 
-function buildSessionRefreshHeaders(request, viewer) {
+function buildSessionRefreshHeaders(request, viewer, env) {
   const headers = new Headers();
   if (!viewer) {
     return headers;
@@ -2417,13 +6824,13 @@ function buildSessionRefreshHeaders(request, viewer) {
 
   const sessionId = readCookie(request, SESSION_COOKIE);
   if (sessionId) {
-    headers.set("Set-Cookie", serializeSessionCookie(sessionId));
+    headers.set("Set-Cookie", serializeSessionCookie(sessionId, env));
   }
   return headers;
 }
 
-function serializeSessionCookie(sessionId) {
-  return `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${60 * 60 * 24 * 30}`;
+function serializeSessionCookie(sessionId, env) {
+  return `${SESSION_COOKIE}=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${getSessionMaxAgeSeconds(env)}`;
 }
 
 function clearSessionCookie() {
@@ -2468,6 +6875,21 @@ function looksLikeLowInformationBadge(text) {
   }
 
   return compact.length <= 6 && LOW_INFORMATION_BADGE_PATTERNS.some((pattern) => pattern.test(compact));
+}
+
+function looksLikeFragmentedSymbolicReply(text) {
+  const raw = String(text || "");
+  const compact = buildCompactRuleText(text);
+  const emojiCount = Array.from(raw.matchAll(EMOJI_PATTERN)).length;
+  if (!compact) {
+    return false;
+  }
+
+  return compact.length <= 4 && (
+    emojiCount >= 2
+    || /[%/\\|]/.test(raw)
+    || /[\r\n]/.test(raw)
+  );
 }
 
 function looksLikeGeoMeetupBait(text) {
@@ -2525,6 +6947,47 @@ function looksLikeBaitQuestionShape(text) {
     "单男",
     "破处"
   ].some((term) => compact.includes(term));
+}
+
+function looksLikeExplicitEroticBait(text) {
+  const normalized = normalizeRuleText(text);
+  const compact = buildCompactRuleText(text);
+  if (!compact) {
+    return false;
+  }
+
+  return EXPLICIT_EROTIC_BAIT_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact));
+}
+
+function looksLikeEroticMentionRedirect(text) {
+  const normalized = normalizeRuleText(text);
+  const compact = buildCompactRuleText(text);
+  if (!compact) {
+    return false;
+  }
+
+  const mentionedHandles = Array.from(new Set((normalized.match(ACCOUNT_MENTION_PATTERN) || []).map((entry) => {
+    return String(entry || "").trim().toLowerCase();
+  }).filter(Boolean)));
+  if (mentionedHandles.length === 0) {
+    return false;
+  }
+
+  if (looksLikeExplicitEroticBait(text)) {
+    return true;
+  }
+
+  return EROTIC_MENTION_REDIRECT_MARKERS.some((term) => normalized.includes(term) || compact.includes(term));
+}
+
+function looksLikeSpamTemplateSignal(text) {
+  const normalized = normalizeRuleText(text);
+  const compact = buildCompactRuleText(text);
+  if (!compact) {
+    return false;
+  }
+
+  return SPAM_TEMPLATE_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact));
 }
 
 function findEarliestTemplateSlotIndex(compact, slotDefinition) {
@@ -2734,10 +7197,14 @@ function buildRowKeys(row) {
   const compactKey = protectedGuardApplies ? "" : (compact ? "compact:" + compact : "");
   const geoMeetupBait = protectedGuardApplies ? false : looksLikeGeoMeetupBait(replyText || normalized);
   const baitQuestionShape = protectedGuardApplies ? false : looksLikeBaitQuestionShape(replyText || normalized);
+  const shareLinkScam = protectedGuardApplies ? false : looksLikeShareLinkScam(replyText || normalized);
+  const spamTemplateSignal = protectedGuardApplies ? false : looksLikeSpamTemplateSignal(replyText || normalized);
+  const explicitEroticBait = protectedGuardApplies ? false : looksLikeExplicitEroticBait(replyText || normalized);
+  const eroticMentionRedirect = protectedGuardApplies ? false : looksLikeEroticMentionRedirect(replyText || normalized);
   const lowInformationLureAccount = protectedGuardApplies
     ? false
     : (
-      looksLikeLowInformationBadge(replyText || normalized)
+      (looksLikeLowInformationBadge(replyText || normalized) || looksLikeFragmentedSymbolicReply(replyText || normalized))
       && displayNameLooksLure(row.reply_display_name || row.replyDisplayName || "")
       && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
     );
@@ -2760,9 +7227,25 @@ function buildRowKeys(row) {
             : (
               lowInformationLureAccount
                 ? "pattern:low-information-lure-account"
-                : (matchedTerms.length > 0
-                  ? "pattern:" + matchedTerms.join("|")
-                  : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                : (
+                  shareLinkScam
+                    ? "pattern:share-link-scam"
+                    : (
+                      spamTemplateSignal
+                        ? "pattern:spam-template-signal"
+                        : (
+                          eroticMentionRedirect
+                          ? "pattern:mention-lure-redirect"
+                          : (
+                            explicitEroticBait
+                              ? "pattern:explicit-erotic-bait"
+                              : (matchedTerms.length > 0
+                                ? "pattern:" + matchedTerms.join("|")
+                                : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                          )
+                        )
+                    )
+                )
             )
         )
     );

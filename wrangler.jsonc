@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
-  "name": "web25-public",
+  "name": "colorful-toilet",
   "main": "cloudflare/src/index.js",
   "compatibility_date": "2026-04-21",
   "assets": {
@@ -16,15 +16,17 @@
   ],
   "vars": {
     "APP_ENV": "production",
-    "APP_URL": "https://web25-public.web25-boris.workers.dev",
+    "APP_URL": "https://colorful-toilet.colorful-toilet.workers.dev",
     "ALLOW_DEVELOPER_DEBUG_CODE": "true",
+    "DEVELOPER_EMAILS": "2715000591@qq.com",
     "OTP_TTL_MINUTES": "10",
     "OTP_RESEND_SECONDS": "60",
     "SESSION_TTL_DAYS": "30",
     "GLOBAL_RULE_MIN_SYNC_KEYS": "1",
     "GLOBAL_RULE_MIN_SCORE": "4",
     "AUTO_GLOBAL_EXACT_WINDOW_DAYS": "30",
-    "AUTO_GLOBAL_EXACT_MIN_HIDES": "2"
+    "AUTO_GLOBAL_EXACT_MIN_HIDES": "2",
+    "OPENAI_RESPONSES_MODEL": "gpt-5.4-mini"
   },
   "observability": {
     "enabled": true,

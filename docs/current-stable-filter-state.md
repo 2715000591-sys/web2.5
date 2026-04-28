@@ -1,4 +1,4 @@
-# web2.5 当前稳定筛选状态
+# Colorful Toilet 当前稳定筛选状态
 
 ## 这份文件的目的
 
@@ -109,7 +109,7 @@
   - `BUILD_ID = 2026-04-23-0052`
 - 云端 Cloudflare Worker：
   - 已正式部署
-  - URL: `https://web25-public.web25-boris.workers.dev`
+  - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID: `983e4bcb-dc55-46a4-91c4-8418880259d5`
 
 ## 如果未来真的要改筛选，必须先做什么

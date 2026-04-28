@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Colorful Toilet Feed Input</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="panel">
+      <section class="card hero-card">
+        <p class="eyebrow">Colorful Toilet Feed Input</p>
+        <h1>首页帖子采集</h1>
+        <p class="hero-text">这个独立插件只记录你在 X 首页真正刷到的帖子快照，不改页面、不插按钮、不影响原来的稳定插件。</p>
+      </section>
+
+      <section class="card">
+        <label class="toggle">
+          <input id="enabled" type="checkbox">
+          <span>开启首页帖子采集</span>
+        </label>
+        <p id="captureHint" class="hint">只在 `x.com/home` 和 `twitter.com/home` 生效。</p>
+      </section>
+
+      <section class="card">
+        <p class="section-title">云端绑定</p>
+        <div class="status-row">
+          <span>服务</span>
+          <strong id="serviceStatusValue">官方云端</strong>
+        </div>
+        <div class="status-row">
+          <span>账号</span>
+          <strong id="accountStatusValue">正在检查...</strong>
+        </div>
+        <div class="status-row">
+          <span>采集身份</span>
+          <strong id="identityValue">正在生成...</strong>
+        </div>
+        <div class="action-row">
+          <a id="openConsole" class="action-link" href="https://colorful-toilet.colorful-toilet.workers.dev/console/" target="_blank" rel="noreferrer">打开控制台并绑定</a>
+        </div>
+        <p id="syncStatus" class="hint">登录后，用这个链接打开控制台，就能把这个新插件采到的数据并到你的账号里。</p>
+      </section>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

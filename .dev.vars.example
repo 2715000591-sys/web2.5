@@ -1,5 +1,8 @@
 APP_ENV=development
 APP_URL=http://127.0.0.1:8787
+# Preferred: set RESEND_API_KEY and EMAIL_FROM
+RESEND_API_KEY=
+# Legacy generic webhook mode is still supported
 EMAIL_SEND_ENDPOINT=
 EMAIL_SEND_TOKEN=
 EMAIL_FROM=no-reply@example.com
@@ -10,3 +13,8 @@ OTP_RESEND_SECONDS=60
 SESSION_TTL_DAYS=30
 GLOBAL_RULE_MIN_SYNC_KEYS=2
 GLOBAL_RULE_MIN_SCORE=3
+# Optional legacy fallback only. Shared AI provider access now comes from user-scoped /api/ai-settings.
+OPENAI_API_KEY=
+OPENAI_RESPONSES_MODEL=gpt-5.4-mini
+# Required to encrypt each user's shared AI provider key/settings at rest.
+USER_AI_SETTINGS_SECRET=

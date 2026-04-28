@@ -15,6 +15,18 @@ const adList = document.getElementById("ad-list");
 const adToggleButton = document.getElementById("adToggleButton");
 const adCountPill = document.getElementById("adCountPill");
 const reviewSection = document.getElementById("reviewSection");
+const aiFeedSection = document.getElementById("aiFeedSection");
+const aiFeedList = document.getElementById("aiFeedList");
+const globalBlockedAccountsList = document.getElementById("globalBlockedAccountsList");
+const aiFeedCountPill = document.getElementById("aiFeedCountPill");
+const aiEnabledToggle = document.getElementById("aiEnabledToggle");
+const aiEnabledStatus = document.getElementById("aiEnabledStatus");
+const aiApiKeyInput = document.getElementById("aiApiKeyInput");
+const aiApiBaseUrlInput = document.getElementById("aiApiBaseUrlInput");
+const aiApiModelInput = document.getElementById("aiApiModelInput");
+const aiPromptInput = document.getElementById("aiPromptInput");
+const saveAiSettingsButton = document.getElementById("saveAiSettingsButton");
+const aiSettingsStatus = document.getElementById("aiSettingsStatus");
 const developerBannerText = document.getElementById("developerBannerText");
 const developerPendingList = document.getElementById("developerPendingList");
 const developerPendingPager = document.getElementById("developerPendingPager");
@@ -70,6 +82,16 @@ const developerStatNodes = {
 };
 
 const POLL_INTERVAL_MS = 30000;
+const LOCAL_AI_SETTINGS_KEY = "web25_local_ai_settings_v1";
+const LOCAL_BLOCKED_TOPICS_KEY = "web25_local_blocked_topics_v1";
+const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
+const DASHBOARD_REQUEST_TIMEOUT_MS = 12000;
+const CLOUD_DASHBOARD_CACHE_KEY_PREFIX = "web25_cloud_dashboard_cache_v1";
+const LEGACY_BACKEND_BASE_URLS = new Set([
+  "https://web25-public-pages.pages.dev",
+  "https://web25-public.web25-boris.workers.dev",
+  "https://colorful-toilet.web25-boris.workers.dev"
+]);
 
 const appState = {
   mode: "detecting",
@@ -88,16 +110,20 @@ const appState = {
 };
 
 function getBackendBaseUrl() {
-  const configured = window.localStorage.getItem("web25_backend_base_url");
+  const configured = String(window.localStorage.getItem("web25_backend_base_url") || "").trim().replace(/\/+$/, "");
   if (configured) {
-    return configured.replace(/\/+$/, "");
+    if (LEGACY_BACKEND_BASE_URLS.has(configured)) {
+      window.localStorage.setItem("web25_backend_base_url", DEFAULT_PUBLIC_BACKEND_BASE_URL);
+      return DEFAULT_PUBLIC_BACKEND_BASE_URL;
+    }
+    return configured;
   }
 
   if (window.location.origin && window.location.origin.startsWith("http")) {
     return window.location.origin.replace(/\/+$/, "");
   }
 
-  return "http://127.0.0.1:8787";
+  return DEFAULT_PUBLIC_BACKEND_BASE_URL;
 }
 
 function getSyncKeyFromPage() {
@@ -111,6 +137,17 @@ function getSyncKeyFromPage() {
   return String(window.localStorage.getItem("web25_sync_key") || "").trim();
 }
 
+function getDeviceIdFromPage() {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = String(params.get("deviceId") || "").trim();
+  if (fromUrl) {
+    window.localStorage.setItem("web25_device_id", fromUrl);
+    return fromUrl;
+  }
+
+  return String(window.localStorage.getItem("web25_device_id") || "").trim();
+}
+
 function setStatus(message) {
   if (dashboardStatus) {
     dashboardStatus.textContent = message;
@@ -121,6 +158,72 @@ function setAuthHint(message) {
   if (authHint) {
     authHint.textContent = message;
   }
+}
+
+function getCloudDashboardCacheKey(viewer) {
+  if (!viewer || !viewer.id) {
+    return "";
+  }
+  return `${CLOUD_DASHBOARD_CACHE_KEY_PREFIX}:${viewer.id}`;
+}
+
+function readCloudDashboardCache(viewer) {
+  const key = getCloudDashboardCacheKey(viewer);
+  if (!key) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(key) || "null");
+    if (!parsed || typeof parsed !== "object" || !parsed.payload) {
+      return null;
+    }
+    return {
+      savedAt: parsed.savedAt || "",
+      payload: parsed.payload
+    };
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeCloudDashboardCache(viewer, payload) {
+  const key = getCloudDashboardCacheKey(viewer);
+  if (!key || !payload) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify({
+      savedAt: new Date().toISOString(),
+      payload
+    }));
+  } catch (error) {
+    // Ignore storage failures and continue with the live response.
+  }
+}
+
+function applyStoredBindingIdentity(binding) {
+  if (!binding || typeof binding !== "object") {
+    return;
+  }
+
+  const syncKey = String(binding.syncKey || "").trim();
+  const deviceId = String(binding.deviceId || "").trim();
+  if (syncKey) {
+    window.localStorage.setItem("web25_sync_key", syncKey);
+  }
+  if (deviceId) {
+    window.localStorage.setItem("web25_device_id", deviceId);
+  }
+}
+
+function restoreBindingIdentityFromDashboard(payload) {
+  if (!payload || typeof payload !== "object") {
+    return;
+  }
+
+  applyStoredBindingIdentity(payload.activeBinding);
 }
 
 function formatViewerLabel(viewer) {
@@ -161,6 +264,81 @@ function renderEmpty(container, message) {
   }
 }
 
+function normalizeBlockedTopicTerms(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value || "").split(/[\n,，]+/g);
+  const seen = new Set();
+  const normalized = [];
+  source.forEach((item) => {
+    const term = String(item || "").replace(/\s+/g, " ").trim();
+    const dedupeKey = term.toLowerCase();
+    if (!term || seen.has(dedupeKey)) {
+      return;
+    }
+    seen.add(dedupeKey);
+    normalized.push(term);
+  });
+  return normalized.slice(0, 40);
+}
+
+function formatBlockedTopicTerms(value) {
+  return normalizeBlockedTopicTerms(value).join("\n");
+}
+
+function normalizeAiPrompt(value) {
+  return String(value || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/\s+$/g, ""))
+    .join("\n")
+    .trim();
+}
+
+function getLegacyBlockedPrompt() {
+  const legacyTerms = normalizeBlockedTopicTerms(window.localStorage.getItem(LOCAL_BLOCKED_TOPICS_KEY) || "");
+  if (!legacyTerms.length) {
+    return "";
+  }
+  return `不想看：${legacyTerms.join("，")}`;
+}
+
+function getLocalAiSettings() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_AI_SETTINGS_KEY) || "{}");
+    const prompt = normalizeAiPrompt(parsed.prompt || "");
+    const legacyPrompt = getLegacyBlockedPrompt();
+    return {
+      enabled: parsed.enabled !== false,
+      apiKey: String(parsed.apiKey || ""),
+      baseUrl: String(parsed.baseUrl || ""),
+      model: String(parsed.model || ""),
+      prompt: prompt || legacyPrompt
+    };
+  } catch (error) {
+    return {
+      enabled: true,
+      apiKey: "",
+      baseUrl: "",
+      model: "",
+      prompt: getLegacyBlockedPrompt()
+    };
+  }
+}
+
+function saveLocalAiSettings(settings) {
+  const next = {
+    enabled: settings && typeof settings.enabled === "boolean" ? settings.enabled : true,
+    apiKey: String(settings && settings.apiKey ? settings.apiKey : ""),
+    baseUrl: String(settings && settings.baseUrl ? settings.baseUrl : ""),
+    model: String(settings && settings.model ? settings.model : ""),
+    prompt: normalizeAiPrompt(settings && settings.prompt ? settings.prompt : "")
+  };
+  window.localStorage.setItem(LOCAL_AI_SETTINGS_KEY, JSON.stringify(next));
+  window.localStorage.removeItem(LOCAL_BLOCKED_TOPICS_KEY);
+  return next;
+}
+
 function describeDeveloperKey(key) {
   const raw = String(key || "");
   if (raw.startsWith("status:")) {
@@ -194,7 +372,7 @@ function formatRelativeTime(value) {
 function getSourceMeta(source) {
   if (source === "auto_hide") {
     return {
-      label: "web2.5 自动",
+      label: "Colorful Toilet 自动",
       className: "reason-pill auto"
     };
   }
@@ -376,6 +554,230 @@ function renderAdList(items) {
   });
 }
 
+function buildAiPostUrl(item) {
+  const statusId = String(item && item.statusId ? item.statusId : "").trim();
+  const handle = String(item && item.authorHandle ? item.authorHandle : "").trim().replace(/^@/, "");
+  if (!statusId || !handle) {
+    return "";
+  }
+  return `https://x.com/${handle}/status/${statusId}`;
+}
+
+function buildReplyAiOpenUrl(item) {
+  const statusId = String(item && (item.replyStatusId || item.threadStatusId) ? (item.replyStatusId || item.threadStatusId) : "").trim();
+  const handle = String(item && item.replyHandle ? item.replyHandle : "").trim().replace(/^@/, "");
+  if (!statusId || !handle) {
+    return "";
+  }
+  return `https://x.com/${handle}/status/${statusId}`;
+}
+
+function formatReplyAiLabel(label) {
+  const mapping = {
+    adult_solicitation: "色情搭讪",
+    lead_gen_spam: "引流垃圾",
+    contact_redirect: "导流到站外",
+    scam_or_fraud: "诈骗风险",
+    meaningless_bait: "空洞钓鱼",
+    profile_link_risk: "主页导流风险",
+    global_blocklist: "全局名单"
+  };
+  return mapping[label] || label || "AI 标签";
+}
+
+function formatProfileSignalLabel(label) {
+  const mapping = {
+    contact_keyword: "简介里有联系方式词",
+    contact_payload: "简介里有直达联系方式",
+    external_link: "简介里有外链",
+    profile_redirect: "简介里有主页导流话术",
+    suspicious_bio: "简介里有高风险词"
+  };
+  return mapping[label] || label || "简介信号";
+}
+
+function renderLocalAiSettings(settings, options) {
+  const source = settings || getLocalAiSettings();
+  const loggedIn = Boolean(options && options.loggedIn);
+  if (aiEnabledToggle) {
+    aiEnabledToggle.checked = source.enabled;
+  }
+  if (aiEnabledStatus) {
+    aiEnabledStatus.textContent = source.enabled ? "当前开启" : "当前关闭";
+  }
+  if (aiApiKeyInput && document.activeElement !== aiApiKeyInput) {
+    aiApiKeyInput.value = loggedIn ? "" : source.apiKey;
+    aiApiKeyInput.placeholder = loggedIn && source.apiKeyConfigured
+      ? `已保存 · ****${source.apiKeyLast4 || ""}`
+      : "sk-...";
+  }
+  if (aiApiBaseUrlInput && document.activeElement !== aiApiBaseUrlInput) {
+    aiApiBaseUrlInput.value = source.baseUrl;
+  }
+  if (aiApiModelInput && document.activeElement !== aiApiModelInput) {
+    aiApiModelInput.value = source.model || "gpt-5.4-mini";
+  }
+  if (aiPromptInput && document.activeElement !== aiPromptInput) {
+    aiPromptInput.value = source.prompt;
+  }
+}
+
+function renderGlobalBlockedAccounts(list) {
+  if (!globalBlockedAccountsList) {
+    return;
+  }
+
+  if (!Array.isArray(list) || !list.length) {
+    renderEmpty(globalBlockedAccountsList, "当前还没有进入所有用户共用名单的高风险账号。");
+    return;
+  }
+
+  globalBlockedAccountsList.innerHTML = "";
+  list.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "review-row ai-feed-row";
+    row.innerHTML = `
+      <div class="review-row-top">
+        <div class="review-row-title">
+          <span class="timeline-pill">全局屏蔽</span>
+          <strong>${escapeHtml(item && item.replyHandle ? item.replyHandle : "未识别账号")}</strong>
+        </div>
+        <div class="review-row-meta">
+          <time>${escapeHtml(formatRelativeTime(item && item.updatedAt ? item.updatedAt : ""))}</time>
+        </div>
+      </div>
+      <p class="review-body">${escapeHtml(item && item.lastReasonShort ? item.lastReasonShort : "这个账号已经被系统判定为高风险，后续回复会直接对所有用户隐藏。")}</p>
+      <div class="ai-feed-meta-line">
+        <span class="surface-note">总高置信命中 ${escapeHtml(String(item && item.totalHighConfidenceHideCount ? item.totalHighConfidenceHideCount : 0))} 次</span>
+        <span class="surface-note">近 7 天 ${escapeHtml(String(item && item.recentHighConfidenceHideCount ? item.recentHighConfidenceHideCount : 0))} 次</span>
+      </div>
+    `;
+    globalBlockedAccountsList.appendChild(row);
+  });
+}
+
+function renderAiFeedSection(replyAiPayload) {
+  const loggedIn = Boolean(appState.viewer);
+  setHidden(aiFeedSection, false);
+  const settings = loggedIn && replyAiPayload && replyAiPayload.settings
+    ? {
+      enabled: replyAiPayload.settings.replyAiEnabled !== false,
+      apiKey: "",
+      apiKeyConfigured: Boolean(replyAiPayload.settings.apiKeyConfigured),
+      apiKeyLast4: String(replyAiPayload.settings.apiKeyLast4 || ""),
+      baseUrl: String(replyAiPayload.settings.providerBaseUrl || "https://api.openai.com/v1"),
+      model: String(replyAiPayload.settings.model || "gpt-5.4-mini"),
+      prompt: String(replyAiPayload.settings.moderationPrompt || "")
+    }
+    : getLocalAiSettings();
+  renderLocalAiSettings(settings, {
+    loggedIn
+  });
+  const list = loggedIn && replyAiPayload && Array.isArray(replyAiPayload.recentHides)
+    ? replyAiPayload.recentHides.slice()
+    : [];
+  const globalBlockedAccounts = loggedIn && replyAiPayload && Array.isArray(replyAiPayload.globalBlockedAccounts)
+    ? replyAiPayload.globalBlockedAccounts.slice()
+    : [];
+  list.sort((left, right) => {
+    const rightTime = new Date(right && (right.updatedAt || right.seenAt) ? (right.updatedAt || right.seenAt) : 0).getTime();
+    const leftTime = new Date(left && (left.updatedAt || left.seenAt) ? (left.updatedAt || left.seenAt) : 0).getTime();
+    return rightTime - leftTime;
+  });
+  globalBlockedAccounts.sort((left, right) => {
+    const rightTime = new Date(right && right.updatedAt ? right.updatedAt : 0).getTime();
+    const leftTime = new Date(left && left.updatedAt ? left.updatedAt : 0).getTime();
+    return rightTime - leftTime;
+  });
+
+  if (aiFeedCountPill) {
+    if (!settings.enabled) {
+      aiFeedCountPill.textContent = "当前已关闭";
+    } else {
+      aiFeedCountPill.textContent = list.length
+        ? `最近 AI 隐藏 ${list.length} 条`
+        : (loggedIn ? "设置已就绪" : "登录后才会真正生效");
+    }
+  }
+
+  if (aiSettingsStatus) {
+    if (!loggedIn) {
+      aiSettingsStatus.textContent = settings.enabled
+        ? "未登录时先保存在这台浏览器；真正用于共享 AI 提供商配置还需要先登录。"
+        : "当前已关闭，配置也会先保存在这台浏览器。";
+    } else if (settings.apiKeyConfigured) {
+      aiSettingsStatus.textContent = `当前账号已保存共享 AI Key · ****${settings.apiKeyLast4 || ""}`;
+    } else {
+      aiSettingsStatus.textContent = "当前账号还没有保存共享 AI Key。";
+    }
+  }
+
+  if (!aiFeedList) {
+    return;
+  }
+
+  renderGlobalBlockedAccounts(globalBlockedAccounts);
+
+  if (!settings.enabled) {
+    renderEmpty(aiFeedList, "你已经把回复区 AI 审核先关掉了。现有硬规则会继续工作，想让 AI 补抓边界垃圾时再打开。");
+    return;
+  }
+
+  if (!loggedIn) {
+    renderEmpty(aiFeedList, "先登录云端控制台，再把共享 AI Key 和模型配好，这里才会出现真正的回复区 AI 审核记录。");
+    return;
+  }
+
+  if (!list.length) {
+    renderEmpty(aiFeedList, "当前还没有 AI 亲自隐藏的回复。先把回复区开关和共享 AI Key 配好，等边界垃圾样本进来后，这里会开始累计。");
+    return;
+  }
+
+  aiFeedList.innerHTML = "";
+  list.forEach((item) => {
+    const title = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
+    const row = document.createElement("article");
+    row.className = "review-row ai-feed-row";
+    const openUrl = buildReplyAiOpenUrl(item);
+    const safetyLabels = Array.isArray(item && item.matchedSafetyLabels) ? item.matchedSafetyLabels : [];
+    const profileSignals = Array.isArray(item && item.matchedProfileSignals) ? item.matchedProfileSignals : [];
+    const confidenceLabel = item && item.confidence === "high" ? "高置信" : (item && item.confidence === "medium" ? "中置信" : "低置信");
+    row.innerHTML = `
+      <div class="review-row-top">
+        <div class="review-row-title">
+          <span class="timeline-pill">${escapeHtml(item && item.decisionLayer === "global_blocklist" ? "全局名单" : "AI 隐藏")}</span>
+          <strong>${escapeHtml(title || "未识别账号")}</strong>
+        </div>
+        <div class="review-row-meta">
+          <time>${escapeHtml(formatRelativeTime(item && (item.updatedAt || item.seenAt) ? (item.updatedAt || item.seenAt) : ""))}</time>
+        </div>
+      </div>
+      <p class="review-body">${escapeHtml(item && item.replyText ? item.replyText : "这条回复没有保存正文。")}</p>
+      ${(item && item.mainPostText) ? `
+        <div class="ai-feed-secondary">
+          <p>原帖上下文：${escapeHtml(item.mainPostText)}</p>
+        </div>
+      ` : ""}
+      <div class="ai-feed-meta-line">
+        <span class="surface-note">${escapeHtml(confidenceLabel)}</span>
+        ${item && item.reasonShort ? `<span class="surface-note">${escapeHtml(item.reasonShort)}</span>` : ""}
+      </div>
+      ${(safetyLabels.length || profileSignals.length) ? `
+        <div class="ai-feed-secondary">
+          ${safetyLabels.length ? `<p>命中标签：${escapeHtml(safetyLabels.map(formatReplyAiLabel).join("、"))}</p>` : ""}
+          ${profileSignals.length ? `<p>主页辅助信号：${escapeHtml(profileSignals.map(formatProfileSignalLabel).join("、"))}</p>` : ""}
+        </div>
+      ` : ""}
+      ${openUrl ? `
+        <div class="ai-feed-actions">
+          <a class="ghost-button small-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noreferrer">在 X 里打开</a>
+        </div>
+      ` : ""}
+    `;
+    aiFeedList.appendChild(row);
+  });
+}
+
 function setMetricGroup(statNodes, stats) {
   const adHomeHideEvents = stats.adHomeHideEvents || 0;
   const adReplyHideEvents = stats.adReplyHideEvents || 0;
@@ -525,7 +927,7 @@ function renderBindings(bindings) {
   }
   const list = Array.isArray(bindings) ? bindings : [];
   if (!list.length) {
-    bindingList.innerHTML = `<span class="surface-note">当前账号下还没有已接入设备。</span>`;
+    bindingList.innerHTML = `<span class="surface-note">当前账号下还没有已接入设备。数据通常不是没了，而是这次还没把 Safari 里的那台设备接到当前账号。先从插件弹窗点“打开控制台”，或者打开一次插件弹窗让它自动接入。</span>`;
     return;
   }
 
@@ -581,6 +983,85 @@ async function restoreItem(item, button) {
       button.textContent = "恢复这条";
     }
   }
+}
+
+async function saveAiSettings() {
+  const settings = saveLocalAiSettings({
+    enabled: aiEnabledToggle ? aiEnabledToggle.checked : true,
+    apiKey: aiApiKeyInput && aiApiKeyInput.value ? aiApiKeyInput.value.trim() : "",
+    baseUrl: aiApiBaseUrlInput && aiApiBaseUrlInput.value ? aiApiBaseUrlInput.value.trim() : "",
+    model: aiApiModelInput && aiApiModelInput.value ? aiApiModelInput.value.trim() : "gpt-5.4-mini",
+    prompt: aiPromptInput && aiPromptInput.value ? aiPromptInput.value.trim() : ""
+  });
+
+  if (!appState.viewer) {
+    renderLocalAiSettings(settings, {
+      loggedIn: false
+    });
+    if (aiSettingsStatus) {
+      const parts = ["已保存到当前浏览器"];
+      parts.push(settings.enabled ? "登录后才能真正用于共享 AI 提供商配置" : "当前已关闭");
+      aiSettingsStatus.textContent = parts.join(" · ");
+    }
+    renderAiFeedSection(appState.dashboardCache && appState.dashboardCache.replyAi ? appState.dashboardCache.replyAi : null);
+    setStatus("设置先保存在这台浏览器了。真正接入共享 AI 提供商配置，还需要先登录云端控制台。");
+    return;
+  }
+
+  const payload = {
+    replyAiEnabled: settings.enabled,
+    providerBaseUrl: settings.baseUrl || "https://api.openai.com/v1",
+    model: settings.model || "gpt-5.4-mini",
+    moderationPrompt: settings.prompt || ""
+  };
+  if (settings.apiKey) {
+    payload.apiKey = settings.apiKey;
+  }
+
+  const result = await requestJson("/api/ai-settings", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!result.ok || !result.data || !result.data.ok || !result.data.settings) {
+    const errorCode = result && result.data && result.data.error
+      ? String(result.data.error || "").trim()
+      : "";
+    const friendlyMessage = errorCode === "missing-ai-settings-secret"
+      ? "云端还没配置 AI Key 加密密钥，所以这次没法保存。先给 Worker 配上 USER_AI_SETTINGS_SECRET 再试。"
+      : "这次没保存到云端账号，等一下再试一次。";
+    if (aiSettingsStatus) {
+      aiSettingsStatus.textContent = friendlyMessage;
+    }
+    setStatus(friendlyMessage);
+    return;
+  }
+
+  if (!appState.dashboardCache) {
+    appState.dashboardCache = {};
+  }
+  appState.dashboardCache.replyAi = Object.assign({}, appState.dashboardCache.replyAi || {}, {
+    settings: result.data.settings
+  });
+  if (aiApiKeyInput) {
+    aiApiKeyInput.value = "";
+  }
+  renderAiFeedSection(appState.dashboardCache.replyAi);
+  if (aiSettingsStatus) {
+    const parts = ["已保存到云端账号"];
+    parts.push(result.data.settings.replyAiEnabled ? "回复区 AI 审核已开启" : "回复区 AI 审核已关闭");
+    if (result.data.settings.model) {
+      parts.push(`模型 ${result.data.settings.model}`);
+    }
+    if (result.data.settings.apiKeyConfigured) {
+      parts.push(`****${result.data.settings.apiKeyLast4 || ""}`);
+    }
+    aiSettingsStatus.textContent = parts.join(" · ");
+  }
+  setStatus("共享 AI 提供商配置和回复区 AI 审核开关已经保存到你的云端账号。");
 }
 
 async function confirmDeveloperFeed(item, button) {
@@ -1101,6 +1582,7 @@ function renderCloudMode(loggedIn) {
   setHidden(loggedInState, !loggedIn);
   setHidden(legacyState, true);
   setHidden(cloudDashboardSection, !loggedIn);
+  setHidden(aiFeedSection, false);
   setHidden(developerSection, true);
   setHidden(personalDashboardSection, !loggedIn);
   setHidden(adSection, !loggedIn);
@@ -1116,6 +1598,7 @@ function renderLegacyMode() {
   setHidden(loggedInState, true);
   setHidden(legacyState, false);
   setHidden(cloudDashboardSection, true);
+  setHidden(aiFeedSection, true);
   setHidden(developerSection, true);
   setHidden(personalDashboardSection, false);
   setHidden(adSection, false);
@@ -1127,11 +1610,25 @@ function renderLegacyMode() {
 
 async function requestJson(path, options) {
   const endpoint = path.startsWith("http") ? path : `${getBackendBaseUrl()}${path}`;
+  const requestOptions = Object.assign({
+    cache: "no-store",
+    credentials: "include"
+  }, options || {});
+  const timeoutMs = Math.max(0, Number(requestOptions.timeoutMs || 0) || 0);
+  delete requestOptions.timeoutMs;
+
+  let abortController = null;
+  let timeoutId = null;
+  if (timeoutMs > 0 && typeof AbortController !== "undefined") {
+    abortController = new AbortController();
+    requestOptions.signal = abortController.signal;
+    timeoutId = window.setTimeout(function () {
+      abortController.abort();
+    }, timeoutMs);
+  }
+
   try {
-    const response = await fetch(endpoint, Object.assign({
-      cache: "no-store",
-      credentials: "include"
-    }, options || {}));
+    const response = await fetch(endpoint, requestOptions);
     let data = {};
     try {
       data = await response.json();
@@ -1144,12 +1641,18 @@ async function requestJson(path, options) {
       data
     };
   } catch (error) {
+    const timeout = Boolean(error && error.name === "AbortError");
     return {
       ok: false,
       status: 0,
       data: {},
-      error: error && error.message ? error.message : String(error)
+      error: timeout ? "request-timeout" : (error && error.message ? error.message : String(error)),
+      timeout
     };
+  } finally {
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -1162,12 +1665,25 @@ async function detectConsoleMode() {
     renderCloudMode(Boolean(appState.viewer));
     if (appState.viewer) {
       viewerEmail.textContent = formatViewerLabel(appState.viewer);
-      await refreshDashboard("已连接到你的云端控制台。");
+      const cachedDashboard = readCloudDashboardCache(appState.viewer);
+      if (cachedDashboard && cachedDashboard.payload) {
+        restoreBindingIdentityFromDashboard(cachedDashboard.payload);
+        renderCloudDashboard(cachedDashboard.payload);
+        setStatus(
+          cachedDashboard.savedAt
+            ? `先显示 ${formatRelativeTime(cachedDashboard.savedAt)} 同步的结果，正在刷新最新数据...`
+            : "先显示上次成功同步的数据，正在刷新最新数据..."
+        );
+      }
+      await refreshDashboard(cachedDashboard && cachedDashboard.payload
+        ? "云端数据已经刷新。"
+        : "已连接到你的云端控制台。");
     } else {
+      renderAiFeedSection(null);
       setStatus("先登录，控制台才会显示你的个人数据。");
       setAuthHint(
         appState.developerLoginEnabled
-          ? "开发者账号现在会直接显示开发验证码。普通邮箱登录，后面再接正式发信服务。"
+          ? "开发者账号点发送验证码后会直接登录。普通邮箱登录，后面再接正式发信服务。"
           : "验证码会发到你的邮箱。登录后，已安装的插件设备会自动接入账号。"
       );
     }
@@ -1200,7 +1716,7 @@ async function requestLoginCode() {
 
   if (!result.ok || !result.data || !result.data.ok) {
     if (result.data && result.data.detail === "missing-email-provider" && appState.developerLoginEnabled) {
-      setAuthHint("普通邮箱登录还没接发信服务。开发者账号会直接显示开发验证码。");
+      setAuthHint("普通邮箱登录还没接发信服务。如果你想走开发者直通，确认当前邮箱已经配进 DEVELOPER_EMAILS。");
     } else {
       setAuthHint("这次没把验证码发出去。等一下再试，或者之后补上邮件服务配置。");
     }
@@ -1211,21 +1727,44 @@ async function requestLoginCode() {
     codeInput.value = result.data.debugCode;
   }
 
+  if (result.data.debugCode && result.data.developerMode) {
+    setAuthHint("开发者验证码已生成，正在为你登录...");
+    await verifyLoginCode({
+      email,
+      code: result.data.debugCode,
+      autoSubmit: true
+    });
+    return;
+  }
+
+  if (result.data.debugCode && result.data.publicDebugCodeMode) {
+    setAuthHint("测试阶段验证码已生成，正在为你登录...");
+    await verifyLoginCode({
+      email,
+      code: result.data.debugCode,
+      autoSubmit: true
+    });
+    return;
+  }
+
   setAuthHint(result.data.debugCode
-    ? `开发者验证码：${result.data.debugCode}`
+    ? (result.data.publicDebugCodeMode
+      ? `测试阶段验证码：${result.data.debugCode}`
+      : `开发者验证码：${result.data.debugCode}`)
     : "验证码已经发出，去邮箱里看一下。");
 }
 
-async function verifyLoginCode() {
-  const email = String(emailInput && emailInput.value ? emailInput.value : "").trim();
-  const code = String(codeInput && codeInput.value ? codeInput.value : "").trim();
+async function verifyLoginCode(options) {
+  const email = String(options && options.email ? options.email : (emailInput && emailInput.value ? emailInput.value : "")).trim();
+  const code = String(options && options.code ? options.code : (codeInput && codeInput.value ? codeInput.value : "")).trim();
+  const autoSubmit = Boolean(options && options.autoSubmit);
   if (!email || !code) {
     setAuthHint("把邮箱和验证码都填上，再登录。");
     return;
   }
 
   verifyCodeButton.disabled = true;
-  setAuthHint("正在验证验证码...");
+  setAuthHint(autoSubmit ? "正在完成开发者登录..." : "正在验证验证码...");
   const result = await requestJson("/api/auth/verify-code", {
     method: "POST",
     headers: {
@@ -1236,7 +1775,9 @@ async function verifyLoginCode() {
   verifyCodeButton.disabled = false;
 
   if (!result.ok || !result.data || !result.data.ok) {
-    setAuthHint("验证码不对，或者已经过期了。重新发一封再试。");
+    setAuthHint(autoSubmit
+      ? "开发者验证码已经生成，但自动登录没有成功。点一次登录再试。"
+      : "验证码不对，或者已经过期了。重新发一封再试。");
     return;
   }
 
@@ -1262,6 +1803,7 @@ async function logout() {
   renderBindings([]);
   renderAdList([]);
   renderReviewList([]);
+  renderAiFeedSection(null);
   setStatus("你已经退出登录。");
 }
 
@@ -1271,6 +1813,7 @@ function renderCloudDashboard(payload) {
   setMetricGroup(personalStatNodes, payload && payload.personalStats ? payload.personalStats : {});
   renderBindings(payload && payload.bindings ? payload.bindings : []);
   renderDeveloperSection(payload && payload.developer ? payload.developer : null);
+  renderAiFeedSection(payload && payload.replyAi ? payload.replyAi : null);
   renderAdList(payload && payload.adEvents ? payload.adEvents : []);
   renderReviewList(payload && payload.recent ? payload.recent : []);
   if (syncModePill) {
@@ -1281,6 +1824,7 @@ function renderCloudDashboard(payload) {
 function renderLegacyDashboard(payload) {
   appState.dashboardCache = payload || null;
   setMetricGroup(personalStatNodes, payload && payload.stats ? payload.stats : {});
+  renderAiFeedSection(null);
   renderAdList(payload && payload.adEvents ? payload.adEvents : []);
   renderReviewList(payload && payload.recent ? payload.recent : []);
   if (syncModePill) {
@@ -1320,9 +1864,13 @@ async function fetchLegacyDashboard(successMessage) {
 async function fetchCloudDashboard(successMessage) {
   setStatus("正在读取你的云端控制台...");
   const syncKey = getSyncKeyFromPage();
+  const deviceId = getDeviceIdFromPage();
   const params = new URLSearchParams();
   if (syncKey) {
     params.set("syncKey", syncKey);
+  }
+  if (deviceId) {
+    params.set("deviceId", deviceId);
   }
   if (appState.viewer && appState.viewer.isDeveloper) {
     const developerState = getDeveloperDashboardRequestState();
@@ -1331,23 +1879,52 @@ async function fetchCloudDashboard(successMessage) {
   }
   const query = params.toString();
   const suffix = query ? `?${query}` : "";
-  const result = await requestJson(`/api/dashboard${suffix}`);
-  if (!result.ok || !result.data || !result.data.ok) {
+  const dashboardResult = await requestJson(`/api/dashboard${suffix}`, {
+    timeoutMs: DASHBOARD_REQUEST_TIMEOUT_MS
+  });
+  if (!dashboardResult.ok || !dashboardResult.data || !dashboardResult.data.ok) {
+    const cachedDashboard = readCloudDashboardCache(appState.viewer);
+    if (cachedDashboard && cachedDashboard.payload) {
+      restoreBindingIdentityFromDashboard(cachedDashboard.payload);
+      renderCloudDashboard(cachedDashboard.payload);
+      setStatus(
+        dashboardResult.timeout
+          ? `这次读取超时了，先显示 ${formatRelativeTime(cachedDashboard.savedAt)} 同步的结果。`
+          : `这次没读到最新数据，先显示 ${formatRelativeTime(cachedDashboard.savedAt)} 同步的结果。`
+      );
+      return;
+    }
+
+    if (appState.dashboardCache) {
+      restoreBindingIdentityFromDashboard(appState.dashboardCache);
+      renderCloudDashboard(appState.dashboardCache);
+      setStatus(dashboardResult.timeout ? "这次读取超时了，先保留刚才这份数据。" : "这次没读到最新数据，先保留刚才这份数据。");
+      return;
+    }
+
     renderCloudDashboard({
       globalStats: {},
       personalStats: {},
       recent: [],
       adEvents: [],
-      bindings: []
+      bindings: [],
+      replyAi: null
     });
-    setStatus("这次没读到你的云端数据。等一下再刷新。");
+    setStatus(dashboardResult.timeout ? "这次读取超时了，等一下再刷新。" : "这次没读到你的云端数据。等一下再刷新。");
     return;
   }
 
   if (syncKey) {
     window.localStorage.setItem("web25_sync_key", syncKey);
   }
-  renderCloudDashboard(result.data);
+  if (deviceId) {
+    window.localStorage.setItem("web25_device_id", deviceId);
+  }
+  restoreBindingIdentityFromDashboard(dashboardResult.data);
+  if (appState.viewer) {
+    writeCloudDashboardCache(appState.viewer, dashboardResult.data);
+  }
+  renderCloudDashboard(dashboardResult.data);
   setStatus(successMessage || "云端数据已经同步。");
 }
 
@@ -1391,6 +1968,20 @@ if (logoutButton) {
 if (refreshDashboardButton) {
   refreshDashboardButton.addEventListener("click", function () {
     refreshDashboard();
+  });
+}
+
+if (aiEnabledToggle) {
+  aiEnabledToggle.addEventListener("change", function () {
+    if (aiEnabledStatus) {
+      aiEnabledStatus.textContent = aiEnabledToggle.checked ? "当前开启" : "当前关闭";
+    }
+  });
+}
+
+if (saveAiSettingsButton) {
+  saveAiSettingsButton.addEventListener("click", function () {
+    saveAiSettings();
   });
 }
 

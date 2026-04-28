@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "web2.5",
+  "name": "Colorful Toilet",
   "description": "Hide suspicious low-quality Chinese replies in X thread pages, locally and conservatively.",
-  "version": "0.1.24",
+  "version": "0.1.30",
   "icons": {
     "16": "content/icon16.png",
     "32": "content/icon32.png",
@@ -31,7 +31,7 @@
       "64": "content/icon64.png",
       "128": "content/icon128.png"
     },
-    "default_title": "web2.5",
+    "default_title": "Colorful Toilet",
     "default_popup": "popup.html"
   },
   "content_scripts": [

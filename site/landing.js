@@ -1,11 +1,19 @@
 (function () {
-  const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://web25-public.web25-boris.workers.dev";
+  const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
+  const LEGACY_BACKEND_BASE_URLS = new Set([
+    "https://web25-public-pages.pages.dev",
+    "https://web25-public.web25-boris.workers.dev",
+    "https://colorful-toilet.web25-boris.workers.dev"
+  ]);
   const LOCAL_STORAGE_KEY = "web25_site_sidebar_controls_enabled";
   const toggleNodes = Array.from(document.querySelectorAll("[data-web25-sidebar-pref-toggle]"));
   const statusNodes = Array.from(document.querySelectorAll("[data-web25-sidebar-pref-status]"));
   const pillNodes = Array.from(document.querySelectorAll("[data-web25-sidebar-pref-pill]"));
+  const downloadVersionNodes = Array.from(document.querySelectorAll("[data-web25-download-version]"));
+  const downloadGeneratedAtNodes = Array.from(document.querySelectorAll("[data-web25-download-generated-at]"));
+  const downloadLinkNodes = Array.from(document.querySelectorAll("[data-web25-download-link]"));
 
-  if (!toggleNodes.length && !statusNodes.length && !pillNodes.length) {
+  if (!toggleNodes.length && !statusNodes.length && !pillNodes.length && !downloadVersionNodes.length && !downloadGeneratedAtNodes.length && !downloadLinkNodes.length) {
     return;
   }
 
@@ -16,6 +24,10 @@
   function getBackendBaseUrl() {
     const configured = normalizeBackendBaseUrl(window.localStorage.getItem("web25_backend_base_url"));
     if (configured) {
+      if (LEGACY_BACKEND_BASE_URLS.has(configured)) {
+        window.localStorage.setItem("web25_backend_base_url", DEFAULT_PUBLIC_BACKEND_BASE_URL);
+        return DEFAULT_PUBLIC_BACKEND_BASE_URL;
+      }
       return configured;
     }
 
@@ -103,6 +115,67 @@
     }
   }
 
+  function formatBuildTime(value) {
+    const timestamp = Date.parse(String(value || ""));
+    if (!timestamp) {
+      return "";
+    }
+
+    try {
+      return new Intl.DateTimeFormat("zh-CN", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date(timestamp));
+    } catch (error) {
+      return "";
+    }
+  }
+
+  async function syncDownloadCards() {
+    if (!downloadVersionNodes.length && !downloadGeneratedAtNodes.length && !downloadLinkNodes.length) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/downloads/latest.json", {
+        cache: "no-store"
+      });
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      const version = String(payload && payload.extensionVersion ? payload.extensionVersion : "").trim();
+      const generatedAt = String(payload && payload.generatedAt ? payload.generatedAt : "").trim();
+      const generatedAtLabel = formatBuildTime(generatedAt);
+      const downloads = payload && payload.downloads ? payload.downloads : {};
+
+      if (version) {
+        downloadVersionNodes.forEach(function (node) {
+          node.textContent = `最新版 ${version}`;
+        });
+      }
+
+      if (generatedAtLabel) {
+        downloadGeneratedAtNodes.forEach(function (node) {
+          node.textContent = `更新于 ${generatedAtLabel}`;
+        });
+      }
+
+      downloadLinkNodes.forEach(function (node) {
+        const key = String(node.dataset.web25DownloadLink || "").trim();
+        if (!key || !downloads[key] || !downloads[key].href) {
+          return;
+        }
+        node.href = String(downloads[key].href || "").trim();
+      });
+    } catch (error) {
+      // Keep the fallback text and fallback links.
+    }
+  }
+
   async function syncPreferenceFromCloud() {
     const localEnabled = readLocalPreference();
     renderPreference(localEnabled);
@@ -168,5 +241,6 @@
     });
   });
 
+  syncDownloadCards();
   syncPreferenceFromCloud();
 })();

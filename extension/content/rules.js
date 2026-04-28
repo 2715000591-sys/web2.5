@@ -62,11 +62,13 @@
   ];
 
   const NAME_LURE_TERMS = [
+    "处男",
     "破处",
     "小狗",
     "主人",
     "搭子",
     "单男",
+    "男单",
     "约",
     "撩",
     "调教",
@@ -74,12 +76,17 @@
   ];
   const DISPLAY_NAME_MARKETING_TERMS = [
     "免费",
+    "免费约",
     "无偿",
     "线下",
     "同城",
+    "上门",
+    "到家",
+    "处男",
     "日泡",
     "破处",
     "单男",
+    "男单",
     "固炮",
     "约炮",
     "搭子",
@@ -89,9 +96,17 @@
     "陪聊"
   ];
   const DISPLAY_NAME_LURE_PATTERNS = [
+    /找.{0,3}同城.{0,3}(男单|单男)/,
+    /同城.{0,3}(男单|单男)/,
+    /同城.{0,4}(上门|到家)/,
+    /(上门|到家).{0,4}(同城|可约|可聊|服务)/,
+    /外男.{0,4}(无偿|免费|约|处|破处)/,
+    /处男.{0,4}(免费|无偿|约)/,
+    /免费约/,
     /免费.{0,2}破处/,
     /(?:男|女).{0,2}无偿/,
-    /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日)/,
+    /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
+    /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
     /日泡/,
     /(破处|约炮|单男|固炮|调教|主人|小狗|搭子)/,
     /(主页|置顶|简介|资料|签名|自介).{0,6}(id|号|账号|小号|入口|联系方式|飞机|电报|tg|vx|wx|群|频道)/,
@@ -121,6 +136,12 @@
   ];
   const SHARE_LINK_SCAM_TERMS = [
     "完整版",
+    "原视频",
+    "出处",
+    "找到了",
+    "一并找到了",
+    "完整的在",
+    "下了哈",
     "网盘",
     "转发在",
     "转发",
@@ -178,6 +199,23 @@
     /^(?:有|求|蹲).{0,12}(万达广场附近|附近|离得近|同城|线下).{0,3}(人吗|的人吗|的吗|吗|嘛|呢)$/
   ];
   const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
+  const ACCOUNT_MENTION_PATTERN = /@[a-z0-9_]{2,20}/ig;
+  const EXPLICIT_EROTIC_BAIT_PATTERNS = [
+    /(?:来个|求个|找个|蹲个).{0,2}(处男|单男|主人|小狗|搭子)/,
+    /(主人|小狗).{0,4}(我听你|听你|任你|都听你)/,
+    /(?:她|你|这).{0,3}好涩我不行了/,
+    /日过这个骚货/
+  ];
+  const EROTIC_MENTION_REDIRECT_MARKERS = [
+    "人美胸大极品尤物",
+    "好涩",
+    "真涩",
+    "太涩",
+    "我不行了",
+    "骚货",
+    "骚母",
+    "日过"
+  ];
   const LURE_EMOJI_MARKERS = [
     "👅",
     "💦",
@@ -192,6 +230,18 @@
     "🐈",
     "🐱",
     "🍒"
+  ];
+  const SPAM_TEMPLATE_PATTERNS = [
+    /主打安全和标准/,
+    /舞蹈生.{0,4}会一字(?:马)?/,
+    /克制又有力量/,
+    /(?:\d{2,3}|一米[五六七八九]).{0,8}身材偏胖.{0,8}喜欢有聊聊.{0,4}香叽/,
+    /人美胸大极品尤物/,
+    /原视频.{0,8}找到(?:啦|了)?/,
+    /出处.{0,8}(找到|一并找到了|也一并找到了)/,
+    /完整(?:版)?的.{0,8}(在|下了|链接|这里|这)/,
+    /i can totally imagine the alluring moment with some toys/i,
+    /alluring moment with some toys/i
   ];
 
   const SLOT_DEFINITIONS = [
@@ -256,6 +306,7 @@
         "固定搭子",
         "固炮",
         "单男",
+        "处男",
         "破处",
         "约炮",
         "骚",
@@ -461,6 +512,11 @@
     const hasLureEmoji = LURE_EMOJI_MARKERS.some(function (marker) {
       return raw.includes(marker);
     });
+    const hasShareLinkScam = looksLikeShareLinkScam(raw);
+    const mentionedHandles = Array.from(new Set((normalized.match(ACCOUNT_MENTION_PATTERN) || []).map(function (entry) {
+      return String(entry || "").trim().toLowerCase();
+    }).filter(Boolean)));
+    const hasAccountMention = mentionedHandles.length > 0;
     const hasExternalContactPayload = CONTACT_PAYLOAD_PATTERNS.some(function (pattern) {
       return pattern.test(normalized) || pattern.test(compact);
     });
@@ -472,6 +528,13 @@
       && LOW_INFORMATION_BADGE_PATTERNS.some(function (pattern) {
         return pattern.test(compact);
       });
+    const hasFragmentedSymbolicReply = compact.length > 0
+      && compact.length <= 4
+      && (
+        emojiCount >= 2
+        || /[%/\\|]/.test(raw)
+        || /[\r\n]/.test(raw)
+      );
     const hasGeoMeetupBait = compact.length > 0
       && compact.length <= 16
       && GEO_MEETUP_BAIT_PATTERNS.some(function (pattern) {
@@ -486,6 +549,20 @@
         || matchedSlots.includes("relationship_or_erotic")
         || (matchedSlots.includes("hook") && matchedSlots.length >= 2)
       );
+    const hasExplicitEroticBait = EXPLICIT_EROTIC_BAIT_PATTERNS.some(function (pattern) {
+      return pattern.test(normalized) || pattern.test(compact);
+    });
+    const hasSpamTemplateSignal = SPAM_TEMPLATE_PATTERNS.some(function (pattern) {
+      return pattern.test(normalized) || pattern.test(compact);
+    });
+    const hasEroticMentionRedirect = hasAccountMention && (
+      hasExplicitEroticBait
+      || EROTIC_MENTION_REDIRECT_MARKERS.some(function (term) {
+        return normalized.includes(term) || compact.includes(term);
+      })
+      || matchedSlots.includes("relationship_or_erotic")
+      || matchedSlots.includes("meetup")
+    );
     const hasMarketingNoise = matchedSlots.length > 0 && (
       compact.length <= SHORT_REPLY_LIMIT
       || hasFlirtyMarker
@@ -504,11 +581,18 @@
       emojiCount: emojiCount,
       hasMinimalTextPayload: hasMinimalTextPayload,
       hasLureEmoji: hasLureEmoji,
+      hasShareLinkScam: hasShareLinkScam,
+      mentionedHandles: mentionedHandles,
+      hasAccountMention: hasAccountMention,
       hasExternalContactPayload: hasExternalContactPayload,
       hasLongDigitRun: hasLongDigitRun,
       hasLowInformationBadge: hasLowInformationBadge,
+      hasFragmentedSymbolicReply: hasFragmentedSymbolicReply,
       hasGeoMeetupBait: hasGeoMeetupBait,
-      hasBaitQuestionShape: hasBaitQuestionShape
+      hasBaitQuestionShape: hasBaitQuestionShape,
+      hasExplicitEroticBait: hasExplicitEroticBait,
+      hasSpamTemplateSignal: hasSpamTemplateSignal,
+      hasEroticMentionRedirect: hasEroticMentionRedirect
     };
   }
 
@@ -632,6 +716,8 @@
   function evaluateReply(replyText, postText, flags) {
     const reply = analyzeReplyText(replyText);
     const postNormalized = buildCompact(postText);
+    const compactHandle = buildCompact(flags.handle || "").replace(/^@/, "");
+    const hasLongDigitHandle = /\d{6,}/.test(compactHandle) || /^[a-z]{2,}[0-9]{5,}$/i.test(compactHandle);
     const shareLinkScam = looksLikeShareLinkScam(replyText);
     const innocentPetContext = looksLikeInnocentPetContext(replyText);
     const highRiskDisplayName = displayNameLooksHighRisk(flags.displayName || "");
@@ -642,6 +728,25 @@
     let score = 0;
 
     if (!reply.normalized) {
+      if (highRiskDisplayName || (lureDisplayName && suspiciousHandle)) {
+        const emptyReasons = [];
+        if (highRiskDisplayName) {
+          emptyReasons.push("high-risk-display-name");
+        }
+        if (lureDisplayName) {
+          emptyReasons.push("lure-display-name");
+        }
+        if (suspiciousHandle) {
+          emptyReasons.push("suspicious-handle");
+        }
+        emptyReasons.push("empty-reply-from-risky-account");
+        return {
+          hide: true,
+          score: AUTO_HIDE_THRESHOLD + 1,
+          reasons: emptyReasons
+        };
+      }
+
       return {
         hide: false,
         score: 0,
@@ -707,6 +812,11 @@
       reasons.push("share-link-scam");
     }
 
+    if (reply.hasSpamTemplateSignal) {
+      score += 4;
+      reasons.push("spam-template-signal");
+    }
+
     if (reply.hasExternalContactPayload) {
       score += 2;
       reasons.push("contact-payload");
@@ -722,6 +832,16 @@
       reasons.push("geo-meetup-bait");
     }
 
+    if (reply.hasExplicitEroticBait) {
+      score += 2;
+      reasons.push("explicit-erotic-bait");
+    }
+
+    if (reply.hasEroticMentionRedirect) {
+      score += 3;
+      reasons.push("mentioned-account-lure-redirect");
+    }
+
     if (reply.hasBaitQuestionShape) {
       score += 1;
       reasons.push("bait-question-shape");
@@ -730,6 +850,11 @@
     if (reply.hasLowInformationBadge && lureDisplayName && suspiciousHandle) {
       score += 2;
       reasons.push("low-information-badge-from-lure-account");
+    }
+
+    if (reply.hasFragmentedSymbolicReply && lureDisplayName && suspiciousHandle) {
+      score += 2;
+      reasons.push("fragmented-symbolic-reply-from-lure-account");
     }
 
     if (highRiskDisplayName) {
@@ -781,9 +906,34 @@
       reasons.push("lure-emoji");
     }
 
+    if (reply.hasFragmentedSymbolicReply && suspiciousHandle && reply.emojiCount >= 2) {
+      score += 1;
+      reasons.push("symbolic-noise-from-suspicious-handle");
+    }
+
+    if (reply.hasAccountMention && (reply.hasLureEmoji || reply.hasExplicitEroticBait)) {
+      score += 1;
+      reasons.push("mentioned-account-bait");
+    }
+
+    if (reply.hasSpamTemplateSignal && suspiciousHandle) {
+      score += 2;
+      reasons.push("spam-template-from-suspicious-handle");
+    }
+
+    if (reply.hasSpamTemplateSignal && (reply.hasLureEmoji || reply.emojiCount >= 3)) {
+      score += 1;
+      reasons.push("spam-template-emoji-noise");
+    }
+
     if (suspiciousHandle && (lureDisplayName || reply.hasMinimalTextPayload || reply.matchedSlots.length > 0)) {
       score += 1;
       reasons.push("suspicious-handle");
+    }
+
+    if (hasLongDigitHandle && (lureDisplayName || reply.hasFragmentedSymbolicReply || reply.hasMinimalTextPayload)) {
+      score += 1;
+      reasons.push("long-digit-handle");
     }
 
     const substantiveCount = countMatches(reply.compact, SUBSTANTIVE_MARKERS);

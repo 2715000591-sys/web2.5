@@ -3,21 +3,33 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>web2.5</title>
+    <title>Colorful Toilet</title>
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
     <main class="panel">
-      <p class="eyebrow">web2.5 MVP</p>
-      <h1>内容控制</h1>
+      <section class="popup-brand">
+        <img class="popup-brand-icon" src="content/icon128.png" alt="Colorful Toilet 头像" />
+        <div class="popup-brand-copy">
+          <p class="eyebrow">Colorful Toilet</p>
+          <h1>内容控制</h1>
+        </div>
+      </section>
       <div class="feature-card control-card">
         <label class="toggle">
           <input id="enabled" type="checkbox">
           <span>开启 X 回复区清理</span>
         </label>
+        <label class="toggle toggle-sub">
+          <input id="replyAiEnabled" type="checkbox">
+          <span>开启回复区 AI 审核</span>
+        </label>
+        <p id="replyAiStatus" class="hint compact-hint">
+          登录后会同步到你的云端账号。AI 提供商配置在控制台里统一管理，刷新 X 页面后生效。
+        </p>
         <label id="markingToggleRow" class="toggle toggle-sub">
           <input id="markingEnabled" type="checkbox">
-          <span>回复下方显示“标记可疑”</span>
+          <span>回复下方显示“冲走”</span>
         </label>
         <p id="cleanupStatus" class="hint compact-hint">
           只在帖子详情页生效。
@@ -43,7 +55,7 @@
           <strong id="accountStatusValue">正在检查...</strong>
         </div>
         <div class="action-row">
-          <a id="openConsole" class="action-link" href="https://web25-public.web25-boris.workers.dev" target="_blank" rel="noreferrer">打开控制台</a>
+          <a id="openConsole" class="action-link" href="https://colorful-toilet.colorful-toilet.workers.dev" target="_blank" rel="noreferrer">打开控制台</a>
         </div>
         <p id="syncStatus" class="hint compact-hint">
           登录后自动接上。

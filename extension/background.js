@@ -279,26 +279,35 @@
       const payload = message.payload || {};
       const method = String(message.method || "GET").trim().toUpperCase();
       const credentials = message.credentials === "include" ? "include" : "omit";
+      const responseType = String(message.responseType || "json").trim().toLowerCase();
+      const extraHeaders = message.headers && typeof message.headers === "object" ? message.headers : {};
 
       if (!endpoint) {
         sendResponse({ ok: false, error: "missing-endpoint" });
         return false;
       }
 
+      const headers = new Headers(extraHeaders);
+      if (!headers.has("Content-Type") && method !== "GET") {
+        headers.set("Content-Type", "application/json");
+      }
+
       fetch(endpoint, {
         method: method,
         credentials: credentials,
         cache: "no-store",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers,
         body: method === "GET" ? undefined : JSON.stringify(payload)
       }).then(async function (response) {
-        let data = {};
+        let data = null;
         try {
-          data = await response.json();
+          if (responseType === "text") {
+            data = await response.text();
+          } else {
+            data = await response.json();
+          }
         } catch (error) {
-          data = {};
+          data = responseType === "text" ? "" : {};
         }
 
         sendResponse({

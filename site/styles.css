@@ -1,20 +1,20 @@
 :root {
-  --bg: #eef2f8;
-  --bg-deep: #0f1728;
+  --bg: #f1f1ee;
+  --bg-deep: #111111;
   --panel: rgba(255, 255, 255, 0.84);
   --panel-strong: rgba(255, 255, 255, 0.94);
-  --ink: #0f1728;
-  --ink-soft: rgba(15, 23, 40, 0.68);
-  --line: rgba(15, 23, 40, 0.1);
-  --line-strong: rgba(15, 23, 40, 0.18);
-  --accent: #1d6bff;
-  --accent-soft: rgba(29, 107, 255, 0.12);
-  --accent-deep: #1144a6;
-  --teal: #0b7f7b;
-  --teal-soft: rgba(11, 127, 123, 0.12);
-  --gold: #9b5b14;
-  --gold-soft: rgba(155, 91, 20, 0.12);
-  --shadow: 0 28px 70px rgba(14, 22, 38, 0.12);
+  --ink: #111111;
+  --ink-soft: rgba(17, 17, 17, 0.68);
+  --line: rgba(17, 17, 17, 0.1);
+  --line-strong: rgba(17, 17, 17, 0.2);
+  --accent: #111111;
+  --accent-soft: rgba(17, 17, 17, 0.08);
+  --accent-deep: #000000;
+  --teal: #5e5e5e;
+  --teal-soft: rgba(17, 17, 17, 0.06);
+  --gold: #767676;
+  --gold-soft: rgba(17, 17, 17, 0.08);
+  --shadow: 0 28px 70px rgba(0, 0, 0, 0.12);
   --radius-xl: 30px;
   --radius-lg: 22px;
   --radius-md: 18px;
@@ -37,9 +37,9 @@ body {
   font-family: var(--font-body);
   color: var(--ink);
   background:
-    radial-gradient(circle at top left, rgba(29, 107, 255, 0.1), transparent 26%),
-    radial-gradient(circle at right 15%, rgba(11, 127, 123, 0.08), transparent 24%),
-    linear-gradient(180deg, #edf2f8 0%, #f6f8fc 42%, #ffffff 100%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.28), transparent 24%),
+    radial-gradient(circle at right 12%, rgba(17, 17, 17, 0.08), transparent 20%),
+    linear-gradient(180deg, #111111 0%, #1b1b1b 15%, #efefeb 48%, #fafaf8 100%);
 }
 
 .hidden {
@@ -52,8 +52,8 @@ body::before {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(15, 23, 40, 0.028) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 40, 0.028) 1px, transparent 1px);
+    linear-gradient(rgba(17, 17, 17, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 17, 17, 0.03) 1px, transparent 1px);
   background-size: 30px 30px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.36), transparent 86%);
 }
@@ -67,6 +67,8 @@ body::before {
 }
 
 .hero,
+.hero-panel,
+.console-sync-panel,
 .surface-card,
 .metric-card,
 .feature-card,
@@ -93,7 +95,7 @@ body::before {
   width: 280px;
   height: 280px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(29, 107, 255, 0.16), transparent 68%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.2), transparent 68%);
   pointer-events: none;
 }
 
@@ -127,34 +129,16 @@ body::before {
   width: 58px;
   height: 58px;
   border-radius: 18px;
-  background: linear-gradient(155deg, #0f1728 0%, #1842a0 52%, #19a1ff 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  overflow: hidden;
+  background: url("/media/toilet-avatar-bw.png") center / cover no-repeat;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .brand-mark span {
-  position: absolute;
-  inset: 14px;
-  border-radius: 14px;
-  border: 2px solid rgba(247, 250, 255, 0.96);
-}
-
-.brand-mark span::before,
-.brand-mark span::after {
-  content: "";
-  position: absolute;
-  background: rgba(247, 250, 255, 0.96);
-}
-
-.brand-mark span::before {
-  inset: 50% 7px auto;
-  height: 2px;
-  transform: translateY(-50%);
-}
-
-.brand-mark span::after {
-  inset: 7px 50% 7px auto;
-  width: 2px;
-  transform: translateX(50%);
+  display: none;
 }
 
 .eyebrow {
@@ -466,6 +450,20 @@ button.ghost-button:disabled {
   margin-top: 22px;
 }
 
+.download-section-note,
+.download-version-note {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.66;
+}
+
+.download-version-note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .section-heading {
   margin-bottom: 16px;
 }
@@ -521,15 +519,69 @@ button.ghost-button:disabled {
   line-height: 1.66;
 }
 
+.download-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.download-card {
+  gap: 16px;
+}
+
+.download-card-highlight {
+  border-color: rgba(17, 17, 17, 0.14);
+  background:
+    radial-gradient(circle at right top, rgba(17, 17, 17, 0.1), transparent 34%),
+    rgba(255, 255, 255, 0.92);
+}
+
+.download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.download-steps {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink);
+  line-height: 1.66;
+}
+
+.download-steps code {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.76);
+  font-family: var(--font-body);
+  font-size: 0.94em;
+  font-weight: 700;
+}
+
+.download-steps li + li {
+  margin-top: 8px;
+}
+
+.download-note {
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--ink-soft);
+  line-height: 1.62;
+}
+
 .preference-card {
   display: grid;
   gap: 14px;
 }
 
 .preference-card-highlight {
-  border-color: rgba(11, 127, 123, 0.18);
+  border-color: rgba(17, 17, 17, 0.14);
   background:
-    radial-gradient(circle at right top, rgba(11, 127, 123, 0.12), transparent 34%),
+    radial-gradient(circle at right top, rgba(17, 17, 17, 0.1), transparent 34%),
     rgba(255, 255, 255, 0.92);
 }
 
@@ -630,9 +682,9 @@ button.ghost-button:disabled {
 }
 
 .update-item-highlight {
-  border-color: rgba(17, 68, 166, 0.18);
+  border-color: rgba(17, 17, 17, 0.16);
   background:
-    radial-gradient(circle at right top, rgba(29, 107, 255, 0.12), transparent 38%),
+    radial-gradient(circle at right top, rgba(17, 17, 17, 0.1), transparent 38%),
     rgba(255, 255, 255, 0.9);
 }
 
@@ -642,8 +694,23 @@ button.ghost-button:disabled {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at left top, rgba(29, 107, 255, 0.12), transparent 28%),
-    radial-gradient(circle at right bottom, rgba(11, 127, 123, 0.1), transparent 26%);
+    radial-gradient(circle at left top, rgba(255, 255, 255, 0.18), transparent 28%),
+    radial-gradient(circle at right bottom, rgba(17, 17, 17, 0.08), transparent 26%);
+}
+
+.launch-photo {
+  margin: 0 0 16px;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 22px 40px rgba(0, 0, 0, 0.18);
+}
+
+.launch-photo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: grayscale(1);
 }
 
 .sync-strip {
@@ -744,17 +811,17 @@ button.ghost-button:disabled {
 
 .global-metric-card-primary {
   background:
-    radial-gradient(circle at right top, rgba(29, 107, 255, 0.16), transparent 32%),
-    linear-gradient(135deg, rgba(14, 25, 48, 0.96), rgba(18, 69, 168, 0.9));
-  border-color: rgba(17, 68, 166, 0.24);
-  color: #f4f8ff;
+    radial-gradient(circle at right top, rgba(255, 255, 255, 0.12), transparent 32%),
+    linear-gradient(135deg, rgba(12, 12, 12, 0.96), rgba(48, 48, 48, 0.9));
+  border-color: rgba(255, 255, 255, 0.08);
+  color: #fbfbfb;
 }
 
 .global-metric-card-accent {
   background:
-    radial-gradient(circle at right top, rgba(11, 127, 123, 0.18), transparent 32%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(237, 247, 246, 0.98));
-  border-color: rgba(11, 127, 123, 0.18);
+    radial-gradient(circle at right top, rgba(17, 17, 17, 0.08), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(238, 238, 234, 0.98));
+  border-color: rgba(17, 17, 17, 0.12);
 }
 
 .global-metric-copy,
@@ -1027,6 +1094,95 @@ button.ghost-button:disabled {
   margin-top: 16px;
 }
 
+.ai-feed-settings {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.ai-toggle-row {
+  margin-top: 16px;
+}
+
+.ai-integration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.ai-config-card {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel-strong);
+}
+
+.ai-term-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-term-editor span {
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-config-hint {
+  margin: 14px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.ai-term-editor input,
+.ai-term-editor textarea,
+.review-search input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.ai-feed-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-section-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.ai-section-column {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel-strong);
+}
+
+.surface-head-mini {
+  margin-bottom: 0;
+}
+
+.surface-head-mini h4 {
+  margin: 4px 0 0;
+  font-size: 16px;
+}
+
 .review-tools.review-tools-collapsed {
   display: none;
 }
@@ -1122,6 +1278,55 @@ button.ghost-button:disabled {
 .review-actions {
   display: flex;
   margin-top: 14px;
+}
+
+.ai-feed-list {
+  margin-top: 16px;
+}
+
+.timeline-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(17, 17, 17, 0.08);
+  color: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-feed-secondary {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(17, 17, 17, 0.04);
+}
+
+.ai-feed-secondary p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.58;
+}
+
+.ai-feed-secondary p + p {
+  margin-top: 8px;
+}
+
+.ai-feed-actions {
+  display: flex;
+  margin-top: 14px;
+}
+
+.ai-feed-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .review-restore-button {
@@ -1417,6 +1622,7 @@ button.ghost-button:disabled {
   .dashboard-grid,
   .developer-grid,
   .metrics-panel,
+  .ai-section-columns,
   .review-toolbar {
     grid-template-columns: 1fr;
   }
@@ -1502,6 +1708,11 @@ button.ghost-button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .download-grid,
+  .entry-grid {
+    grid-template-columns: 1fr;
+  }
+
   .metric-card strong {
     font-size: 2.6rem;
   }
@@ -1512,5 +1723,9 @@ button.ghost-button:disabled {
 
   .global-metric-value strong {
     font-size: 3.1rem;
+  }
+
+  .ai-integration-grid {
+    grid-template-columns: 1fr;
   }
 }

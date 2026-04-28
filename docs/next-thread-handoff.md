@@ -1,4 +1,4 @@
-# web2.5 下一轮接力说明
+# Colorful Toilet 下一轮接力说明
 
 ## Summary
 
@@ -61,7 +61,7 @@
 ### 已经做成的
 
 - `X / Safari` 插件主链路已经稳定：
-  - 标记可疑
+  - 冲走
   - 自动下沉
   - 恢复
   - 蓝框
@@ -76,8 +76,8 @@
   - 某些详情页会在首轮渲染后把右栏灰叉吃掉；当前版本已经用延迟复扫补挂，默认不要删这层兜底
   - Safari 只应保留 `/Applications/web2.5.app` 这一份扩展注册；如果页面还在跑旧 `BUILD_ID`，先用 `pluginkit` 清掉缓存/临时构建，再重新注册 `/Applications/web2.5.app/Contents/PlugIns/web2.5 Extension.appex`
 - 公网网站已经能打开：
-  - 官网首页：`https://web25-public-pages.pages.dev/`
-  - 公网控制台：`https://web25-public-pages.pages.dev/console/`
+  - 官网首页：`https://colorful-toilet.colorful-toilet.workers.dev/`
+  - 公网控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
 - 开发者登录已经可用：
   - `2715000591@qq.com`
   - 开发者验证码会直接显示
@@ -105,7 +105,7 @@
 - 当前本地与云端规则已经对齐：
   - Safari 本地构建 `BUILD_ID = 2026-04-23-1415`
   - Cloudflare Worker 已部署
-  - 线上 URL: `https://web25-public.web25-boris.workers.dev`
+  - 线上 URL: `https://colorful-toilet.colorful-toilet.workers.dev`
   - 当前 Version ID: `ca843ed1-1bd2-429f-b16c-b19906e3f994`
 
 ### 还没做完的
@@ -130,7 +130,7 @@
 
 尤其不能改坏：
 
-- 标记可疑
+- 冲走
 - 自动下沉
 - 恢复
 - 蓝框
@@ -279,7 +279,7 @@
 
 把下面这段原样发给新对话最合适：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先不要扩功能，也不要重构。X 插件主链路已经稳定，绝对不要乱动：标记可疑、自动下沉、恢复、蓝框、广告跳过都不能改坏。先读 `cloudflare/src/index.js`、`cloudflare/schema.sql`、`site/console.html`、`site/console/index.html`、`site/app.js`、`site/styles.css`、`wrangler.jsonc`，然后只回答三件事：1. 当前真实状态是什么；2. 还缺什么；3. 下一步只应该收哪一个点。默认优先清理开发测试痕迹和普通用户邮件验证码，不要抢跑 AI 和个性化。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先不要扩功能，也不要重构。X 插件主链路已经稳定，绝对不要乱动：冲走、自动下沉、恢复、蓝框、广告跳过都不能改坏。先读 `cloudflare/src/index.js`、`cloudflare/schema.sql`、`site/console.html`、`site/console/index.html`、`site/app.js`、`site/styles.css`、`wrangler.jsonc`，然后只回答三件事：1. 当前真实状态是什么；2. 还缺什么；3. 下一步只应该收哪一个点。默认优先清理开发测试痕迹和普通用户邮件验证码，不要抢跑 AI 和个性化。
 
 ## 默认实现原则
 

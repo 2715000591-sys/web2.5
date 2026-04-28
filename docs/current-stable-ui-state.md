@@ -1,4 +1,4 @@
-# web2.5 当前稳定 UI 状态
+# Colorful Toilet 当前稳定 UI 状态
 
 ## 这份文件的目的
 
