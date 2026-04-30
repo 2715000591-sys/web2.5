@@ -1,6 +1,6 @@
 # Colorful Toilet 下一轮接力说明
 
-最后整理日期：2026-04-28
+最后整理日期：2026-04-30
 
 这份文件是给下一轮 Codex / 开发助手看的，不是产品宣传文档。目标只有一个：新对话打开后，能快速、安全、连续地接手，不重复解释，不误删数据，不改坏已经稳定的插件。
 
@@ -94,7 +94,9 @@
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID：`e85cc291-b3c5-4121-bbc4-30359a442657`
-  - 2026-04-30 本地 `npm run cloud:deploy` 构建成功，但 Cloudflare 上传因本机 wrangler token 失效失败；下一次部署前需要刷新 Cloudflare 登录或提供有效 `CLOUDFLARE_API_TOKEN`
+  - 2026-04-30 本地 `npm run cloud:deploy` 构建成功，但 Cloudflare 上传因本机 wrangler token 失效失败。
+  - 2026-04-30 追加尝试：Cloudflare API 插件可读 Worker，但写入 `/workers/scripts/colorful-toilet/content` 返回 `Authentication error`；Wrangler 重新登录已打开 Cloudflare 页面，但卡在真人验证/账号登录，必须由账号本人完成。
+  - 下一次部署前需要刷新 Cloudflare 登录或提供有效 `CLOUDFLARE_API_TOKEN`；部署后立刻跑 `npm run cloud:audit-data-layer` 做线上分层审计。
 - Cloudflare D1：
   - 数据库名：`web25`
   - 绑定名：`DB`
