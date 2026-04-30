@@ -96,8 +96,8 @@
   - Version ID：`23ce2f24-4594-48dc-ab22-183a770c2992`
   - 2026-04-30 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
-  - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 仍会连接超时，导致 `npm run cloud:audit-data-layer` 在本机报 `fetch failed`；已用 `wrangler d1 execute --remote` 做只读远程 D1 审计替代。
-  - 远程 D1 只读审计结果：`total_users=2`，真实事件 `total_events=674`、`bound_events=674`、`unbound_events=0`、`event_user_count=1`；`events_with_unknown_user=0`、`sync_keys_with_unknown_user=0`、`events_mismatched_sync_user=0`、`developer_decisions_missing_event=0`。
+  - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 会连接超时；原因是命令行直连没有走 macOS 系统代理。`scripts/audit-data-layer.mjs` 已修复：检测到 macOS HTTPS 代理时会自动用 `NODE_USE_ENV_PROXY=1` 重启自己。
+  - 2026-04-30 `npm run cloud:audit-data-layer` 已直接跑通，线上分层审计全部 PASS：`total_users=2`，真实事件 `total_events=675`、`bound_events=675`、`unbound_events=0`、`event_user_count=1`；`single_contributor_blocked_candidates=8`。
 - Cloudflare D1：
   - 数据库名：`web25`
   - 绑定名：`DB`
@@ -239,6 +239,8 @@ npm run cloud:audit-data-layer
 ```
 
 如果 Cloudflare token 失效，`wrangler d1 execute --remote` 会失败；这个脚本走线上开发者登录接口，部署后更适合做日常验收。
+
+本机当前 macOS 系统代理是 `127.0.0.1:7897`。审计脚本会自动检测 HTTPS 代理并重启自己；如果未来又出现 `fetch failed`，先检查代理是否还在运行。
 
 ### 改网站 / Worker
 

@@ -71,6 +71,8 @@ npm run cloud:audit-data-layer
 
 这个脚本会用开发者调试验证码登录，然后读取 `/api/developer/data-layer-audit`，检查个人统计、公共规则、syncKey 绑定和单用户污染风险。
 
+如果本机直连 `workers.dev` 超时，脚本会在 macOS 上自动读取系统 HTTPS 代理并用 `NODE_USE_ENV_PROXY=1` 重启自己。当前常见代理地址是 `127.0.0.1:7897`。
+
 ## 当前这版上线前还必须确认的三件事
 
 1. Cloudflare 的发布权限已经真正可用

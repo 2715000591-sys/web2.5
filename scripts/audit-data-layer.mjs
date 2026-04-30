@@ -1,7 +1,56 @@
 #!/usr/bin/env node
 
+import { execFileSync, spawnSync } from "node:child_process";
+
 const DEFAULT_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
 const DEFAULT_DEVELOPER_EMAIL = "2715000591@qq.com";
+
+function detectMacHttpsProxy() {
+  if (process.platform !== "darwin") {
+    return "";
+  }
+
+  try {
+    const output = execFileSync("scutil", ["--proxy"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    });
+    if (!/HTTPSEnable\s*:\s*1/.test(output)) {
+      return "";
+    }
+    const host = output.match(/HTTPSProxy\s*:\s*([^\n]+)/)?.[1]?.trim();
+    const port = output.match(/HTTPSPort\s*:\s*(\d+)/)?.[1]?.trim();
+    return host && port ? `http://${host}:${port}` : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function relaunchWithDetectedProxyIfNeeded() {
+  if (process.env.WEB25_AUDIT_PROXY_RELAUNCHED === "1") {
+    return;
+  }
+  const existingHttpsProxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  const detectedProxy = existingHttpsProxy || detectMacHttpsProxy();
+  if (!detectedProxy) {
+    return;
+  }
+  if (process.env.NODE_USE_ENV_PROXY === "1" && existingHttpsProxy) {
+    return;
+  }
+
+  const result = spawnSync(process.execPath, process.argv.slice(1), {
+    stdio: "inherit",
+    env: Object.assign({}, process.env, {
+      HTTPS_PROXY: detectedProxy,
+      NODE_USE_ENV_PROXY: "1",
+      WEB25_AUDIT_PROXY_RELAUNCHED: "1"
+    })
+  });
+  process.exit(result.status === null ? 1 : result.status);
+}
+
+relaunchWithDetectedProxyIfNeeded();
 
 function readArg(name, fallback = "") {
   const prefix = `--${name}=`;
