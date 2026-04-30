@@ -75,7 +75,7 @@
   - 同一账号多个设备不能伪装成多人共识
   - 新增开发者只读审计接口：`GET /api/developer/data-layer-audit`
   - 新增审计脚本：`npm run cloud:audit-data-layer`
-  - 如果这批改动尚未部署，线上仍以当前 Cloudflare Worker Version ID 为准
+  - 2026-04-30 已部署到线上 Worker
 
 ### 还没完成
 
@@ -88,15 +88,16 @@
 
 ## 3. 当前版本锚点
 
-这些是截至 2026-04-28 的已知稳定锚点：
+这些是截至 2026-04-30 的已知稳定锚点：
 
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`e85cc291-b3c5-4121-bbc4-30359a442657`
-  - 2026-04-30 本地 `npm run cloud:deploy` 构建成功，但 Cloudflare 上传因本机 wrangler token 失效失败。
-  - 2026-04-30 追加尝试：Cloudflare API 插件可读 Worker，但写入 `/workers/scripts/colorful-toilet/content` 返回 `Authentication error`；Wrangler 重新登录已打开 Cloudflare 页面，但卡在真人验证/账号登录，必须由账号本人完成。
-  - 下一次部署前需要刷新 Cloudflare 登录或提供有效 `CLOUDFLARE_API_TOKEN`；部署后立刻跑 `npm run cloud:audit-data-layer` 做线上分层审计。
+  - Version ID：`23ce2f24-4594-48dc-ab22-183a770c2992`
+  - 2026-04-30 `npm run cloud:deploy` 已成功部署。
+  - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
+  - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 仍会连接超时，导致 `npm run cloud:audit-data-layer` 在本机报 `fetch failed`；已用 `wrangler d1 execute --remote` 做只读远程 D1 审计替代。
+  - 远程 D1 只读审计结果：`total_users=2`，真实事件 `total_events=674`、`bound_events=674`、`unbound_events=0`、`event_user_count=1`；`events_with_unknown_user=0`、`sync_keys_with_unknown_user=0`、`events_mismatched_sync_user=0`、`developer_decisions_missing_event=0`。
 - Cloudflare D1：
   - 数据库名：`web25`
   - 绑定名：`DB`
