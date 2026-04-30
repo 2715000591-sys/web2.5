@@ -6,6 +6,7 @@ This file is the first thing future Codex sessions should read. The user does no
 
 - Default to doing the full maintenance loop yourself: inspect, edit, test, commit, push, deploy, update the local Safari app, and verify the installed result.
 - Do not only explain what should happen when the user clearly wants the project updated.
+- Continue until there is no reasonable next engineering step left. If blocked by account login, CAPTCHA, payment, or another action only the user can complete, record the exact blocker and the last successful verification.
 - Keep user-facing explanations simple and concrete. Avoid developer jargon unless it is explained in plain language.
 - If a change affects the extension filtering behavior, update both local extension code and Cloudflare Worker code in the same pass.
 - If a change affects the stable product state, update the relevant docs before finishing.
@@ -60,6 +61,7 @@ Read these before touching core behavior:
 
 - Keep `docs/next-thread-handoff.md` concise, current, and operational.
 - Do not let it become a chat transcript or a pile of historical counts.
+- When the user repeats a working preference or a durable project rule, promote it into this file or `docs/next-thread-handoff.md` instead of relying on chat memory.
 - When a deployment, local Safari app build, database migration, or stable behavior changes, update the handoff and the relevant stable-state doc in the same change.
 - Prefer dated version anchors, exact paths, and verification commands over vague reminders.
 
