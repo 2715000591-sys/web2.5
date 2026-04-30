@@ -19,6 +19,8 @@ This file is the first thing future Codex sessions should read. The user does no
   - Global/shared rules and samples may be used by every account.
   - Each user's personal hidden count, restored count, preferences, and history must remain account-specific.
   - Do not make every new account inherit the developer's personal hidden-count total.
+- A `manual_hide` / `冲走` event can contribute garbage candidates. A `manual_allow` / `恢复` event only means "do not treat this as garbage / do not promote this rule"; do not use it as a broad reverse-training sample.
+- A single user repeating the same manual hide must not automatically become a public/global rule. Automatic public promotion needs multiple contributors or explicit developer confirmation.
 
 ## Filtering Rules
 

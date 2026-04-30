@@ -12,10 +12,11 @@ const ALLOWED_EVENT_TYPES = new Set([
 const REVIEW_EVENT_TYPES = new Set(["auto_hide", "manual_hide", "manual_allow"]);
 const GLOBAL_TEMPLATE_WINDOW_DAYS = 7;
 const GLOBAL_TEMPLATE_MIN_HIDES = 5;
-const GLOBAL_TEMPLATE_MIN_SYNC_KEYS = 3;
+const GLOBAL_TEMPLATE_MIN_CONTRIBUTORS = 3;
 const GLOBAL_TEMPLATE_MIN_TEXTS = 3;
 const AUTO_GLOBAL_EXACT_WINDOW_DAYS = 30;
 const AUTO_GLOBAL_EXACT_MIN_HIDES = 2;
+const AUTO_GLOBAL_EXACT_MIN_CONTRIBUTORS = 2;
 const REPEAT_HANDLE_WINDOW_HOURS = 24;
 const REPEAT_HANDLE_MIN_HIDES = 2;
 const DEFAULT_USER_PREFERENCES = Object.freeze({
@@ -64,7 +65,7 @@ const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
 const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
 const REPLY_AI_TEMPLATE_REUSE_WINDOW_HOURS = 72;
 const REPLY_AI_ACCOUNT_REUSE_WINDOW_HOURS = 36;
-const GLOBAL_RULE_STATE_CACHE_VERSION = "exclude-test-events-v1";
+const GLOBAL_RULE_STATE_CACHE_VERSION = "contributor-layering-v2";
 const ZERO_WIDTH_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 const COMPACT_PUNCTUATION_PATTERN = /[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g;
 const EMOJI_PATTERN = /[\u{1F100}-\u{1FAFF}\u2600-\u27BF]/gu;
@@ -523,6 +524,10 @@ async function handleApi(request, env, ctx, url) {
 
   if (request.method === "POST" && url.pathname === "/api/developer/revoke-feed") {
     return handleDeveloperRevokeFeed(request, env);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/developer/data-layer-audit") {
+    return handleDeveloperDataLayerAudit(request, env);
   }
 
   if (request.method === "GET" && url.pathname === "/api/state") {
@@ -1508,6 +1513,469 @@ async function buildStats(env, userId) {
     distinctHiddenHandles: Number(row && row.distinct_hidden_handles ? row.distinct_hidden_handles : 0),
     distinctHiddenPhrases: Number(row && row.distinct_hidden_phrases ? row.distinct_hidden_phrases : 0)
   };
+}
+
+function numberFromRow(row, key) {
+  return Number(row && row[key] ? row[key] : 0);
+}
+
+function summarizeAuditRowsByKey(rows, keyName, valueName) {
+  const output = {};
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const key = String(row && row[keyName] ? row[keyName] : "unknown").trim() || "unknown";
+    output[key] = Number(row && row[valueName] ? row[valueName] : 0);
+  });
+  return output;
+}
+
+function buildRuleContributorKey(row) {
+  const userId = String(row && (row.user_id || row.userId) ? (row.user_id || row.userId) : "").trim();
+  if (userId) {
+    return `user:${userId}`;
+  }
+  const syncKey = String(row && (row.sync_key || row.syncKey) ? (row.sync_key || row.syncKey) : "").trim();
+  if (syncKey) {
+    return `sync:${syncKey}`;
+  }
+  return "";
+}
+
+function buildAuditCheck(id, status, title, detail, meta) {
+  return {
+    id,
+    status,
+    title,
+    detail,
+    meta: meta || {}
+  };
+}
+
+function computeDataLayerAuditChecks(summary) {
+  const source = summary || {};
+  const checks = [];
+  checks.push(buildAuditCheck(
+    "personal-stats-are-user-scoped",
+    "pass",
+    "个人统计按账号隔离",
+    "控制台个人统计查询使用 moderation_events.user_id，不会让新账号继承开发者账号的个人屏蔽数量。"
+  ));
+  checks.push(buildAuditCheck(
+    "global-baseline-is-shared",
+    "pass",
+    "公共基础库可共享",
+    "全局规则只通过开发者确认或多贡献者自动规则进入 /api/state，再与个人规则合并。"
+  ));
+
+  const invalidEventUsers = numberFromRow(source.integrity, "events_with_unknown_user");
+  checks.push(buildAuditCheck(
+    "events-reference-known-users",
+    invalidEventUsers === 0 ? "pass" : "fail",
+    "事件 user_id 必须能找到用户",
+    invalidEventUsers === 0
+      ? "没有发现指向不存在用户的真实事件。"
+      : `发现 ${invalidEventUsers} 条真实事件指向不存在的 user_id。`,
+    { count: invalidEventUsers }
+  ));
+
+  const invalidSyncUsers = numberFromRow(source.integrity, "sync_keys_with_unknown_user");
+  checks.push(buildAuditCheck(
+    "sync-keys-reference-known-users",
+    invalidSyncUsers === 0 ? "pass" : "fail",
+    "syncKey 绑定必须能找到用户",
+    invalidSyncUsers === 0
+      ? "没有发现指向不存在用户的 syncKey。"
+      : `发现 ${invalidSyncUsers} 个 syncKey 指向不存在的 user_id。`,
+    { count: invalidSyncUsers }
+  ));
+
+  const mismatchedEvents = numberFromRow(source.integrity, "events_mismatched_sync_user");
+  checks.push(buildAuditCheck(
+    "event-user-matches-sync-key-user",
+    mismatchedEvents === 0 ? "pass" : "fail",
+    "事件归属必须和 syncKey 绑定一致",
+    mismatchedEvents === 0
+      ? "没有发现事件 user_id 与 syncKey 绑定 user_id 不一致。"
+      : `发现 ${mismatchedEvents} 条事件的 user_id 与 syncKey 绑定不一致。`,
+    { count: mismatchedEvents }
+  ));
+
+  const unboundEvents = numberFromRow(source.eventSummary, "unboundEvents");
+  checks.push(buildAuditCheck(
+    "unbound-events-are-not-personal-stats",
+    unboundEvents === 0 ? "pass" : "warn",
+    "未登录事件不会算进个人统计",
+    unboundEvents === 0
+      ? "当前没有未绑定账号的真实事件。"
+      : `当前有 ${unboundEvents} 条真实事件还没有绑定账号；它们可用于公共统计观察，但不会算进任何用户的个人统计。`,
+    { count: unboundEvents }
+  ));
+
+  const minContributors = Number(source.globalRuleConfig && source.globalRuleConfig.minContributors ? source.globalRuleConfig.minContributors : 0);
+  checks.push(buildAuditCheck(
+    "auto-global-requires-multiple-contributors",
+    minContributors >= 2 ? "pass" : "fail",
+    "自动全局规则必须要求多贡献者",
+    minContributors >= 2
+      ? `自动全局精确规则至少需要 ${minContributors} 个贡献者，同一账号多设备不会伪装成多人共识。`
+      : "自动全局精确规则贡献者门槛低于 2，存在单用户污染公共库风险。",
+    { minContributors }
+  ));
+
+  const blockedSingleContributor = numberFromRow(source.autoGlobalAudit, "single_contributor_blocked_candidates");
+  checks.push(buildAuditCheck(
+    "single-user-repeats-stay-personal",
+    "pass",
+    "单用户重复冲走不会自动进入公共规则",
+    blockedSingleContributor
+      ? `审计发现 ${blockedSingleContributor} 个旧逻辑可能误升全局的单贡献者候选，现在会被拦住。`
+      : "没有发现会被旧逻辑误升全局的单贡献者候选。",
+    { blockedCandidates: blockedSingleContributor }
+  ));
+
+  const missingDecisionEvents = numberFromRow(source.integrity, "developer_decisions_missing_event");
+  checks.push(buildAuditCheck(
+    "developer-decisions-have-source-events",
+    missingDecisionEvents === 0 ? "pass" : "warn",
+    "开发者全局规则应保留来源事件",
+    missingDecisionEvents === 0
+      ? "所有开发者全局规则都能找到来源事件。"
+      : `发现 ${missingDecisionEvents} 条开发者全局规则找不到来源事件，建议后续人工核对。`,
+    { count: missingDecisionEvents }
+  ));
+
+  return checks;
+}
+
+async function buildAutoGlobalCandidateAudit(env, config) {
+  const safeConfig = config || getAutoGlobalExactConfig(env);
+  const nowMs = Date.now();
+  const windowCutoffIso = new Date(nowMs - (safeConfig.windowDays * 24 * 60 * 60 * 1000)).toISOString();
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        id,
+        sync_key,
+        user_id,
+        event_type,
+        account_protected,
+        thread_status_id,
+        reply_status_id,
+        reply_text,
+        normalized_text,
+        compact_text,
+        reply_handle,
+        reply_display_name,
+        created_at
+      FROM moderation_events me
+      WHERE event_type IN ('manual_hide', 'manual_allow')
+        AND created_at >= ?
+        AND ${buildNonTestModerationEventSql("me")}
+      ORDER BY id ASC
+      LIMIT 2000
+    `
+  ).bind(windowCutoffIso).all();
+
+  const autoExactKeyStats = new Map();
+  for (const row of results) {
+    const keys = buildRowKeys(row);
+    const candidateKeys = collectAutoGlobalExactKeys(keys);
+    const normalizedHandle = String(row.reply_handle || "").trim().toLowerCase();
+    const contributorKey = buildRuleContributorKey(row);
+
+    candidateKeys.forEach((key) => {
+      const current = autoExactKeyStats.get(key) || {
+        hideCount: 0,
+        allowCount: 0,
+        contributors: new Set(),
+        handles: new Set()
+      };
+
+      if (row.event_type === "manual_hide") {
+        current.hideCount += 1;
+        if (contributorKey) {
+          current.contributors.add(contributorKey);
+        }
+        if (normalizedHandle) {
+          current.handles.add(normalizedHandle);
+        }
+      } else if (row.event_type === "manual_allow") {
+        current.allowCount += 1;
+      }
+
+      autoExactKeyStats.set(key, current);
+    });
+  }
+
+  let eligibleCandidates = 0;
+  let singleContributorBlockedCandidates = 0;
+  let allowSuppressedCandidates = 0;
+  for (const value of autoExactKeyStats.values()) {
+    const weightedScore = getAutoGlobalExactWeightedScore(value);
+    const baseEligible = value.hideCount >= safeConfig.minHides
+      && weightedScore >= safeConfig.minScore;
+    if (!baseEligible) {
+      continue;
+    }
+    if (value.allowCount > 0) {
+      allowSuppressedCandidates += 1;
+      continue;
+    }
+    if (value.contributors.size >= safeConfig.minContributors) {
+      eligibleCandidates += 1;
+    } else {
+      singleContributorBlockedCandidates += 1;
+    }
+  }
+
+  return {
+    scannedRows: results.length,
+    eligible_candidates: eligibleCandidates,
+    single_contributor_blocked_candidates: singleContributorBlockedCandidates,
+    allow_suppressed_candidates: allowSuppressedCandidates
+  };
+}
+
+async function buildDataLayerAudit(env) {
+  await ensureAiFeedSchema(env);
+  const globalRuleConfig = getAutoGlobalExactConfig(env);
+  const developerEmails = Array.from(getDeveloperEmails(env));
+  const developerEmailPlaceholders = developerEmails.map(() => "?").join(",") || "''";
+  const userSummaryStatement = env.DB.prepare(
+    `
+      SELECT
+        COUNT(*) AS total_users,
+        SUM(CASE WHEN LOWER(TRIM(email)) IN (${developerEmailPlaceholders}) THEN 1 ELSE 0 END) AS developer_users
+      FROM users
+    `
+  );
+  const [
+    userSummary,
+    syncSummary,
+    eventSummary,
+    eventTypeRows,
+    userEventRows,
+    eventUserIntegrity,
+    syncUserIntegrity,
+    eventSyncIntegrity,
+    missingDecisionEvents,
+    decisionSummary,
+    sampleRows,
+    labelRows,
+    candidateRows,
+    autoGlobalAudit
+  ] = await Promise.all([
+    developerEmails.length
+      ? userSummaryStatement.bind(...developerEmails).first()
+      : userSummaryStatement.first(),
+    env.DB.prepare(
+      `
+        SELECT
+          COUNT(*) AS total_sync_keys,
+          SUM(CASE WHEN user_id IS NOT NULL AND TRIM(user_id) != '' THEN 1 ELSE 0 END) AS bound_sync_keys,
+          SUM(CASE WHEN user_id IS NULL OR TRIM(user_id) = '' THEN 1 ELSE 0 END) AS unbound_sync_keys
+        FROM sync_keys
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT
+          COUNT(*) AS total_events,
+          SUM(CASE WHEN user_id IS NOT NULL AND TRIM(user_id) != '' THEN 1 ELSE 0 END) AS bound_events,
+          SUM(CASE WHEN user_id IS NULL OR TRIM(user_id) = '' THEN 1 ELSE 0 END) AS unbound_events,
+          COUNT(DISTINCT CASE WHEN user_id IS NOT NULL AND TRIM(user_id) != '' THEN user_id ELSE NULL END) AS event_user_count
+        FROM moderation_events me
+        WHERE ${buildNonTestModerationEventSql("me")}
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT event_type, COUNT(*) AS total_count
+        FROM moderation_events me
+        WHERE ${buildNonTestModerationEventSql("me")}
+        GROUP BY event_type
+        ORDER BY event_type
+      `
+    ).all(),
+    env.DB.prepare(
+      `
+        SELECT
+          u.id AS user_id,
+          u.email AS email,
+          COUNT(me.id) AS total_events,
+          SUM(CASE WHEN me.event_type = 'manual_hide' THEN 1 ELSE 0 END) AS manual_hide_events,
+          SUM(CASE WHEN me.event_type = 'manual_allow' THEN 1 ELSE 0 END) AS manual_allow_events,
+          SUM(CASE WHEN me.event_type = 'auto_hide' THEN 1 ELSE 0 END) AS auto_hide_events,
+          SUM(CASE WHEN me.event_type IN ('ad_home_hide', 'ad_hide', 'ad_reply_hide') THEN 1 ELSE 0 END) AS ad_hide_events
+        FROM users u
+        LEFT JOIN moderation_events me
+          ON me.user_id = u.id
+          AND ${buildNonTestModerationEventSql("me")}
+        GROUP BY u.id, u.email
+        ORDER BY COUNT(me.id) DESC, u.created_at DESC
+        LIMIT 50
+      `
+    ).all(),
+    env.DB.prepare(
+      `
+        SELECT
+          COUNT(*) AS events_with_unknown_user
+        FROM moderation_events me
+        LEFT JOIN users u
+          ON u.id = me.user_id
+        WHERE ${buildNonTestModerationEventSql("me")}
+          AND me.user_id IS NOT NULL
+          AND TRIM(me.user_id) != ''
+          AND u.id IS NULL
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT
+          COUNT(*) AS sync_keys_with_unknown_user
+        FROM sync_keys sk
+        LEFT JOIN users u
+          ON u.id = sk.user_id
+        WHERE sk.user_id IS NOT NULL
+          AND TRIM(sk.user_id) != ''
+          AND u.id IS NULL
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT
+          COUNT(*) AS events_mismatched_sync_user
+        FROM moderation_events me
+        JOIN sync_keys sk
+          ON sk.sync_key = me.sync_key
+        WHERE ${buildNonTestModerationEventSql("me")}
+          AND me.user_id IS NOT NULL
+          AND TRIM(me.user_id) != ''
+          AND sk.user_id IS NOT NULL
+          AND TRIM(sk.user_id) != ''
+          AND me.user_id != sk.user_id
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT COUNT(*) AS developer_decisions_missing_event
+        FROM developer_global_decisions d
+        LEFT JOIN moderation_events me
+          ON me.id = d.event_id
+        WHERE d.event_id IS NOT NULL
+          AND d.event_id != 0
+          AND me.id IS NULL
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT
+          COUNT(*) AS total_decisions,
+          SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END) AS active_decisions,
+          SUM(CASE WHEN revoked_at IS NOT NULL THEN 1 ELSE 0 END) AS revoked_decisions
+        FROM developer_global_decisions
+      `
+    ).first(),
+    env.DB.prepare(
+      `
+        SELECT contribution_scope || ':' || quality_status AS bucket, COUNT(*) AS total_count
+        FROM moderation_samples
+        GROUP BY contribution_scope, quality_status
+        ORDER BY contribution_scope, quality_status
+      `
+    ).all(),
+    env.DB.prepare(
+      `
+        SELECT decision, COUNT(*) AS total_count
+        FROM moderation_sample_labels
+        GROUP BY decision
+        ORDER BY decision
+      `
+    ).all(),
+    env.DB.prepare(
+      `
+        SELECT status, COUNT(*) AS total_count
+        FROM moderation_rule_candidates
+        GROUP BY status
+        ORDER BY status
+      `
+    ).all(),
+    buildAutoGlobalCandidateAudit(env, globalRuleConfig)
+  ]);
+
+  const summary = {
+    checkedAt: new Date().toISOString(),
+    userSummary: {
+      totalUsers: numberFromRow(userSummary, "total_users"),
+      developerUsers: numberFromRow(userSummary, "developer_users")
+    },
+    syncSummary: {
+      totalSyncKeys: numberFromRow(syncSummary, "total_sync_keys"),
+      boundSyncKeys: numberFromRow(syncSummary, "bound_sync_keys"),
+      unboundSyncKeys: numberFromRow(syncSummary, "unbound_sync_keys")
+    },
+    eventSummary: {
+      totalEvents: numberFromRow(eventSummary, "total_events"),
+      boundEvents: numberFromRow(eventSummary, "bound_events"),
+      unboundEvents: numberFromRow(eventSummary, "unbound_events"),
+      eventUserCount: numberFromRow(eventSummary, "event_user_count"),
+      byType: summarizeAuditRowsByKey(eventTypeRows.results, "event_type", "total_count")
+    },
+    perUserEventSummary: (userEventRows.results || []).map((row) => ({
+      userId: row.user_id || "",
+      email: row.email || "",
+      totalEvents: Number(row.total_events || 0),
+      manualHideEvents: Number(row.manual_hide_events || 0),
+      manualAllowEvents: Number(row.manual_allow_events || 0),
+      autoHideEvents: Number(row.auto_hide_events || 0),
+      adHideEvents: Number(row.ad_hide_events || 0)
+    })),
+    integrity: {
+      events_with_unknown_user: numberFromRow(eventUserIntegrity, "events_with_unknown_user"),
+      sync_keys_with_unknown_user: numberFromRow(syncUserIntegrity, "sync_keys_with_unknown_user"),
+      events_mismatched_sync_user: numberFromRow(eventSyncIntegrity, "events_mismatched_sync_user"),
+      developer_decisions_missing_event: numberFromRow(missingDecisionEvents, "developer_decisions_missing_event")
+    },
+    globalRules: {
+      totalDecisions: numberFromRow(decisionSummary, "total_decisions"),
+      activeDecisions: numberFromRow(decisionSummary, "active_decisions"),
+      revokedDecisions: numberFromRow(decisionSummary, "revoked_decisions")
+    },
+    moderationTraining: {
+      samplesByScopeStatus: summarizeAuditRowsByKey(sampleRows.results, "bucket", "total_count"),
+      labelsByDecision: summarizeAuditRowsByKey(labelRows.results, "decision", "total_count"),
+      candidatesByStatus: summarizeAuditRowsByKey(candidateRows.results, "status", "total_count")
+    },
+    globalRuleConfig: {
+      minContributors: globalRuleConfig.minContributors,
+      minHides: globalRuleConfig.minHides,
+      minScore: globalRuleConfig.minScore,
+      windowDays: globalRuleConfig.windowDays
+    },
+    autoGlobalAudit
+  };
+
+  return Object.assign({}, summary, {
+    checks: computeDataLayerAuditChecks(summary)
+  });
+}
+
+async function handleDeveloperDataLayerAudit(request, env) {
+  const viewer = await requireDeveloper(request, env);
+  if (!viewer) {
+    return json({ ok: false, error: "developer-required" }, 403, request, true);
+  }
+
+  const audit = await buildDataLayerAudit(env);
+  return json(
+    {
+      ok: true,
+      audit
+    },
+    200,
+    request,
+    true,
+    buildSessionRefreshHeaders(request, viewer, env)
+  );
 }
 
 async function buildRecentEvents(env, userId) {
@@ -2888,6 +3356,7 @@ async function buildGlobalRuleStateUncached(env) {
       SELECT
         id,
         sync_key,
+        user_id,
         event_type,
         account_protected,
         thread_status_id,
@@ -2921,14 +3390,15 @@ async function buildGlobalRuleStateUncached(env) {
         const current = templateRuleStats.get(templateKey) || {
           hideCount: 0,
           allowCount: 0,
-          syncKeys: new Set(),
+          contributors: new Set(),
           normalizedTexts: new Set()
         };
 
         if (row.event_type === "manual_hide") {
           current.hideCount += 1;
-          if (row.sync_key) {
-            current.syncKeys.add(row.sync_key);
+          const contributorKey = buildRuleContributorKey(row);
+          if (contributorKey) {
+            current.contributors.add(contributorKey);
           }
           const normalizedText = String(row.normalized_text || "").trim() || normalizeRuleText(row.reply_text || "");
           if (normalizedText) {
@@ -2950,14 +3420,15 @@ async function buildGlobalRuleStateUncached(env) {
         const current = autoExactKeyStats.get(key) || {
           hideCount: 0,
           allowCount: 0,
-          syncKeys: new Set(),
+          contributors: new Set(),
           handles: new Set()
         };
 
         if (row.event_type === "manual_hide") {
           current.hideCount += 1;
-          if (row.sync_key) {
-            current.syncKeys.add(row.sync_key);
+          const contributorKey = buildRuleContributorKey(row);
+          if (contributorKey) {
+            current.contributors.add(contributorKey);
           }
           if (normalizedHandle) {
             current.handles.add(normalizedHandle);
@@ -2976,7 +3447,7 @@ async function buildGlobalRuleStateUncached(env) {
     if (
       value.hideCount >= GLOBAL_TEMPLATE_MIN_HIDES
       && value.allowCount === 0
-      && value.syncKeys.size >= GLOBAL_TEMPLATE_MIN_SYNC_KEYS
+      && value.contributors.size >= GLOBAL_TEMPLATE_MIN_CONTRIBUTORS
       && value.normalizedTexts.size >= GLOBAL_TEMPLATE_MIN_TEXTS
     ) {
       templateRules.push(templateKey);
@@ -3000,7 +3471,7 @@ async function buildGlobalRuleStateUncached(env) {
     if (
       value.hideCount >= autoGlobalExactConfig.minHides
       && value.allowCount === 0
-      && value.syncKeys.size >= autoGlobalExactConfig.minSyncKeys
+      && value.contributors.size >= autoGlobalExactConfig.minContributors
       && weightedScore >= autoGlobalExactConfig.minScore
       && !revokedExactKeys.has(key)
     ) {
@@ -3026,12 +3497,18 @@ async function buildGlobalRuleStateUncached(env) {
 }
 
 function getAutoGlobalExactConfig(env) {
-  const minSyncKeys = Math.max(1, Number(env && env.GLOBAL_RULE_MIN_SYNC_KEYS ? env.GLOBAL_RULE_MIN_SYNC_KEYS : 1) || 1);
+  const configuredContributors = env && env.GLOBAL_RULE_MIN_CONTRIBUTORS
+    ? env.GLOBAL_RULE_MIN_CONTRIBUTORS
+    : (env && env.GLOBAL_RULE_MIN_SYNC_KEYS ? env.GLOBAL_RULE_MIN_SYNC_KEYS : AUTO_GLOBAL_EXACT_MIN_CONTRIBUTORS);
+  const minContributors = Math.max(
+    AUTO_GLOBAL_EXACT_MIN_CONTRIBUTORS,
+    Number(configuredContributors) || AUTO_GLOBAL_EXACT_MIN_CONTRIBUTORS
+  );
   const minScore = Math.max(4, Number(env && env.GLOBAL_RULE_MIN_SCORE ? env.GLOBAL_RULE_MIN_SCORE : 4) || 4);
   const windowDays = Math.max(GLOBAL_TEMPLATE_WINDOW_DAYS, Number(env && env.AUTO_GLOBAL_EXACT_WINDOW_DAYS ? env.AUTO_GLOBAL_EXACT_WINDOW_DAYS : AUTO_GLOBAL_EXACT_WINDOW_DAYS) || AUTO_GLOBAL_EXACT_WINDOW_DAYS);
   const minHides = Math.max(2, Number(env && env.AUTO_GLOBAL_EXACT_MIN_HIDES ? env.AUTO_GLOBAL_EXACT_MIN_HIDES : AUTO_GLOBAL_EXACT_MIN_HIDES) || AUTO_GLOBAL_EXACT_MIN_HIDES);
   return {
-    minSyncKeys,
+    minContributors,
     minScore,
     windowDays,
     minHides
@@ -3054,7 +3531,7 @@ function collectAutoGlobalExactKeys(keys) {
 function getAutoGlobalExactWeightedScore(stats) {
   const source = stats || {};
   return Number(source.hideCount || 0)
-    + Number(source.syncKeys ? source.syncKeys.size : 0)
+    + Number(source.contributors ? source.contributors.size : 0)
     + Number(source.handles ? source.handles.size : 0);
 }
 
@@ -6766,7 +7243,8 @@ function isCredentialedPath(pathname) {
     || pathname === "/api/account/bind-sync-key"
     || pathname === "/api/developer/confirm-feed"
     || pathname === "/api/developer/dismiss-feed"
-    || pathname === "/api/developer/revoke-feed";
+    || pathname === "/api/developer/revoke-feed"
+    || pathname === "/api/developer/data-layer-audit";
 }
 
 function buildCorsHeaders(request, allowCredentials) {

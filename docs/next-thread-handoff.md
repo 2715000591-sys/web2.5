@@ -69,6 +69,13 @@
   - 精确项直达全局
   - 全局撤回
 - 插件默认同步地址已经指向公网，不再默认写本地后台。
+- 第一层数据分层防线已经在代码层补强：
+  - 个人统计继续按 `user_id` 隔离
+  - 自动全局精确规则至少需要多贡献者
+  - 同一账号多个设备不能伪装成多人共识
+  - 新增开发者只读审计接口：`GET /api/developer/data-layer-audit`
+  - 新增审计脚本：`npm run cloud:audit-data-layer`
+  - 如果这批改动尚未部署，线上仍以当前 Cloudflare Worker Version ID 为准
 
 ### 还没完成
 
@@ -87,6 +94,7 @@
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID：`e85cc291-b3c5-4121-bbc4-30359a442657`
+  - 2026-04-30 本地 `npm run cloud:deploy` 构建成功，但 Cloudflare 上传因本机 wrangler token 失效失败；下一次部署前需要刷新 Cloudflare 登录或提供有效 `CLOUDFLARE_API_TOKEN`
 - Cloudflare D1：
   - 数据库名：`web25`
   - 绑定名：`DB`
@@ -121,6 +129,8 @@ Cloudflare D1 是重要生产数据，不是临时缓存。
 - 个人偏好层：个人不喜欢的话题、语气、账号风格，后续再用 AI 或个性化规则处理
 
 新账号可以共享公共基础库，但不能继承开发者账号的个人屏蔽数量、恢复数量、偏好和历史。
+
+`冲走` 可以作为垃圾候选样本；`恢复` 只能表示“不该按垃圾处理 / 不应升级为公共垃圾规则”，不能当成另一类内容的反向训练样本。
 
 ## 5. 筛选机制硬约束
 
@@ -219,6 +229,14 @@ Cloudflare D1 是重要生产数据，不是临时缓存。
 5. 改完验证表结构、关键计数、个人/全局分层
 6. 记录备份文件和执行结果
 
+只读分层审计优先用：
+
+```bash
+npm run cloud:audit-data-layer
+```
+
+如果 Cloudflare token 失效，`wrangler d1 execute --remote` 会失败；这个脚本走线上开发者登录接口，部署后更适合做日常验收。
+
 ### 改网站 / Worker
 
 1. 读 `cloudflare/src/index.js`、`site/`、`wrangler.jsonc`
@@ -261,6 +279,7 @@ git status --branch --short
 node --check cloudflare/src/index.js
 node --check extension/content/rules.js
 node --check extension/content/content.js
+npm run cloud:audit-data-layer
 npm run cloud:check
 npm run cloud:deploy
 rg -n "BUILD_ID|displayNameLooksStrongLure|low-information-strong-lure-name" "/Applications/web2.5.app/Contents/PlugIns/web2.5 Extension.appex/Contents/Resources/content"

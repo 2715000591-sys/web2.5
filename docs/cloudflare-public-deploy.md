@@ -50,7 +50,7 @@ cp .dev.vars.example .dev.vars
 - `OTP_TTL_MINUTES`
 - `OTP_RESEND_SECONDS`
 - `SESSION_TTL_DAYS`
-- `GLOBAL_RULE_MIN_SYNC_KEYS`
+- `GLOBAL_RULE_MIN_CONTRIBUTORS`
 - `GLOBAL_RULE_MIN_SCORE`
 
 ## 推荐上线顺序
@@ -62,6 +62,14 @@ cp .dev.vars.example .dev.vars
   5. `npm run cloud:check`
   6. `npm run cloud:deploy`
   7. 把 Safari 插件里的同步服务地址改成正式网址
+
+上线后建议跑一次只读数据分层审计：
+
+```bash
+npm run cloud:audit-data-layer
+```
+
+这个脚本会用开发者调试验证码登录，然后读取 `/api/developer/data-layer-audit`，检查个人统计、公共规则、syncKey 绑定和单用户污染风险。
 
 ## 当前这版上线前还必须确认的三件事
 

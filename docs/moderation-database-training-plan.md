@@ -86,6 +86,13 @@
 - `trust_weight`：不同来源权重不同，防止恶意投毒
 - `safety_labels_json`：违规类别，比如 `adult_solicitation`、`lead_gen_spam`、`contact_redirect`
 
+重要口径：
+
+- `manual_hide` / `冲走` 可以作为垃圾候选样本。
+- `manual_allow` / `恢复` 只能表示“这条不该继续按垃圾处理”或“这条不是当前规则要压的垃圾”。
+- `manual_allow` 不能被粗暴当成“反向垃圾样本”去训练模型，也不能自动代表用户喜欢这类内容。
+- 在候选规则里，`negative_label_count` 的含义是“抑制/撤销/不应升级为公共垃圾规则的证据”，不是另一个内容类别的正样本。
+
 ### `moderation_rule_candidates`
 
 候选规则表。它承接“很多样本都指向同一个模式”这件事。
@@ -136,7 +143,7 @@
 先做一个小闭环：
 
 1. 从 `manual_hide` 和 `manual_allow` 事件抽取样本
-2. 给每条样本写入对应 label
+2. 给每条样本写入对应 label，其中 `manual_allow` 只写成“不应隐藏 / 不应升级”的抑制信号
 3. 统计重复出现的 `pattern_key`
 4. 只把高共识候选项展示给开发者确认
 5. 确认后再进入现有全局规则机制
