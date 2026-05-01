@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
     <link rel="shortcut icon" href="/favicon-32.png?v=3" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
-    <link rel="stylesheet" href="/styles.css?v=2026-05-01-source-buckets" />
+    <link rel="stylesheet" href="/styles.css?v=2026-05-01-integrated-source-cards" />
   </head>
   <body class="console-body">
     <div class="site-shell">
@@ -136,21 +136,51 @@
             <h2>登录后只看你自己的累计、恢复和最近动作。</h2>
           </div>
           <section class="metrics-panel">
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ai">
+              <span>AI 智能屏蔽</span>
+              <strong id="sourceAiCount">0</strong>
+              <small>AI 已判定，点击查看</small>
+            </button>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ai_reuse">
+              <span>AI 结果复用</span>
+              <strong id="sourceAiReuseCount">0</strong>
+              <small>没有调用 AI，点击查看</small>
+            </button>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="history">
+              <span>数据库历史命中</span>
+              <strong id="sourceHistoryCount">0</strong>
+              <small>来自历史冲走，点击查看</small>
+            </button>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="public_rule">
+              <span>公共数据库规则</span>
+              <strong id="sourcePublicRuleCount">0</strong>
+              <small>全局规则命中，点击查看</small>
+            </button>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="account_blocklist">
+              <span>账号黑名单</span>
+              <strong id="sourceAccountBlocklistCount">0</strong>
+              <small>来自账号名单，点击查看</small>
+            </button>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="local_rule">
+              <span>本地规则下沉</span>
+              <strong id="sourceLocalRuleCount">0</strong>
+              <small>没有调用 AI，点击查看</small>
+            </button>
             <article class="metric-card">
               <span>累计自动整理</span>
               <strong id="autoHideCount">0</strong>
               <small>系统自动帮你处理的次数</small>
             </article>
-            <article class="metric-card">
-              <span>累计手动标记</span>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="manual">
+              <span>你手动冲走</span>
               <strong id="manualHideCount">0</strong>
-              <small>你亲手确认过的次数</small>
-            </article>
-            <article class="metric-card">
-              <span>累计恢复</span>
+              <small>你亲手确认，点击查看</small>
+            </button>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="restored">
+              <span>恢复误判</span>
               <strong id="manualAllowCount">0</strong>
-              <small>恢复误标的次数</small>
-            </article>
+              <small>纠错记录，点击查看</small>
+            </button>
             <article class="metric-card">
               <span>累计涉及账号数</span>
               <strong id="distinctHandleCount">0</strong>
@@ -172,13 +202,24 @@
               <small>与你绑定的数据里跳过的回复流广告</small>
             </article>
           </section>
+          <section class="metric-detail-panel hidden" id="sourceDetailPanel">
+            <div class="source-detail-head">
+              <div>
+                <p class="eyebrow" id="sourceDetailEyebrow">当前分类</p>
+                <h4 id="sourceDetailTitle">AI 智能屏蔽</h4>
+              </div>
+              <span id="sourceDetailCountPill" class="surface-note">0 条</span>
+            </div>
+            <div class="review-list ai-feed-list" id="aiFeedList"></div>
+            <div class="ai-feed-pager" id="aiFeedPager"></div>
+          </section>
         </section>
 
         <section class="surface-card review-section hidden" id="aiFeedSection">
           <div class="surface-head">
             <div>
               <p class="eyebrow">回复区 AI 审核</p>
-              <h3>这里管理 AI 开关、接入方式和屏蔽来源入口</h3>
+              <h3>这里管理 AI 开关和接入方式</h3>
             </div>
             <div class="review-head-actions">
               <span id="aiFeedCountPill" class="surface-note">本地可配置</span>
@@ -225,26 +266,6 @@
               <span id="aiSettingsStatus" class="surface-note">登录后会保存到你的云端账号</span>
             </div>
           </div>
-          <section class="source-dashboard" id="sourceDashboard">
-            <div class="surface-head surface-head-mini">
-              <div>
-                <p class="eyebrow">屏蔽来源入口</p>
-                <h4>点一个小方格，看这一类具体挡掉了什么</h4>
-              </div>
-            </div>
-            <div class="source-bucket-grid" id="sourceBucketGrid"></div>
-            <div class="source-detail-panel">
-              <div class="source-detail-head">
-                <div>
-                  <p class="eyebrow" id="sourceDetailEyebrow">当前分类</p>
-                  <h4 id="sourceDetailTitle">AI 智能屏蔽</h4>
-                </div>
-                <span id="sourceDetailCountPill" class="surface-note">0 条</span>
-              </div>
-              <div class="review-list ai-feed-list" id="aiFeedList"></div>
-              <div class="ai-feed-pager" id="aiFeedPager"></div>
-            </div>
-          </section>
         </section>
 
         <section class="surface-card review-section" id="adSection">
@@ -298,6 +319,6 @@
       </main>
     </div>
 
-    <script src="/app.js?v=2026-05-01-source-buckets"></script>
+    <script src="/app.js?v=2026-05-01-integrated-source-cards"></script>
   </body>
 </html>

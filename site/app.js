@@ -18,7 +18,7 @@ const reviewSection = document.getElementById("reviewSection");
 const aiFeedSection = document.getElementById("aiFeedSection");
 const aiFeedList = document.getElementById("aiFeedList");
 const aiFeedPager = document.getElementById("aiFeedPager");
-const sourceBucketGrid = document.getElementById("sourceBucketGrid");
+const sourceDetailPanel = document.getElementById("sourceDetailPanel");
 const sourceDetailEyebrow = document.getElementById("sourceDetailEyebrow");
 const sourceDetailTitle = document.getElementById("sourceDetailTitle");
 const sourceDetailCountPill = document.getElementById("sourceDetailCountPill");
@@ -69,6 +69,15 @@ const personalStatNodes = {
   adReplyHideCount: document.getElementById("adReplyHideCount")
 };
 
+const sourceStatNodes = {
+  ai: document.getElementById("sourceAiCount"),
+  ai_reuse: document.getElementById("sourceAiReuseCount"),
+  history: document.getElementById("sourceHistoryCount"),
+  public_rule: document.getElementById("sourcePublicRuleCount"),
+  account_blocklist: document.getElementById("sourceAccountBlocklistCount"),
+  local_rule: document.getElementById("sourceLocalRuleCount")
+};
+
 const globalStatNodes = {
   autoHideCount: document.getElementById("globalAutoHideCount"),
   adTotalHideCount: document.getElementById("globalAdHideCount"),
@@ -114,7 +123,7 @@ const appState = {
   developerPendingPage: 1,
   developerRulePage: 1,
   aiFeedPage: 1,
-  sourceBucket: "ai"
+  sourceBucket: ""
 };
 
 function getBackendBaseUrl() {
@@ -945,30 +954,18 @@ function buildSourceBuckets(replyAiPayload) {
   return buckets;
 }
 
-function renderSourceBucketGrid(buckets) {
-  if (!sourceBucketGrid) {
-    return;
-  }
-
-  sourceBucketGrid.innerHTML = SOURCE_BUCKETS.map((bucket) => {
+function updateSourceMetricCards(buckets) {
+  SOURCE_BUCKETS.forEach((bucket) => {
     const count = buckets && Array.isArray(buckets[bucket.id]) ? buckets[bucket.id].length : 0;
-    const active = appState.sourceBucket === bucket.id;
-    return `
-      <button class="source-bucket-card${active ? " active" : ""}" type="button" data-source-bucket="${escapeHtml(bucket.id)}">
-        <span>${escapeHtml(bucket.title)}</span>
-        <strong>${escapeHtml(String(count))}</strong>
-        <small>${escapeHtml(count ? bucket.note : (bucket.id === "history" || bucket.id === "public_rule" ? "待接入来源标记" : bucket.note))}</small>
-      </button>
-    `;
-  }).join("");
+    const node = sourceStatNodes[bucket.id];
+    if (node) {
+      node.textContent = String(count);
+    }
+  });
 
-  Array.from(sourceBucketGrid.querySelectorAll("[data-source-bucket]")).forEach((button) => {
-    button.addEventListener("click", function () {
-      const bucketId = String(button.getAttribute("data-source-bucket") || "ai");
-      appState.sourceBucket = bucketId;
-      appState.aiFeedPage = 1;
-      renderAiFeedSection(getCachedReplyAiPayload());
-    });
+  Array.from(document.querySelectorAll("[data-source-bucket]")).forEach((button) => {
+    const bucketId = String(button.getAttribute("data-source-bucket") || "");
+    button.classList.toggle("active", Boolean(bucketId && appState.sourceBucket === bucketId));
   });
 }
 
@@ -1037,7 +1034,15 @@ function renderSourceDetail(buckets) {
     return;
   }
 
-  const bucketId = SOURCE_BUCKET_META[appState.sourceBucket] ? appState.sourceBucket : "ai";
+  if (!SOURCE_BUCKET_META[appState.sourceBucket]) {
+    setHidden(sourceDetailPanel, true);
+    clearAiFeedPager();
+    aiFeedList.innerHTML = "";
+    updateSourceMetricCards(buckets);
+    return;
+  }
+
+  const bucketId = appState.sourceBucket;
   const meta = getBucketMeta(bucketId);
   const list = buckets && Array.isArray(buckets[bucketId]) ? buckets[bucketId] : [];
   const totalPages = Math.max(1, Math.ceil(list.length / SOURCE_DETAIL_PAGE_SIZE));
@@ -1046,6 +1051,8 @@ function renderSourceDetail(buckets) {
   const pageItems = list.slice(pageStartIndex, pageStartIndex + SOURCE_DETAIL_PAGE_SIZE);
   appState.sourceBucket = bucketId;
   appState.aiFeedPage = currentPage;
+  setHidden(sourceDetailPanel, false);
+  updateSourceMetricCards(buckets);
 
   if (sourceDetailEyebrow) {
     sourceDetailEyebrow.textContent = "当前分类";
@@ -1119,19 +1126,14 @@ function renderAiFeedSection(replyAiPayload) {
   }
 
   if (!loggedIn) {
-    renderSourceBucketGrid(sourceBuckets);
+    updateSourceMetricCards(sourceBuckets);
+    setHidden(sourceDetailPanel, true);
     clearAiFeedPager();
-    if (sourceDetailTitle) {
-      sourceDetailTitle.textContent = getBucketMeta(appState.sourceBucket).title;
-    }
-    if (sourceDetailCountPill) {
-      sourceDetailCountPill.textContent = "0 条";
-    }
-    renderEmpty(aiFeedList, "先登录云端控制台，这里才会显示各类屏蔽来源记录。");
+    aiFeedList.innerHTML = "";
     return;
   }
 
-  renderSourceBucketGrid(sourceBuckets);
+  updateSourceMetricCards(sourceBuckets);
   renderSourceDetail(sourceBuckets);
 }
 
@@ -2485,6 +2487,18 @@ if (adToggleButton) {
     renderAdList(appState.dashboardCache && appState.dashboardCache.adEvents ? appState.dashboardCache.adEvents : []);
   });
 }
+
+Array.from(document.querySelectorAll("[data-source-bucket]")).forEach((button) => {
+  button.addEventListener("click", function () {
+    const bucketId = String(button.getAttribute("data-source-bucket") || "");
+    if (!SOURCE_BUCKET_META[bucketId]) {
+      return;
+    }
+    appState.sourceBucket = bucketId;
+    appState.aiFeedPage = 1;
+    renderAiFeedSection(appState.dashboardCache && appState.dashboardCache.replyAi ? appState.dashboardCache.replyAi : null);
+  });
+});
 
 if (reviewSearchInput) {
   reviewSearchInput.addEventListener("input", function (event) {
