@@ -575,7 +575,7 @@ function buildReplyAiOpenUrl(item) {
 
 function formatReplyAiLabel(label) {
   const mapping = {
-    adult_solicitation: "色情搭讪",
+    adult_solicitation: "约见/成人导流",
     lead_gen_spam: "引流垃圾",
     contact_redirect: "导流到站外",
     scam_or_fraud: "诈骗风险",
@@ -769,12 +769,19 @@ function renderAiFeedSection(replyAiPayload) {
           ${profileSignals.length ? `<p>主页辅助信号：${escapeHtml(profileSignals.map(formatProfileSignalLabel).join("、"))}</p>` : ""}
         </div>
       ` : ""}
-      ${openUrl ? `
-        <div class="ai-feed-actions">
-          <a class="ghost-button small-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noreferrer">在 X 里打开</a>
-        </div>
-      ` : ""}
+      <div class="ai-feed-actions">
+        <button class="ghost-button small-button ai-feed-restore-button" type="button">恢复这条</button>
+        ${openUrl ? `<a class="ghost-button small-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noreferrer">在 X 里打开</a>` : ""}
+      </div>
     `;
+    const restoreButton = row.querySelector(".ai-feed-restore-button");
+    if (restoreButton) {
+      restoreButton.addEventListener("click", function () {
+        restoreItem(item, restoreButton, {
+          replyAiItemId: item && (item.replyAiItemId || item.id) ? (item.replyAiItemId || item.id) : 0
+        });
+      });
+    }
     aiFeedList.appendChild(row);
   });
 }
@@ -940,13 +947,14 @@ function renderBindings(bindings) {
   `).join("");
 }
 
-async function restoreItem(item, button) {
+async function restoreItem(item, button, options) {
   const syncKey = String(getActiveSyncKey() || "").trim();
   if (!syncKey) {
     setStatus("这台设备还没接上账号，刷新一下再试。");
     return;
   }
 
+  const replyAiItemId = Number(options && options.replyAiItemId ? options.replyAiItemId : 0);
   if (button) {
     button.disabled = true;
     button.textContent = "正在恢复...";
@@ -954,25 +962,32 @@ async function restoreItem(item, button) {
   setStatus("正在恢复这条内容...");
 
   try {
+    const eventPayload = {
+      syncKey,
+      source: "dashboard",
+      eventType: "manual_allow",
+      threadUrl: item.threadUrl || "",
+      threadStatusId: item.threadStatusId || "",
+      replyStatusId: item.replyStatusId || "",
+      replyHandle: item.replyHandle || "",
+      replyDisplayName: item.replyDisplayName || "",
+      replyText: item.replyText || "",
+      normalizedText: item.normalizedText || "",
+      compactText: item.compactText || ""
+    };
+    if (replyAiItemId > 0) {
+      eventPayload.replyAiItemId = replyAiItemId;
+    }
     const result = await requestJson("/api/events", {
       method: "POST",
-      body: JSON.stringify({
-        syncKey,
-        source: "dashboard",
-        eventType: "manual_allow",
-        threadUrl: item.threadUrl || "",
-        threadStatusId: item.threadStatusId || "",
-        replyStatusId: item.replyStatusId || "",
-        replyHandle: item.replyHandle || "",
-        replyDisplayName: item.replyDisplayName || "",
-        replyText: item.replyText || "",
-        normalizedText: item.normalizedText || "",
-        compactText: item.compactText || ""
-      })
+      body: JSON.stringify(eventPayload)
     });
 
     if (!result.ok || !result.data || !result.data.ok) {
       throw new Error((result.data && result.data.error) || "restore-failed");
+    }
+    if (replyAiItemId > 0 && result.data.replyAiRestored !== true) {
+      throw new Error("reply-ai-restore-failed");
     }
 
     await refreshDashboard("这条内容已经恢复。");

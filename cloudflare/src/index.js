@@ -947,22 +947,32 @@ async function handleUpdateAiSettings(request, env, ctx) {
   }
 }
 
-function buildAiProviderTestItem() {
+function normalizeAiProviderTestText(value, fallback, limit) {
+  const normalized = String(value === undefined || value === null ? fallback : value).trim();
+  return normalized.slice(0, Math.max(1, Number(limit || 1000) || 1000));
+}
+
+function buildAiProviderTestItem(sample) {
+  const source = sample && typeof sample === "object" ? sample : {};
   return {
     id: 0,
-    threadUrl: "https://x.com/example/status/1",
-    threadStatusId: "provider-test-thread",
-    replyStatusId: "provider-test-reply",
-    replyHandle: "wx1234567890",
-    replyDisplayName: "同城免费约",
-    replyText: "主页置顶看id",
-    mainPostText: "这是一条 AI 接入连通性测试样本，不会写入数据库。",
-    accountProtected: false,
-    profilePath: "/wx1234567890",
-    profileBioText: "联系方式看主页 vx",
-    profileSignalTags: ["contact_keyword", "profile_redirect"],
-    profileLinks: [],
-    profileFetchStatus: "ready"
+    threadUrl: normalizeAiProviderTestText(source.threadUrl, "https://x.com/example/status/1", 500),
+    threadStatusId: normalizeAiProviderTestText(source.threadStatusId, "provider-test-thread", 120),
+    replyStatusId: normalizeAiProviderTestText(source.replyStatusId, "provider-test-reply", 120),
+    replyHandle: normalizeAiProviderTestText(source.replyHandle, "wx1234567890", 80),
+    replyDisplayName: normalizeAiProviderTestText(source.replyDisplayName, "同城免费约", 120),
+    replyText: normalizeAiProviderTestText(source.replyText, "主页置顶看id", 1200),
+    mainPostText: normalizeAiProviderTestText(source.mainPostText, "这是一条 AI 接入连通性测试样本，不会写入数据库。", 1800),
+    accountProtected: source.accountProtected === true,
+    profilePath: normalizeAiProviderTestText(source.profilePath, "/wx1234567890", 160),
+    profileBioText: normalizeAiProviderTestText(source.profileBioText, "联系方式看主页 vx", 1200),
+    profileSignalTags: normalizeReplyAiStringList(
+      source.profileSignalTags || ["contact_keyword", "profile_redirect"],
+      REPLY_AI_PROFILE_SIGNAL_LABELS,
+      8
+    ),
+    profileLinks: normalizeReplyAiProfileLinks(source.profileLinks || []),
+    profileFetchStatus: normalizeReplyAiProfileFetchStatus(source.profileFetchStatus || "ready")
   };
 }
 
@@ -990,6 +1000,8 @@ async function handleTestAiSettings(request, env) {
     return json({ ok: false, error: "unauthorized" }, 401, request, true);
   }
 
+  const payload = await readJson(request);
+  const testItem = buildAiProviderTestItem(payload && payload.sample);
   const settings = await getUserAiSettingsWithSecret(env, viewer.id);
   if (!String(settings && settings.apiKey ? settings.apiKey : "").trim()) {
     return json({ ok: false, error: "missing-ai-api-key" }, 400, request, true, buildSessionRefreshHeaders(request, viewer, env));
@@ -1003,7 +1015,7 @@ async function handleTestAiSettings(request, env) {
       schemaName: "reply_moderation_provider_test",
       responseSchema: buildReplyAiDecisionSchema(),
       developerPrompt: buildReplyAiProviderPrompt(settings, { isBatch: false }),
-      userPayloadText: JSON.stringify(buildReplyAiProviderInputItem("provider-test", buildAiProviderTestItem(), null)),
+      userPayloadText: JSON.stringify(buildReplyAiProviderInputItem("provider-test", testItem, null)),
       metadata: {
         reasoningEffort: "low"
       }
@@ -1564,8 +1576,15 @@ async function handlePostEvent(request, env) {
     compactText: String(payload.compactText || "").trim(),
     accountProtected: Number(payload.accountProtected || 0) ? 1 : 0
   });
+  let replyAiRestored = false;
+  if (normalizedEventType === "manual_allow") {
+    const replyAiItemId = Number(payload.replyAiItemId || 0);
+    if (replyAiItemId > 0) {
+      replyAiRestored = await markReplyAiItemAllowedByManualRestore(env, syncKey, replyAiItemId);
+    }
+  }
 
-  return json({ ok: true, deduped: saved.deduped }, 200, request, false);
+  return json({ ok: true, deduped: saved.deduped, replyAiRestored }, 200, request, false);
 }
 
 async function buildStats(env, userId) {
@@ -5861,6 +5880,44 @@ async function getReplyAiResultByItemId(env, itemId) {
   };
 }
 
+async function markReplyAiItemAllowedByManualRestore(env, syncKey, itemId) {
+  await ensureAiFeedSchema(env);
+  const normalizedSyncKey = String(syncKey || "").trim();
+  const normalizedItemId = Number(itemId || 0);
+  if (!normalizedSyncKey || !normalizedItemId) {
+    return false;
+  }
+
+  const itemRow = await getReplyAiItemById(env, normalizedItemId);
+  if (!itemRow) {
+    return false;
+  }
+
+  let sameUser = false;
+  if (itemRow.userId) {
+    const syncKeyRow = await env.DB.prepare(
+      "SELECT user_id FROM sync_keys WHERE sync_key = ? LIMIT 1"
+    ).bind(normalizedSyncKey).first();
+    sameUser = Boolean(syncKeyRow && syncKeyRow.user_id && String(syncKeyRow.user_id) === String(itemRow.userId));
+  }
+
+  if (itemRow.syncKey !== normalizedSyncKey && !sameUser) {
+    return false;
+  }
+
+  await finalizeReplyAiDecision(env, itemRow, buildDefaultReplyAiDecision({
+    action: "allow",
+    decisionLayer: "manual_allow",
+    matchedSafetyLabels: [],
+    matchedProfileSignals: [],
+    confidence: "high",
+    reasonShort: "用户恢复，标记为 AI 误判",
+    status: "ready",
+    model: "manual"
+  }));
+  return true;
+}
+
 function buildReplyAiProviderScopeKey(userId, settings) {
   return buildAiProviderScopeKey(userId, settings);
 }
@@ -6260,7 +6317,8 @@ async function refreshReplyAiAccountRisk(env, itemRow, decision) {
 
   const totalCount = Number(totalRow && totalRow.total_count ? totalRow.total_count : 0);
   const recentCount = Number(recentRow && recentRow.total_count ? recentRow.total_count : 0);
-  const shouldBlock = Boolean(existing && Number(existing.active_global_block || 0) === 1)
+  const preserveExistingGlobalBlock = !(decision && decision.decisionLayer === "manual_allow");
+  const shouldBlock = (preserveExistingGlobalBlock && Boolean(existing && Number(existing.active_global_block || 0) === 1))
     || recentCount >= REPLY_AI_GLOBAL_BLOCK_THRESHOLD;
   const now = new Date().toISOString();
   const firstFlaggedAt = existing && existing.first_flagged_at
@@ -6487,7 +6545,10 @@ function buildReplyAiProviderPrompt(settings, options) {
     isBatch
       ? "You are the primary moderation decision-maker for multiple independent X replies."
       : "You are the primary moderation decision-maker for a single X reply.",
-    "Hide only when the reply is clearly spammy, sexual solicitation, contact redirect, scam, meaningless bait, or dangerous profile-link risk.",
+    "Hide only when the reply is clearly spammy, contact redirect, scam/fraud, malware or unsafe-download bait, meaningless bait, profile-link risk, or adult/meetup solicitation.",
+    "Sexual, erotic, pornographic, or adult-topic discussion is allowed when it is substantive, on-topic, conversational, or part of the thread context.",
+    "Do not hide merely because a reply contains sexual words, erotic preferences, porn discussion, or adult jokes.",
+    "Hide adult/sexual content only when it clearly combines with paid or free hookup solicitation, meetup bait, contact redirect, scam/fraud, malware risk, unsafe external links, profile-link lure, or low-information bait from risky account metadata.",
     "You must evaluate account metadata as first-class evidence, not just reply text.",
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
     "Combined weak signals across name, handle, reply text, profile, and prior risk history can justify a high-confidence hide when they clearly form a lure/spam pattern.",
@@ -6865,6 +6926,7 @@ async function buildRecentReplyAiHides(env, userId, limit) {
 
   return results.map((row) => ({
     id: Number(row.id || 0),
+    replyAiItemId: Number(row.id || 0),
     threadUrl: row.thread_url || "",
     threadStatusId: row.thread_status_id || "",
     replyStatusId: row.reply_status_id || "",

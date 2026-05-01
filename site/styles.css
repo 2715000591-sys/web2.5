@@ -1319,6 +1319,8 @@ button.ghost-button:disabled {
 
 .ai-feed-actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 14px;
 }
 
