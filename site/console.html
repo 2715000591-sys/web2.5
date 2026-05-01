@@ -12,9 +12,14 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
     <link rel="shortcut icon" href="/favicon-32.png?v=3" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
-    <link rel="stylesheet" href="/styles.css?v=2026-05-02-device-collapse" />
+    <link rel="stylesheet" href="/styles.css?v=2026-05-02-detail-focused" />
   </head>
   <body class="console-body">
+    <script>
+      if (new URLSearchParams(window.location.search).has("detail") || new URLSearchParams(window.location.search).has("source")) {
+        document.body.classList.add("console-detail-body");
+      }
+    </script>
     <div class="site-shell">
       <header class="hero console-hero">
         <nav class="topbar">
@@ -324,6 +329,6 @@
       </main>
     </div>
 
-    <script src="/app.js?v=2026-05-02-device-collapse"></script>
+    <script src="/app.js?v=2026-05-02-detail-focused"></script>
   </body>
 </html>

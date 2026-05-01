@@ -42,6 +42,15 @@ body {
     linear-gradient(180deg, #111111 0%, #1b1b1b 15%, #efefeb 48%, #fafaf8 100%);
 }
 
+.console-detail-body .console-hero,
+.console-detail-body #cloudDashboardSection,
+.console-detail-body #personalDashboardSection,
+.console-detail-body #aiFeedSection,
+.console-detail-body #adSection,
+.console-detail-body #reviewSection {
+  display: none !important;
+}
+
 .hidden {
   display: none !important;
 }
@@ -64,6 +73,10 @@ body::before {
   width: min(calc(100% - 40px), var(--content-width));
   margin: 0 auto;
   padding: 28px 0 80px;
+}
+
+.console-detail-body .site-shell {
+  padding-top: 18px;
 }
 
 .hero,
@@ -458,6 +471,10 @@ button.ghost-button:disabled {
 
 .page-content {
   margin-top: 24px;
+}
+
+.console-detail-body .page-content {
+  margin-top: 0;
 }
 
 .marketing-section {
@@ -1238,6 +1255,10 @@ button.ghost-button:disabled {
   border-radius: var(--radius-xl);
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.console-detail-body .metric-detail-page {
+  min-height: calc(100vh - 36px);
 }
 
 .source-detail-head {
