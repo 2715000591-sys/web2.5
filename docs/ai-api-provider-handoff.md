@@ -26,6 +26,7 @@
 - DeepSeek `deepseek-v4-flash` 已接入线上开发者账号，并通过真实调用测试。
 - 已补强通用 JSON 模式提示：当平台不支持严格 JSON Schema、只能走普通 JSON 对象模式时，Worker 会把允许使用的审核标签明确写进提示里，避免模型自造标签。
 - 2026-05-01 已修复扩展侧 AI 排队保护：本地规则必须先判定为可疑候选，回复才会送入 AI 队列，避免无脑调用模型。
+- 2026-05-01 已继续收紧扩展侧 AI 排队：如果本地/数据库规则已经能直接隐藏，例如 `找个同城的哥哥` 这类 `pattern:geo-relationship-bait`，就不再送 AI，避免为模板垃圾浪费 API 额度。
 - 2026-05-01 已收紧基础审核口径：正常成人话题、色情讨论、性教育/平台治理讨论不应仅因色情词被隐藏；基础层要保护正常表达，只隐藏诈骗、约见引流、联系方式、木马/安装包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。头像/图片只有在未来真的采集并提供给 AI 时才能作为辅助证据，不能让模型凭空脑补。
 - 官网控制台“最近 AI 隐藏记录”已新增“恢复误判”。恢复会写入 `manual_allow`，并把对应 AI 结果改成 `manual_allow/allow`，用于纠正单条误判。
 - `/api/ai-settings/test` 已支持传入临时 `sample` 做一次性识别测试；样本不会写入 `reply_ai_items`。
@@ -41,7 +42,7 @@
 
 - 站点：`https://colorful-toilet.colorful-toilet.workers.dev/`
 - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- Worker Version ID：`e385e10b-e88a-4b97-b37b-e8f89797d2fa`
+- Worker Version ID：`b9d97ff3-c648-4615-a10b-7639ca182547`
 - Git commit：当前分支最新提交包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护
 
 ## 3. 还没完成
@@ -122,7 +123,7 @@ npm run cloud:deploy
 
 如果影响 Safari 扩展本地代码，才需要重建和替换 `/Applications/web2.5.app`。
 
-如果改动扩展侧 AI 调度、候选过滤、页面采集或 BUILD_ID，需要重建并替换本机 Safari App。2026-05-01 已替换 `/Applications/web2.5.app` 到 `BUILD_ID = 2026-05-01-1924`。
+如果改动扩展侧 AI 调度、候选过滤、页面采集或 BUILD_ID，需要重建并替换本机 Safari App。2026-05-01 已替换 `/Applications/web2.5.app` 到 `BUILD_ID = 2026-05-01-2117`。
 
 ## 8. 高风险提醒
 

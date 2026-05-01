@@ -106,7 +106,7 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`e385e10b-e88a-4b97-b37b-e8f89797d2fa`
+  - Version ID：`b9d97ff3-c648-4615-a10b-7639ca182547`
   - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
@@ -117,7 +117,7 @@
     - Key 已加密保存，控制台只显示后四位 `bc09`，不要把完整 Key 写入代码、文档或 GitHub。
     - “测试一次 AI 接入”已返回 `status=ready`、`action=hide`、`confidence=high`，标签包含 `adult_solicitation`、`contact_redirect`。
     - 6 条小样本识别测试全部符合预期：招嫖/联系方式引流、附近约见诱导、风险名字+低信息回复会隐藏；`Apple ID 一直登不上`、正常地点讨论、普通短回复会放过。
-    - 2026-05-01 修复了扩展侧 AI 排队保护：只有本地规则先判定为可疑候选的回复才会进入 AI 队列，避免打开详情页后把所有回复都送去模型。
+    - 2026-05-01 修复了扩展侧 AI 排队保护：只有本地规则先判定为可疑候选、且本地/数据库规则还没有直接隐藏的回复才会进入 AI 队列，避免打开详情页后把所有回复都送去模型，也避免 `找个同城的哥哥` 这类模板已经能本地隐藏时还消耗 API。
     - 2026-05-01 收紧 AI 基础审核边界：正常成人话题、色情讨论、性教育/平台治理讨论不能只因为含有色情词就隐藏；基础层要保护正常表达，只隐藏诈骗、约见引流、联系方式、木马/安装包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。头像/图片只有在未来真的采集并提供给 AI 时才能作为辅助证据，不能让模型凭空脑补。4 条真实 DeepSeek 临时样本测试通过：2 条正常成人讨论放过，2 条导流/安装包风险隐藏。
     - 线上控制台“最近 AI 隐藏记录”已新增“恢复误判”：会写入 `manual_allow`，并把对应 `reply_ai_results` 标成 `manual_allow/allow`，让该条从 AI 隐藏列表消失；同账号同文案短期会复用放过结果。不要把这个恢复当成广泛反向训练，只表示这条 AI 误判。
     - 轻量样本分类方向：不要做用户直接写压缩包；应自动从现有 `moderation_events`、`reply_ai_items`、`reply_ai_results` 抽到 `moderation_samples` / `moderation_sample_labels`。`manual_hide` 是垃圾候选，AI 高置信 hide 是辅助证据，`manual_allow` / “恢复误判”是抑制和纠错证据，只有多贡献者或开发者确认后才升级公共规则。
@@ -130,9 +130,9 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-01-1924`
-  - extension manifest version：`0.1.31`
-  - App / Extension version：`1.0.31 (32)`
+  - `BUILD_ID = 2026-05-01-2117`
+  - extension manifest version：`0.1.32`
+  - App / Extension version：`1.0.32 (33)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
 
@@ -185,6 +185,7 @@ Cloudflare D1 是重要生产数据，不是临时缓存。
 - `NEW / dd / 极短符号 + 风险显示名 + 数字 handle`
 - `哥哥我想要`
 - `有哥哥找下吗`
+- `找个同城的哥哥`
 - 风险显示名配低信息回复，例如 `男大可约` + `dd`
 
 必须避免误伤：
@@ -198,6 +199,7 @@ Cloudflare D1 是重要生产数据，不是临时缓存。
 当前关键模式键：
 
 - `pattern:geo-meetup-bait`
+- `pattern:geo-relationship-bait`
 - `pattern:bait-question-shape`
 - `pattern:low-information-lure-account`
 - `pattern:low-information-strong-lure-name`

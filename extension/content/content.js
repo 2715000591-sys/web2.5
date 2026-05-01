@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-01-1924";
+  const BUILD_ID = "2026-05-01-2117";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -4723,6 +4723,7 @@
         || analysis.hasLureEmoji
         || analysis.hasExternalContactPayload
         || analysis.hasGeoMeetupBait
+        || analysis.hasGeoRelationshipBait
         || analysis.hasBaitQuestionShape
       )
     );
@@ -4884,6 +4885,9 @@
     if (analysis && analysis.hasGeoMeetupBait) {
       score += 2;
     }
+    if (analysis && analysis.hasGeoRelationshipBait) {
+      score += 5;
+    }
     if (analysis && analysis.hasExplicitEroticBait) {
       score += 2;
     }
@@ -4948,6 +4952,7 @@
         || analysis.hasFragmentedSymbolicReply
         || analysis.hasLowInformationBadge
         || analysis.hasGeoMeetupBait
+        || analysis.hasGeoRelationshipBait
         || analysis.hasBaitQuestionShape
         || analysis.hasExplicitEroticBait
         || analysis.hasSpamTemplateSignal
@@ -5478,7 +5483,7 @@
           decision: decision,
           hiddenSource: hiddenSource,
           isManuallyHidden: isManuallyHidden,
-          shouldQueueAi: shouldQueueAi,
+          shouldQueueAi: shouldQueueAi && !(decision && decision.hide),
           aiCacheKey: aiCacheKey,
           aiCandidateScore: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0),
           aiReady: Boolean(readyAiDecision),

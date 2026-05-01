@@ -206,6 +206,11 @@
     /^(?:万达广场附近|附近|离得近|同城|线下).{0,6}(有吗|有人吗|的吗|嘛|吗|么|呢)$/,
     /^(?:有|求|蹲).{0,12}(万达广场附近|附近|离得近|同城|线下).{0,3}(人吗|的人吗|的吗|吗|嘛|呢)$/
   ];
+  const GEO_RELATIONSHIP_BAIT_PATTERNS = [
+    /^(?:找|求|蹲).{0,4}(同城|附近|线下).{0,5}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
+    /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
+    /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/
+  ];
   const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
   const ACCOUNT_MENTION_PATTERN = /@[a-z0-9_]{2,20}/ig;
   const EXPLICIT_EROTIC_BAIT_PATTERNS = [
@@ -548,6 +553,11 @@
       && GEO_MEETUP_BAIT_PATTERNS.some(function (pattern) {
         return pattern.test(normalized) || pattern.test(compact);
       });
+    const hasGeoRelationshipBait = compact.length > 0
+      && compact.length <= 16
+      && GEO_RELATIONSHIP_BAIT_PATTERNS.some(function (pattern) {
+        return pattern.test(normalized) || pattern.test(compact);
+      });
     const hasBaitQuestionShape = compact.length > 0
       && compact.length <= 16
       && BAIT_QUESTION_ENDING_PATTERN.test(normalized)
@@ -597,6 +607,7 @@
       hasLowInformationBadge: hasLowInformationBadge,
       hasFragmentedSymbolicReply: hasFragmentedSymbolicReply,
       hasGeoMeetupBait: hasGeoMeetupBait,
+      hasGeoRelationshipBait: hasGeoRelationshipBait,
       hasBaitQuestionShape: hasBaitQuestionShape,
       hasExplicitEroticBait: hasExplicitEroticBait,
       hasSpamTemplateSignal: hasSpamTemplateSignal,
@@ -859,6 +870,11 @@
     if (reply.hasGeoMeetupBait) {
       score += 2;
       reasons.push("geo-meetup-bait");
+    }
+
+    if (reply.hasGeoRelationshipBait) {
+      score += 5;
+      reasons.push("geo-relationship-bait");
     }
 
     if (reply.hasExplicitEroticBait) {

@@ -332,6 +332,11 @@ const GEO_MEETUP_BAIT_PATTERNS = [
   /^(?:万达广场附近|附近|离得近|同城|线下).{0,6}(有吗|有人吗|的吗|嘛|吗|么|呢)$/,
   /^(?:有|求|蹲).{0,12}(万达广场附近|附近|离得近|同城|线下).{0,3}(人吗|的人吗|的吗|吗|嘛|呢)$/
 ];
+const GEO_RELATIONSHIP_BAIT_PATTERNS = [
+  /^(?:找|求|蹲).{0,4}(同城|附近|线下).{0,5}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
+  /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
+  /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/
+];
 const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
 const PROFILE_CONTACT_PATTERNS = [
   /(?:vx|wx|tg|qq|telegram|电报|飞机|飞機|频道|群|群号|群號|联系方式|聯繫方式|联系我|聯繫我|联系|聯繫)/i,
@@ -6398,6 +6403,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const highRiskDisplayName = displayNameLooksHighRisk(displayName);
   const hasShareLinkScam = looksLikeShareLinkScam(replyText);
   const hasGeoMeetupBait = looksLikeGeoMeetupBait(replyText);
+  const hasGeoRelationshipBait = looksLikeGeoRelationshipBait(replyText);
   const hasBaitQuestionShape = looksLikeBaitQuestionShape(replyText);
   const hasExplicitEroticBait = looksLikeExplicitEroticBait(replyText);
   const hasEroticMentionRedirect = looksLikeEroticMentionRedirect(replyText);
@@ -6445,6 +6451,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasGeoMeetupBait || hasBaitQuestionShape) {
     evidenceNotes.push("reply shape resembles meetup/contact bait");
   }
+  if (hasGeoRelationshipBait) {
+    evidenceNotes.push("reply is a short geo relationship lure template");
+  }
   if (Number(riskRow && riskRow.total_high_confidence_hide_count ? riskRow.total_high_confidence_hide_count : 0) > 0) {
     evidenceNotes.push("this account already has prior high-confidence AI hides");
   }
@@ -6461,6 +6470,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     shortOrThinReply,
     hasShareLinkScam,
     hasGeoMeetupBait,
+    hasGeoRelationshipBait,
     hasBaitQuestionShape,
     hasExplicitEroticBait,
     hasEroticMentionRedirect,
@@ -7789,6 +7799,16 @@ function looksLikeGeoMeetupBait(text) {
   return GEO_MEETUP_BAIT_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact));
 }
 
+function looksLikeGeoRelationshipBait(text) {
+  const normalized = normalizeRuleText(text);
+  const compact = buildCompactRuleText(text);
+  if (!compact || compact.length > 16) {
+    return false;
+  }
+
+  return GEO_RELATIONSHIP_BAIT_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact));
+}
+
 function looksLikeBaitQuestionShape(text) {
   const normalized = normalizeRuleText(text);
   const compact = buildCompactRuleText(text);
@@ -8098,6 +8118,7 @@ function buildRowKeys(row) {
   const textKey = protectedGuardApplies ? "" : (normalized ? "text:" + normalized : "");
   const compactKey = protectedGuardApplies ? "" : (compact ? "compact:" + compact : "");
   const geoMeetupBait = protectedGuardApplies ? false : looksLikeGeoMeetupBait(replyText || normalized);
+  const geoRelationshipBait = protectedGuardApplies ? false : looksLikeGeoRelationshipBait(replyText || normalized);
   const baitQuestionShape = protectedGuardApplies ? false : looksLikeBaitQuestionShape(replyText || normalized);
   const shareLinkScam = protectedGuardApplies ? false : looksLikeShareLinkScam(replyText || normalized);
   const spamTemplateSignal = protectedGuardApplies ? false : looksLikeSpamTemplateSignal(replyText || normalized);
@@ -8130,31 +8151,35 @@ function buildRowKeys(row) {
       geoMeetupBait
         ? "pattern:geo-meetup-bait"
         : (
-          baitQuestionShape
-            ? "pattern:bait-question-shape"
+          geoRelationshipBait
+            ? "pattern:geo-relationship-bait"
             : (
-              lowInformationStrongLureName
-                ? "pattern:low-information-strong-lure-name"
+              baitQuestionShape
+                ? "pattern:bait-question-shape"
                 : (
-                  lowInformationLureAccount
-                    ? "pattern:low-information-lure-account"
+                  lowInformationStrongLureName
+                    ? "pattern:low-information-strong-lure-name"
                     : (
-                      shareLinkScam
-                        ? "pattern:share-link-scam"
+                      lowInformationLureAccount
+                        ? "pattern:low-information-lure-account"
                         : (
-                          spamTemplateSignal
-                            ? "pattern:spam-template-signal"
-                          : (
-                            eroticMentionRedirect
-                            ? "pattern:mention-lure-redirect"
+                          shareLinkScam
+                            ? "pattern:share-link-scam"
                             : (
-                              explicitEroticBait
-                                ? "pattern:explicit-erotic-bait"
-                                : (matchedTerms.length > 0
-                                  ? "pattern:" + matchedTerms.join("|")
-                                  : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                              spamTemplateSignal
+                                ? "pattern:spam-template-signal"
+                              : (
+                                eroticMentionRedirect
+                                ? "pattern:mention-lure-redirect"
+                                : (
+                                  explicitEroticBait
+                                    ? "pattern:explicit-erotic-bait"
+                                    : (matchedTerms.length > 0
+                                      ? "pattern:" + matchedTerms.join("|")
+                                      : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                )
+                              )
                             )
-                          )
                         )
                     )
                 )
