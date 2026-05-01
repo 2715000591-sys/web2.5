@@ -140,6 +140,19 @@
 - 不要只存最终结论而丢掉原始文本、来源和时间
 - 不要做“大家直接写一个压缩包”的样本入口；应优先从现有数据库事件和 AI 结果自动抽样，用户只通过冲走、恢复误判、开发者确认来留下结构化证据。
 
+## 2026-05-01 当前数据库现状
+
+只读检查结果：
+
+- `moderation_events` 非测试口径：`auto_hide=397`、`manual_hide=143`、`manual_allow=10`、`ad_home_hide=129`、`ad_reply_hide=13`。直接查原始表会多出少量开发测试行，例如 `devtrash` / `测试开发者全局投喂样本`，日常判断以非测试口径为准。
+- `reply_ai_items=1064`，`reply_ai_results=1064`；其中 ready/hide 约 `117`，ready/allow 约 `756`，failed 约 `178`。这些主要是旧 AI 审核项，不代表当前每条新回复都送 AI。
+- `moderation_samples=0`、`moderation_sample_labels=0`、`moderation_rule_candidates=0`。也就是说，当前还没有把“冲走/恢复/AI 判定”自动抽成训练样本，更没有反复把数据库里的垃圾信息丢给 AI 训练。
+- 手动重复冲走样本里，当前看到重复较多的是资源包/网盘链接样本和一条开发测试样本；仍然只能作为候选，不应直接升级公共规则。
+
+当前正确口径：AI 只做辅助判断和生成 label 的证据来源。后续要做训练闭环，也必须先抽样到 `moderation_samples` / `moderation_sample_labels`，再让开发者确认或多贡献者共识，不能把单用户重复冲走直接喂成公共模型/公共规则。
+
+基础提示词包已经建立在 `docs/ai-prompt-packs/sexual-leadgen-foundation/`，用于沉淀“色情引流 / 空洞诱饵 / 联系方式导流”的公共审核口径和回归样本。
+
 ## 近期最实用的下一步
 
 先做一个小闭环：

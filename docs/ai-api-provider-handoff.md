@@ -6,9 +6,16 @@
 
 2026-05-01 用户已明确 API 已经提供。下一轮不要再默认让用户重新购买 API；先检查线上控制台里已保存的加密配置和真实测试结果。只有线上配置丢失、Key 失效、额度不足，或用户主动要换平台时，才让用户补新的 Key / 接口地址 / 模型名字。
 
-2026-05-01 后续排查发现：线上 DeepSeek 配置的接口地址和模型还在，但 API Key 已被一次普通保存误清空。原因是 Worker 接口把“请求里没有带 apiKey”错误当成“清空 apiKey”。已修复并部署到 Worker Version ID `e7793119-2da3-4cde-9c03-65c5e6d7e08a`：以后保存开关、模型或提示词时，如果没有提交新的 Key，会保留原来的加密 Key。
+2026-05-01 后续排查发现：线上 DeepSeek 配置的接口地址和模型还在，但 API Key 已被一次普通保存误清空。原因是 Worker 接口把“请求里没有带 apiKey”错误当成“清空 apiKey”。已修复并部署到 Worker Version ID `8039945b-87ba-4a4c-8eca-775775e9b7fa`：以后保存开关、模型或提示词时，如果没有提交新的 Key，会保留原来的加密 Key。
 
 2026-05-01 用户重新提供 DeepSeek Key，已通过线上 `/api/ai-settings` 加密保存到开发者账号；只记录后四位 `a6db`，不要把完整 Key 写入代码、文档、命令、日志或 GitHub。随后已复测一次“不带 apiKey 的普通保存”，返回 `preservedAfterEmptySave=true`，并只读确认远程 D1 里 `api_key_last4=a6db`、加密内容长度非 0。
+
+2026-05-01 已用线上已保存 Key 做两条临时测试，都会消耗少量额度，但不会写入 `reply_ai_items`：
+
+- 引流样本：`主页置顶看联系方式，同城哥哥私聊，今晚可约。` 返回 `ready / hide / high`，标签包含 `adult_solicitation`、`lead_gen_spam`、`contact_redirect`。
+- 正常成人治理讨论样本：`成人内容的分级和平台治理...不能只靠色情关键词一刀切` 返回 `ready / allow / low`。
+
+当前补充提示词已保存到线上账号：色情内容本身允许；只屏蔽色情引流、约见导流、联系方式导流、主页/置顶/简介诱导、空洞低信息诱饵、诈骗、木马、安装包、资源包和不安全外链。提示词包文件在 `docs/ai-prompt-packs/sexual-leadgen-foundation/`。
 
 ## 1. 当前结论
 
@@ -30,6 +37,7 @@
 - 官网控制台的 AI 配置文案已经改成通用说法，不再只提示 DeepSeek。
 - 官网控制台的 AI 配置区已新增“测试一次 AI 接入”按钮。它会先保存设置，再发一条小样本测试 Key、接口地址、模型名是否能真实调用；只有用户手动点击才会消耗少量额度。
 - DeepSeek `deepseek-v4-flash` 已重新接入线上开发者账号，Key 已加密保存，后四位 `a6db`。
+- 回复区 AI 默认提示词已进一步收紧：成人/色情内容本身允许；证据不足时放过；普通短句不能只因短就隐藏；`meaningless_bait` 必须有风险账号或导流证据支撑。
 - 已补强通用 JSON 模式提示：当平台不支持严格 JSON Schema、只能走普通 JSON 对象模式时，Worker 会把允许使用的审核标签明确写进提示里，避免模型自造标签。
 - 2026-05-01 已修复扩展侧 AI 排队保护：本地规则必须先判定为可疑候选，回复才会送入 AI 队列，避免无脑调用模型。
 - 2026-05-01 已继续收紧扩展侧 AI 排队：如果本地/数据库规则已经能直接隐藏，例如 `找个同城的哥哥` 这类 `pattern:geo-relationship-bait`，就不再送 AI，避免为模板垃圾浪费 API 额度。
@@ -48,12 +56,12 @@
 
 - 站点：`https://colorful-toilet.colorful-toilet.workers.dev/`
 - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- Worker Version ID：`e7793119-2da3-4cde-9c03-65c5e6d7e08a`
+- Worker Version ID：`8039945b-87ba-4a4c-8eca-775775e9b7fa`
 - Git commit：当前分支最新提交包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护，以及保存 AI 设置时不再误清空已有 Key 的修复
 
 ## 3. 还没完成
 
-- DeepSeek API Key 已重新加密保存；还需要重新点一次“测试一次 AI 接入”或用真实 X 回复做页面级验收。
+- DeepSeek API Key 已重新加密保存，并已通过临时引流 hide / 正常成人讨论 allow 两条测试；还需要用真实 X 回复做页面级验收。
 - 已产生少量测试调用消耗；2026-05-01 的 6 条小样本批量测试约消耗 `2805` token。
 - 2026-05-01 的 4 条成人内容边界临时测试也产生少量调用消耗，但没有写入真实回复审核数据表。
 - 还没有做真实 X 页面回复审核验收。

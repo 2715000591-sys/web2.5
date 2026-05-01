@@ -1,0 +1,62 @@
+[
+  {
+    "id": "hide-contact-hookup-001",
+    "replyText": "主页置顶看联系方式，同城哥哥私聊，今晚可约。",
+    "authorDisplayName": "同城福利号",
+    "authorHandle": "fuli_8899",
+    "profileBioText": "联系方式看主页 vx",
+    "expectedAction": "hide",
+    "expectedLabels": ["adult_solicitation", "lead_gen_spam", "contact_redirect"],
+    "notes": "色情约见和联系方式导流绑定。"
+  },
+  {
+    "id": "hide-resource-package-001",
+    "replyText": "完整版资源包，手慢无，安装包链接看主页。",
+    "authorDisplayName": "资源分享",
+    "authorHandle": "ziyuan_7788",
+    "profileBioText": "网盘和安装包入口在主页",
+    "expectedAction": "hide",
+    "expectedLabels": ["lead_gen_spam", "profile_link_risk", "scam_or_fraud"],
+    "notes": "资源包、安装包和主页入口风险。"
+  },
+  {
+    "id": "hide-empty-bait-001",
+    "replyText": "dd",
+    "authorDisplayName": "同城小狗福利",
+    "authorHandle": "love5201314",
+    "profileBioText": "私聊看简介",
+    "expectedAction": "hide",
+    "expectedLabels": ["meaningless_bait", "profile_link_risk"],
+    "notes": "正文低信息，账号画像和主页诱导共同支撑。"
+  },
+  {
+    "id": "allow-adult-discussion-001",
+    "replyText": "我觉得成人内容的分级和平台治理应该分开讨论，不能只靠关键词一刀切。",
+    "authorDisplayName": "普通用户",
+    "authorHandle": "normal_user_42",
+    "profileBioText": "",
+    "expectedAction": "allow",
+    "expectedLabels": [],
+    "notes": "正常成人内容治理讨论，必须保留。"
+  },
+  {
+    "id": "allow-sex-topic-001",
+    "replyText": "这个色情片段的争议点其实是同意和传播边界，不是单纯尺度问题。",
+    "authorDisplayName": "影评人",
+    "authorHandle": "film_talk",
+    "profileBioText": "电影和流媒体评论",
+    "expectedAction": "allow",
+    "expectedLabels": [],
+    "notes": "有信息量的色情/成人话题讨论，必须保留。"
+  },
+  {
+    "id": "allow-short-normal-001",
+    "replyText": "ok",
+    "authorDisplayName": "普通账号",
+    "authorHandle": "daily_user",
+    "profileBioText": "",
+    "expectedAction": "allow",
+    "expectedLabels": [],
+    "notes": "普通短回复不能因为短就隐藏。"
+  }
+]
