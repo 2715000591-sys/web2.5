@@ -25,6 +25,8 @@
 - 官网控制台的 AI 配置区已新增“测试一次 AI 接入”按钮。它会先保存设置，再发一条小样本测试 Key、接口地址、模型名是否能真实调用；只有用户手动点击才会消耗少量额度。
 - DeepSeek `deepseek-v4-flash` 已接入线上开发者账号，并通过真实调用测试。
 - 已补强通用 JSON 模式提示：当平台不支持严格 JSON Schema、只能走普通 JSON 对象模式时，Worker 会把允许使用的审核标签明确写进提示里，避免模型自造标签。
+- 2026-05-01 已修复扩展侧 AI 排队保护：本地规则必须先判定为可疑候选，回复才会送入 AI 队列，避免无脑调用模型。
+- 已做 6 条小样本识别测试，结果全部符合预期；本轮测试约消耗 2805 token。
 - 官网下载包已经重新生成并上传到 Cloudflare。
 - 已确认公网首页、控制台、下载清单和下载包可以直接访问，不依赖本地部署。
 - GitHub 当前分支已推送。
@@ -35,13 +37,13 @@
 
 - 站点：`https://colorful-toilet.colorful-toilet.workers.dev/`
 - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- Worker Version ID：`d2329837-2684-4356-a342-0990a406a77b`
-- Git commit：当前分支最新提交包含“测试一次 AI 接入”入口和 DeepSeek JSON 标签提示补强
+- Worker Version ID：`28223820-2815-431b-a653-da53a851c49c`
+- Git commit：当前分支最新提交包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护
 
 ## 3. 还没完成
 
 - 已接入真实 DeepSeek API Key，并已做小样本真实调用测试。
-- 已产生极少量测试调用消耗；DeepSeek 余额查询仍显示人民币 `10.00`，可能因为消耗太小或余额显示有四舍五入。
+- 已产生少量测试调用消耗；2026-05-01 的 6 条小样本批量测试约消耗 `2805` token。
 - 还没有做真实 X 页面回复审核验收。
 - 还没有确定 DeepSeek 长期是否最稳；目前先用便宜的 `deepseek-v4-flash`。
 
@@ -115,7 +117,7 @@ npm run cloud:deploy
 
 如果影响 Safari 扩展本地代码，才需要重建和替换 `/Applications/web2.5.app`。
 
-这次通用 AI 接入主要是云端和官网控制台改动，不需要替换本机 Safari App。
+如果改动扩展侧 AI 调度、候选过滤、页面采集或 BUILD_ID，需要重建并替换本机 Safari App。2026-05-01 已替换 `/Applications/web2.5.app` 到 `BUILD_ID = 2026-05-01-1924`。
 
 ## 8. 高风险提醒
 

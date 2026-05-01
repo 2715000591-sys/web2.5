@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-04-28-1757";
+  const BUILD_ID = "2026-05-01-1924";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -5398,6 +5398,7 @@
           && !isGloballyBlocked
           && Boolean(state.replyAiEnabled && state.backendBaseUrl && state.syncKey && state.deviceId)
           && Boolean(aiCacheKey)
+          && Boolean(aiCandidate && aiCandidate.shouldQueue)
           && (!cachedAiDecision || failedAiRetryDue);
 
         if (isAllowed) {

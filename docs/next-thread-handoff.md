@@ -95,7 +95,7 @@
 - 普通用户真实邮件验证码发送还没接正式发信服务
 - 普通用户正式登录闭环还没完全收口
 - 个性化屏蔽还没开始
-- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。线上开发者账号已加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过一次真实 AI 接入测试。后续还需要用真实 X 回复做页面级验收。
+- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。线上开发者账号已加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过真实 AI 接入测试和 6 条小样本识别测试。后续还需要用真实 X 回复做页面级验收。
 - 正式自定义域名还没定
 - 远程 D1 里仍有少量开发测试原始行，只能在明确识别后清理
 
@@ -106,7 +106,7 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`d2329837-2684-4356-a342-0990a406a77b`
+  - Version ID：`28223820-2815-431b-a653-da53a851c49c`
   - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
@@ -116,6 +116,8 @@
     - `model = deepseek-v4-flash`
     - Key 已加密保存，控制台只显示后四位 `bc09`，不要把完整 Key 写入代码、文档或 GitHub。
     - “测试一次 AI 接入”已返回 `status=ready`、`action=hide`、`confidence=high`，标签包含 `adult_solicitation`、`contact_redirect`。
+    - 6 条小样本识别测试全部符合预期：招嫖/联系方式引流、附近约见诱导、风险名字+低信息回复会隐藏；`Apple ID 一直登不上`、正常地点讨论、普通短回复会放过。
+    - 2026-05-01 修复了扩展侧 AI 排队保护：只有本地规则先判定为可疑候选的回复才会进入 AI 队列，避免打开详情页后把所有回复都送去模型。
   - API 接入下一步详见 `docs/ai-api-provider-handoff.md`。
   - 2026-05-01 已验证公网首页、控制台、`/downloads/latest.json`、Safari 下载包、Chrome/Edge 下载包都可从 Cloudflare 线上地址直接访问，不依赖本地部署。
   - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 会连接超时；原因是命令行直连没有走 macOS 系统代理。`scripts/audit-data-layer.mjs` 已修复：检测到 macOS HTTPS 代理时会自动用 `NODE_USE_ENV_PROXY=1` 重启自己。
@@ -125,9 +127,9 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-04-28-1757`
-  - extension manifest version：`0.1.30`
-  - App / Extension version：`1.0.30 (31)`
+  - `BUILD_ID = 2026-05-01-1924`
+  - extension manifest version：`0.1.31`
+  - App / Extension version：`1.0.31 (32)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
 
