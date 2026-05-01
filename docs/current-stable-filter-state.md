@@ -123,8 +123,9 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `23ce2f24-4594-48dc-ab22-183a770c2992`
+  - Version ID: `eab43617-84ce-4d65-8b1a-f5f3a797303a`
   - 数据分层防线已上线：自动全局精确规则按多贡献者计数，优先使用 `user_id`，同一账号多设备不能伪装成多人共识。
+  - 2026-05-01 已部署通用大模型兼容适配；筛选基线本身未改。
 
 ## 如果未来真的要改筛选，必须先做什么
 

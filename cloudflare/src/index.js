@@ -33,6 +33,12 @@ const AI_PROVIDER_ADAPTER_KEYS = Object.freeze({
   OPENAI_COMPATIBLE: "openai_compatible",
   NATIVE_RESERVED: "native_reserved"
 });
+const AI_PROVIDER_RESPONSE_MODES = Object.freeze({
+  RESPONSES_JSON_SCHEMA: "responses_json_schema",
+  CHAT_COMPLETIONS_JSON_SCHEMA: "chat_completions_json_schema",
+  CHAT_COMPLETIONS_JSON_OBJECT: "chat_completions_json_object",
+  CHAT_COMPLETIONS_PROMPT_ONLY: "chat_completions_prompt_only"
+});
 const AI_PROVIDER_COOLDOWN_STEPS_MS = Object.freeze([30000, 120000, 300000, 600000]);
 const AI_PROVIDER_COOLDOWN_JITTER_RATIO = 0.15;
 const TIMELINE_POST_STORAGE_TEXT_LIMIT = 20000;
@@ -2724,7 +2730,14 @@ function normalizeAiProviderBaseUrl(value) {
   if (!trimmed) {
     return DEFAULT_USER_AI_SETTINGS.providerBaseUrl;
   }
-  return trimmed.endsWith("/responses") ? trimmed.slice(0, -"/responses".length) : trimmed;
+  const lower = trimmed.toLowerCase();
+  const endpointSuffixes = ["/responses", "/chat/completions"];
+  for (const suffix of endpointSuffixes) {
+    if (lower.endsWith(suffix)) {
+      return trimmed.slice(0, -suffix.length).replace(/\/+$/, "");
+    }
+  }
+  return trimmed;
 }
 
 function buildResponsesApiEndpoint(baseUrl) {
@@ -2740,6 +2753,16 @@ function buildChatCompletionsApiEndpoint(baseUrl) {
 function isGeminiOpenAiCompatibleBaseUrl(baseUrl) {
   const normalized = normalizeAiProviderBaseUrl(baseUrl);
   return /generativelanguage\.googleapis\.com/i.test(normalized) && /\/openai$/i.test(normalized);
+}
+
+function isOfficialOpenAiCompatibleBaseUrl(baseUrl) {
+  const normalized = normalizeAiProviderBaseUrl(baseUrl);
+  try {
+    const hostname = new URL(normalized).hostname;
+    return /(^|\.)openai\.com$/i.test(hostname);
+  } catch (error) {
+    return /openai\.com/i.test(normalized);
+  }
 }
 
 function normalizeAiModerationTaskType(value, fallback) {
@@ -2759,7 +2782,12 @@ function normalizeAiProviderAdapterKey(value) {
 }
 
 function normalizeAiProviderResponseMode(baseUrl) {
-  return isGeminiOpenAiCompatibleBaseUrl(baseUrl) ? "chat_completions_json_schema" : "responses_json_schema";
+  if (isOfficialOpenAiCompatibleBaseUrl(baseUrl)) {
+    return AI_PROVIDER_RESPONSE_MODES.RESPONSES_JSON_SCHEMA;
+  }
+  return isGeminiOpenAiCompatibleBaseUrl(baseUrl)
+    ? AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA
+    : AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT;
 }
 
 function normalizeAiModel(value) {
@@ -4516,41 +4544,147 @@ function extractChatCompletionOutputText(responseJson) {
   return textParts.join("\n").trim();
 }
 
+function parseAiJsonOutputText(outputText) {
+  const normalized = String(outputText || "").trim();
+  if (!normalized) {
+    throw new Error("ai-provider-empty-output");
+  }
+
+  const candidates = [normalized];
+  const fencedMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fencedMatch && fencedMatch[1]) {
+    candidates.push(fencedMatch[1].trim());
+  }
+
+  const firstObject = normalized.indexOf("{");
+  const lastObject = normalized.lastIndexOf("}");
+  if (firstObject >= 0 && lastObject > firstObject) {
+    candidates.push(normalized.slice(firstObject, lastObject + 1));
+  }
+
+  const firstArray = normalized.indexOf("[");
+  const lastArray = normalized.lastIndexOf("]");
+  if (firstArray >= 0 && lastArray > firstArray) {
+    candidates.push(normalized.slice(firstArray, lastArray + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      // Try the next common provider output shape.
+    }
+  }
+
+  throw new Error("ai-provider-invalid-json");
+}
+
 function shouldFallbackOpenAiCompatibleResponsesToChat(status) {
   return [400, 404, 405, 415, 422, 501].includes(Number(status || 0));
 }
 
+function buildAiJsonExampleValue(schema, propertyName) {
+  const source = schema && typeof schema === "object" ? schema : {};
+  if (Array.isArray(source.enum) && source.enum.length) {
+    const enumValues = source.enum.map((item) => String(item || ""));
+    if (propertyName === "action" && enumValues.includes("allow")) {
+      return "allow";
+    }
+    if (propertyName === "confidence" && enumValues.includes("low")) {
+      return "low";
+    }
+    if (propertyName === "status" && enumValues.includes("ready")) {
+      return "ready";
+    }
+    return enumValues[0];
+  }
+
+  if (source.type === "array") {
+    if (source.items && source.items.type === "object") {
+      return [buildAiJsonExampleValue(source.items, propertyName)];
+    }
+    return [];
+  }
+
+  if (source.type === "object") {
+    const output = {};
+    const properties = source.properties && typeof source.properties === "object" ? source.properties : {};
+    const required = Array.isArray(source.required) ? source.required : Object.keys(properties);
+    required.forEach((key) => {
+      output[key] = buildAiJsonExampleValue(properties[key], key);
+    });
+    return output;
+  }
+
+  if (source.type === "boolean") {
+    return false;
+  }
+  if (source.type === "number" || source.type === "integer") {
+    return 0;
+  }
+  return "";
+}
+
+function buildJsonObjectModeDeveloperPrompt(moderationTask) {
+  const example = JSON.stringify(buildAiJsonExampleValue(moderationTask.responseSchema, ""), null, 2);
+  return [
+    moderationTask.developerPrompt,
+    "Return only valid JSON. Do not wrap the JSON in markdown. Do not add explanations before or after the JSON.",
+    "The JSON must match this shape:",
+    example
+  ].filter(Boolean).join("\n\n");
+}
+
 async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort, extraResponseMeta) {
   const providerConfig = moderationTask.providerConfig;
+  const meta = extraResponseMeta && typeof extraResponseMeta === "object" ? extraResponseMeta : {};
+  const requestedMode = Object.values(AI_PROVIDER_RESPONSE_MODES).includes(meta.responseModeOverride)
+    ? meta.responseModeOverride
+    : providerConfig.responseMode;
+  const useJsonObjectMode = requestedMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT;
+  const usePromptOnlyMode = requestedMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_PROMPT_ONLY;
+  const chatResponseMode = useJsonObjectMode || usePromptOnlyMode
+    ? requestedMode
+    : AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA;
+  const requestBody = {
+    model: providerConfig.model,
+    temperature: 0,
+    messages: [
+      {
+        role: "system",
+        content: (useJsonObjectMode || usePromptOnlyMode)
+          ? buildJsonObjectModeDeveloperPrompt(moderationTask)
+          : moderationTask.developerPrompt
+      },
+      {
+        role: "user",
+        content: moderationTask.userPayloadText
+      }
+    ],
+  };
+
+  if (useJsonObjectMode) {
+    requestBody.response_format = {
+      type: "json_object"
+    };
+  } else if (!usePromptOnlyMode) {
+    requestBody.response_format = {
+      type: "json_schema",
+      json_schema: {
+        name: moderationTask.schemaName,
+        strict: true,
+        schema: moderationTask.responseSchema
+      }
+    };
+  }
+
   const response = await fetch(buildChatCompletionsApiEndpoint(providerConfig.providerBaseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${providerConfig.apiKey}`
     },
-    body: JSON.stringify({
-      model: providerConfig.model,
-      reasoning_effort: reasoningEffort === "minimal" ? "low" : reasoningEffort,
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: moderationTask.developerPrompt
-        },
-        {
-          role: "user",
-          content: moderationTask.userPayloadText
-        }
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: moderationTask.schemaName,
-          strict: true,
-          schema: moderationTask.responseSchema
-        }
-      }
-    })
+    body: JSON.stringify(requestBody)
   });
 
   let responseJson = {};
@@ -4561,6 +4695,14 @@ async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoni
   }
 
   if (!response.ok) {
+    if (meta.allowUnsupportedFallback && shouldFallbackOpenAiCompatibleResponsesToChat(response.status)) {
+      return {
+        unsupported: true,
+        status: response.status,
+        responseJson,
+        responseMode: chatResponseMode
+      };
+    }
     throw new Error(`ai-provider-status-${response.status}`);
   }
 
@@ -4570,14 +4712,17 @@ async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoni
   }
 
   return {
-    parsed: JSON.parse(outputText),
+    parsed: parseAiJsonOutputText(outputText),
     model: providerConfig.model,
     responseMeta: Object.assign({
       adapterKey: providerConfig.adapterKey,
-      responseMode: "chat_completions_json_schema",
+      responseMode: chatResponseMode,
       id: responseJson && responseJson.id ? responseJson.id : "",
       outputText
-    }, extraResponseMeta || {})
+    }, Object.assign({}, meta, {
+      responseModeOverride: undefined,
+      allowUnsupportedFallback: undefined
+    }))
   };
 }
 
@@ -4650,15 +4795,74 @@ async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffo
   }
 
   return {
-    parsed: JSON.parse(outputText),
+    parsed: parseAiJsonOutputText(outputText),
     model: providerConfig.model,
     responseMeta: {
       adapterKey: providerConfig.adapterKey,
-      responseMode: "responses_json_schema",
+      responseMode: AI_PROVIDER_RESPONSE_MODES.RESPONSES_JSON_SCHEMA,
       id: responseJson && responseJson.id ? responseJson.id : "",
       outputText
     }
   };
+}
+
+function buildChatCompletionResponseModeFallbacks(primaryMode) {
+  const modes = [];
+  const addMode = (mode) => {
+    if (mode && !modes.includes(mode)) {
+      modes.push(mode);
+    }
+  };
+
+  if (primaryMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA) {
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA);
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT);
+  } else if (primaryMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT) {
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT);
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA);
+  } else if (primaryMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_PROMPT_ONLY) {
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_PROMPT_ONLY);
+  } else {
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA);
+    addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT);
+  }
+
+  addMode(AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_PROMPT_ONLY);
+  return modes;
+}
+
+async function requestOpenAiCompatibleViaChatFallbacks(moderationTask, reasoningEffort, primaryMode, extraResponseMeta) {
+  const modes = buildChatCompletionResponseModeFallbacks(primaryMode);
+  let lastUnsupported = null;
+
+  for (let index = 0; index < modes.length; index += 1) {
+    const mode = modes[index];
+    try {
+      const response = await requestOpenAiCompatibleViaChatCompletions(
+        moderationTask,
+        reasoningEffort,
+        Object.assign({}, extraResponseMeta || {}, {
+          responseModeOverride: mode,
+          allowUnsupportedFallback: true
+        })
+      );
+      if (response && response.unsupported) {
+        lastUnsupported = response;
+        continue;
+      }
+      return response;
+    } catch (error) {
+      const message = error && error.message ? String(error.message) : String(error);
+      const canTryLooserMode = index < modes.length - 1
+        && /ai-provider-(invalid-json|empty-output)/i.test(message);
+      if (canTryLooserMode) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw new Error(`ai-provider-status-${lastUnsupported && lastUnsupported.status ? lastUnsupported.status : 400}`);
 }
 
 async function requestOpenAiCompatibleStructuredJson(task) {
@@ -4671,8 +4875,12 @@ async function requestOpenAiCompatibleStructuredJson(task) {
     20
   ) || "low";
 
-  if (providerConfig.responseMode === "chat_completions_json_schema") {
-    return requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort);
+  if (
+    providerConfig.responseMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA
+    || providerConfig.responseMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_OBJECT
+    || providerConfig.responseMode === AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_PROMPT_ONLY
+  ) {
+    return requestOpenAiCompatibleViaChatFallbacks(moderationTask, reasoningEffort, providerConfig.responseMode);
   }
 
   const responsesResult = await requestOpenAiCompatibleViaResponses(
@@ -4684,8 +4892,8 @@ async function requestOpenAiCompatibleStructuredJson(task) {
     return responsesResult;
   }
 
-  return requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort, {
-    fallbackFrom: "responses_json_schema",
+  return requestOpenAiCompatibleViaChatFallbacks(moderationTask, reasoningEffort, AI_PROVIDER_RESPONSE_MODES.CHAT_COMPLETIONS_JSON_SCHEMA, {
+    fallbackFrom: AI_PROVIDER_RESPONSE_MODES.RESPONSES_JSON_SCHEMA,
     fallbackStatus: Number(responsesResult.status || 0)
   });
 }

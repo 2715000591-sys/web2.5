@@ -1,6 +1,6 @@
 # Colorful Toilet 下一轮接力说明
 
-最后整理日期：2026-04-30
+最后整理日期：2026-05-01
 
 这份文件是给下一轮 Codex / 开发助手看的，不是产品宣传文档。目标只有一个：新对话打开后，能快速、安全、连续地接手，不重复解释，不误删数据，不改坏已经稳定的插件。
 
@@ -22,7 +22,15 @@
 
 ## 1. 用户工作方式
 
-用户没有计算机基础，不应该被迫理解提交、推送、部署、D1、Worker、构建签名这些细节。
+用户没有计算机基础，不应该被迫理解提交、推送、部署、D1、Worker、构建签名、AI 接口、模型适配、API Key 这些细节。
+
+对用户解释时必须先用大白话说结论：
+
+- 先说“能不能用 / 还差什么 / 我下一步会做什么”
+- 不要直接甩 API 名称、接口路径、模型参数、错误码、命令输出
+- 必须提技术词时，后面立刻用一句普通中文解释
+- 需要用户提供密钥、登录、付款、真人验证时，只说用户要做的那一步，不让用户判断工程细节
+- 用户问“准备好了吗”这类问题时，优先回答“准备好了 / 还没完全准备好”，再用一两句解释原因
 
 默认工作方式：
 
@@ -77,29 +85,30 @@
   - 同一账号多个设备不能伪装成多人共识
   - 新增开发者只读审计接口：`GET /api/developer/data-layer-audit`
   - 新增审计脚本：`npm run cloud:audit-data-layer`
-  - 2026-04-30 已部署到线上 Worker
+  - 2026-05-01 已部署到线上 Worker
 
 ### 还没完成
 
 - 普通用户真实邮件验证码发送还没接正式发信服务
 - 普通用户正式登录闭环还没完全收口
 - 个性化屏蔽还没开始
-- AI 判断还没接入正式流程
+- AI 判断还没接入正式流程；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。还没接真实 Key、没产生费用、没做真实 AI 调用验收
 - 正式自定义域名还没定
 - 远程 D1 里仍有少量开发测试原始行，只能在明确识别后清理
 
 ## 3. 当前版本锚点
 
-这些是截至 2026-04-30 的已知稳定锚点：
+这些是截至 2026-05-01 的已知稳定锚点：
 
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`23ce2f24-4594-48dc-ab22-183a770c2992`
-  - 2026-04-30 `npm run cloud:deploy` 已成功部署。
+  - Version ID：`eab43617-84ce-4d65-8b1a-f5f3a797303a`
+  - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
+  - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
   - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 会连接超时；原因是命令行直连没有走 macOS 系统代理。`scripts/audit-data-layer.mjs` 已修复：检测到 macOS HTTPS 代理时会自动用 `NODE_USE_ENV_PROXY=1` 重启自己。
-  - 2026-04-30 `npm run cloud:audit-data-layer` 已直接跑通，线上分层审计全部 PASS：`total_users=2`，真实事件 `total_events=675`、`bound_events=675`、`unbound_events=0`、`event_user_count=1`；`single_contributor_blocked_candidates=8`。
+  - 2026-05-01 `npm run cloud:audit-data-layer` 已直接跑通，线上分层审计全部 PASS：`total_users=2`，真实事件 `total_events=691`、`bound_events=691`、`unbound_events=0`、`event_user_count=1`；`single_contributor_blocked_candidates=8`。
 - Cloudflare D1：
   - 数据库名：`web25`
   - 绑定名：`DB`
