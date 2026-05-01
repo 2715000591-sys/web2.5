@@ -95,7 +95,7 @@
 - 普通用户真实邮件验证码发送还没接正式发信服务
 - 普通用户正式登录闭环还没完全收口
 - 个性化屏蔽还没开始
-- AI 判断还没接入正式流程；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。还没接真实 Key、没产生费用、没做真实 AI 调用验收
+- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。线上开发者账号已加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过一次真实 AI 接入测试。后续还需要用真实 X 回复做页面级验收。
 - 正式自定义域名还没定
 - 远程 D1 里仍有少量开发测试原始行，只能在明确识别后清理
 
@@ -106,11 +106,16 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`ddd9a36c-fb5f-4d64-92c3-4d68a6ea18c5`
+  - Version ID：`d2329837-2684-4356-a342-0990a406a77b`
   - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
   - 线上控制台 AI 设置区已新增“测试一次 AI 接入”按钮。按钮会先保存设置，再只发一条小样本测试 Key / 接口地址 / 模型名是否可用；它不会自动运行，用户手动点击才会消耗少量 API 额度。
+  - 2026-05-01 已将线上开发者账号的共享 AI 设置接入 DeepSeek：
+    - `providerBaseUrl = https://api.deepseek.com`
+    - `model = deepseek-v4-flash`
+    - Key 已加密保存，控制台只显示后四位 `bc09`，不要把完整 Key 写入代码、文档或 GitHub。
+    - “测试一次 AI 接入”已返回 `status=ready`、`action=hide`、`confidence=high`，标签包含 `adult_solicitation`、`contact_redirect`。
   - API 接入下一步详见 `docs/ai-api-provider-handoff.md`。
   - 2026-05-01 已验证公网首页、控制台、`/downloads/latest.json`、Safari 下载包、Chrome/Edge 下载包都可从 Cloudflare 线上地址直接访问，不依赖本地部署。
   - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 会连接超时；原因是命令行直连没有走 macOS 系统代理。`scripts/audit-data-layer.mjs` 已修复：检测到 macOS HTTPS 代理时会自动用 `NODE_USE_ENV_PROXY=1` 重启自己。

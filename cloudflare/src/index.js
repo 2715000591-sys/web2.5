@@ -4726,11 +4726,38 @@ function buildAiJsonExampleValue(schema, propertyName) {
   return "";
 }
 
+function collectAiJsonSchemaEnumHints(schema, path, output) {
+  const source = schema && typeof schema === "object" ? schema : {};
+  const hints = Array.isArray(output) ? output : [];
+  const currentPath = String(path || "").trim();
+
+  if (Array.isArray(source.enum) && source.enum.length && currentPath) {
+    hints.push(`${currentPath}: ${source.enum.map((item) => String(item || "")).filter(Boolean).join(", ")}`);
+  }
+
+  if (source.type === "array" && source.items) {
+    collectAiJsonSchemaEnumHints(source.items, `${currentPath || "items"}[]`, hints);
+    return hints;
+  }
+
+  if (source.type === "object" && source.properties && typeof source.properties === "object") {
+    Object.keys(source.properties).forEach((key) => {
+      collectAiJsonSchemaEnumHints(source.properties[key], currentPath ? `${currentPath}.${key}` : key, hints);
+    });
+  }
+
+  return hints;
+}
+
 function buildJsonObjectModeDeveloperPrompt(moderationTask) {
   const example = JSON.stringify(buildAiJsonExampleValue(moderationTask.responseSchema, ""), null, 2);
+  const enumHints = collectAiJsonSchemaEnumHints(moderationTask.responseSchema, "", []);
   return [
     moderationTask.developerPrompt,
     "Return only valid JSON. Do not wrap the JSON in markdown. Do not add explanations before or after the JSON.",
+    enumHints.length
+      ? `Allowed enum values:\n${enumHints.map((hint) => `- ${hint}`).join("\n")}`
+      : "",
     "The JSON must match this shape:",
     example
   ].filter(Boolean).join("\n\n");
@@ -6470,6 +6497,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "If confidence is not high, return action allow.",
     "Use matchedLabels only from the provided enum.",
     "Use matchedProfileSignals only from the provided enum.",
+    "When action is hide, matchedLabels must contain at least one provided safety label that explains the hide decision.",
     isBatch
       ? "Return exactly one decision for every clientItemId in the batch, and preserve each clientItemId exactly."
       : "",
