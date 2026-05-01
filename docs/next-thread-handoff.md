@@ -96,7 +96,7 @@
 - 普通用户真实邮件验证码发送还没接正式发信服务
 - 普通用户正式登录闭环还没完全收口
 - 个性化屏蔽还没开始
-- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。用户已明确 API 已提供，下一轮不要再让用户重新购买或重新提供，除非线上配置丢失、Key 失效、额度不足，或用户主动要换平台。线上开发者账号已加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过真实 AI 接入测试、6 条小样本识别测试、4 条成人内容边界小样本测试。基础层现在明确放过正常成人/色情讨论，只压约见导流、联系方式、诈骗、木马/安装包、主页诱导和空洞钓鱼。后续还需要用真实 X 回复做页面级验收。
+- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。用户已明确 API 已提供，下一轮不要再让用户重新购买。线上开发者账号曾加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过真实 AI 接入测试、6 条小样本识别测试、4 条成人内容边界小样本测试。2026-05-01 后续发现保存 AI 设置时会把空 Key 输入框误当成清空 Key，导致当前线上 DeepSeek Key 已为空；已修复并部署，重新填一次 Key 后，普通保存设置不会再误清。基础层现在明确放过正常成人/色情讨论，只压约见导流、联系方式、诈骗、木马/安装包、主页诱导和空洞钓鱼。后续还需要重新填 Key 后再用真实 X 回复做页面级验收。
 - 正式自定义域名还没定
 - 远程 D1 里仍有少量开发测试原始行，只能在明确识别后清理
 
@@ -107,7 +107,7 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`b9d97ff3-c648-4615-a10b-7639ca182547`
+  - Version ID：`e7793119-2da3-4cde-9c03-65c5e6d7e08a`
   - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
@@ -115,7 +115,7 @@
   - 2026-05-01 已将线上开发者账号的共享 AI 设置接入 DeepSeek：
     - `providerBaseUrl = https://api.deepseek.com`
     - `model = deepseek-v4-flash`
-    - Key 已加密保存，控制台只显示后四位 `bc09`，不要把完整 Key 写入代码、文档或 GitHub。
+    - Key 曾加密保存，控制台只显示后四位 `bc09`，不要把完整 Key 写入代码、文档或 GitHub。2026-05-01 后续保存设置时被 bug 误清空；当前需要用户重新填一次 Key。
     - “测试一次 AI 接入”已返回 `status=ready`、`action=hide`、`confidence=high`，标签包含 `adult_solicitation`、`contact_redirect`。
     - 6 条小样本识别测试全部符合预期：招嫖/联系方式引流、附近约见诱导、风险名字+低信息回复会隐藏；`Apple ID 一直登不上`、正常地点讨论、普通短回复会放过。
     - 2026-05-01 修复了扩展侧 AI 排队保护：只有本地规则先判定为可疑候选、且本地/数据库规则还没有直接隐藏的回复才会进入 AI 队列，避免打开详情页后把所有回复都送去模型，也避免 `找个同城的哥哥` 这类模板已经能本地隐藏时还消耗 API。
@@ -127,6 +127,7 @@
   - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 会连接超时；原因是命令行直连没有走 macOS 系统代理。`scripts/audit-data-layer.mjs` 已修复：检测到 macOS HTTPS 代理时会自动用 `NODE_USE_ENV_PROXY=1` 重启自己。
   - 2026-05-01 `npm run cloud:audit-data-layer` 已直接跑通，线上分层审计全部 PASS：`total_users=2`，真实事件 `total_events=692`、`bound_events=692`、`unbound_events=0`、`event_user_count=1`；`single_contributor_blocked_candidates=8`。
   - 2026-05-01 已确认 Worker Secret 名单包含 `USER_AI_SETTINGS_SECRET`，AI Key 可以加密保存。
+  - 2026-05-01 已修复 AI 设置保存 bug：如果请求里没有带 `apiKey`，Worker 会保留原来的加密 Key，不再把空输入框误当成清空 Key。已部署到 Version ID `e7793119-2da3-4cde-9c03-65c5e6d7e08a`。
 - Cloudflare D1：
   - 数据库名：`web25`
   - 绑定名：`DB`

@@ -923,14 +923,21 @@ async function handleUpdateAiSettings(request, env, ctx) {
     return json({ ok: false, error: "missing-ai-settings-patch" }, 400, request, true);
   }
 
+  const patch = {};
+  [
+    "replyAiEnabled",
+    "providerBaseUrl",
+    "model",
+    "moderationPrompt",
+    "apiKey"
+  ].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) {
+      patch[key] = payload[key];
+    }
+  });
+
   try {
-    const settings = await upsertUserAiSettings(env, viewer.id, {
-      replyAiEnabled: payload.replyAiEnabled,
-      providerBaseUrl: payload.providerBaseUrl,
-      model: payload.model,
-      moderationPrompt: payload.moderationPrompt,
-      apiKey: payload.apiKey
-    });
+    const settings = await upsertUserAiSettings(env, viewer.id, patch);
     if (ctx && typeof ctx.waitUntil === "function") {
       ctx.waitUntil(Promise.all([
         reclassifyRecentTimelinePostsForUser(env, viewer.id),
