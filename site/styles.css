@@ -343,6 +343,20 @@ button.ghost-button:disabled {
   color: var(--accent-deep);
 }
 
+.binding-item-primary {
+  align-items: flex-start;
+}
+
+.binding-copy {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.binding-history-note {
+  line-height: 1.48;
+}
+
 .status-pill,
 .panel-label {
   background: rgba(255, 255, 255, 0.66);

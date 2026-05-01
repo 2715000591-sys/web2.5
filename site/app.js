@@ -1533,7 +1533,54 @@ function applyDeveloperPayload(payload) {
   renderDeveloperSection(payload || null);
 }
 
-function renderBindings(bindings) {
+function getBindingTimeValue(item) {
+  return new Date(item && (item.lastSeenAt || item.updatedAt || item.createdAt) ? (item.lastSeenAt || item.updatedAt || item.createdAt) : 0).getTime();
+}
+
+function getBindingDeviceId(item) {
+  return String(item && item.deviceId ? item.deviceId : "").trim();
+}
+
+function isDevelopmentBinding(item) {
+  return /^device_(dev|eval|test)_/i.test(getBindingDeviceId(item));
+}
+
+function getPrimaryBinding(bindings, activeBinding) {
+  const list = Array.isArray(bindings) ? bindings.slice() : [];
+  const activeDeviceId = getBindingDeviceId(activeBinding);
+  if (activeDeviceId) {
+    const matched = list.find((item) => getBindingDeviceId(item) === activeDeviceId);
+    if (matched) {
+      return matched;
+    }
+    return activeBinding;
+  }
+
+  list.sort((left, right) => getBindingTimeValue(right) - getBindingTimeValue(left));
+  return list[0] || null;
+}
+
+function getHistoricalBindingNote(bindings, primaryBinding) {
+  const primaryDeviceId = getBindingDeviceId(primaryBinding);
+  const history = (Array.isArray(bindings) ? bindings : []).filter((item) => {
+    const deviceId = getBindingDeviceId(item);
+    return deviceId && deviceId !== primaryDeviceId;
+  });
+  if (!history.length) {
+    return "这就是当前接入控制台的设备。";
+  }
+
+  const developmentCount = history.filter(isDevelopmentBinding).length;
+  if (developmentCount === history.length) {
+    return `已收起 ${history.length} 个开发测试连接标识，不算多台真实设备。`;
+  }
+  if (developmentCount > 0) {
+    return `已收起 ${history.length} 个历史连接标识，其中 ${developmentCount} 个是开发测试标识，不算多台真实设备。`;
+  }
+  return `已收起 ${history.length} 个历史连接标识，通常来自插件重装、重新绑定或浏览器本地存储变化。`;
+}
+
+function renderBindings(bindings, activeBinding) {
   if (!bindingList) {
     return;
   }
@@ -1543,12 +1590,16 @@ function renderBindings(bindings) {
     return;
   }
 
-  bindingList.innerHTML = list.map((item) => `
-    <div class="binding-item">
-      <strong>${escapeHtml(String(item && item.label ? item.label : "已接入"))}</strong>
-      <span class="surface-note">${escapeHtml(`最近活跃 ${formatRelativeTime(item.lastSeenAt)}`)}</span>
+  const primaryBinding = getPrimaryBinding(list, activeBinding);
+  bindingList.innerHTML = `
+    <div class="binding-item binding-item-primary">
+      <div class="binding-copy">
+        <strong>当前这台设备</strong>
+        <span class="surface-note">${escapeHtml(`最近活跃 ${formatRelativeTime(primaryBinding && primaryBinding.lastSeenAt)}`)}</span>
+        <span class="surface-note binding-history-note">${escapeHtml(getHistoricalBindingNote(list, primaryBinding))}</span>
+      </div>
     </div>
-  `).join("");
+  `;
 }
 
 async function restoreItem(item, button, options) {
@@ -2522,7 +2573,7 @@ function renderCloudDashboard(payload) {
   appState.dashboardCache = payload || null;
   setMetricGroup(globalStatNodes, payload && payload.globalStats ? payload.globalStats : {});
   setMetricGroup(personalStatNodes, payload && payload.personalStats ? payload.personalStats : {});
-  renderBindings(payload && payload.bindings ? payload.bindings : []);
+  renderBindings(payload && payload.bindings ? payload.bindings : [], payload && payload.activeBinding ? payload.activeBinding : null);
   renderDeveloperSection(payload && payload.developer ? payload.developer : null);
   renderAiFeedSection(payload && payload.replyAi ? payload.replyAi : null);
   renderMetricDetailPage(payload || null);
