@@ -26,6 +26,7 @@ const aiApiBaseUrlInput = document.getElementById("aiApiBaseUrlInput");
 const aiApiModelInput = document.getElementById("aiApiModelInput");
 const aiPromptInput = document.getElementById("aiPromptInput");
 const saveAiSettingsButton = document.getElementById("saveAiSettingsButton");
+const testAiSettingsButton = document.getElementById("testAiSettingsButton");
 const aiSettingsStatus = document.getElementById("aiSettingsStatus");
 const developerBannerText = document.getElementById("developerBannerText");
 const developerPendingList = document.getElementById("developerPendingList");
@@ -1005,7 +1006,7 @@ async function saveAiSettings() {
     }
     renderAiFeedSection(appState.dashboardCache && appState.dashboardCache.replyAi ? appState.dashboardCache.replyAi : null);
     setStatus("设置先保存在这台浏览器了。真正接入共享 AI 提供商配置，还需要先登录云端控制台。");
-    return;
+    return false;
   }
 
   const payload = {
@@ -1037,7 +1038,7 @@ async function saveAiSettings() {
       aiSettingsStatus.textContent = friendlyMessage;
     }
     setStatus(friendlyMessage);
-    return;
+    return false;
   }
 
   if (!appState.dashboardCache) {
@@ -1062,6 +1063,92 @@ async function saveAiSettings() {
     aiSettingsStatus.textContent = parts.join(" · ");
   }
   setStatus("共享 AI 提供商配置和回复区 AI 审核开关已经保存到你的云端账号。");
+  return true;
+}
+
+function getAiProviderTestMessage(errorCode) {
+  const code = String(errorCode || "").trim();
+  if (code === "missing-ai-api-key") {
+    return "还没有保存 API Key。先把 Key、接口地址和模型名填好，再点保存。";
+  }
+  if (code === "ai-provider-status-401" || code === "ai-provider-status-403") {
+    return "AI 平台拒绝了这次测试。通常是 Key 不对、没开通模型，或者账号没有权限。";
+  }
+  if (code === "ai-provider-status-404") {
+    return "AI 平台没有找到这个接口或模型。通常是接口地址或模型名字填错。";
+  }
+  if (code === "ai-provider-status-429") {
+    return "AI 平台说请求太多或额度不足。等一下再试，或检查余额。";
+  }
+  if (/^ai-provider-status-5\d\d$/.test(code) || code === "ai-provider-status-529") {
+    return "AI 平台那边暂时不稳定。稍后再点测试。";
+  }
+  if (code === "ai-provider-invalid-json" || code === "ai-provider-empty-output") {
+    return "模型有回复，但格式不对。这个平台可能不完全兼容，需要我补单独适配。";
+  }
+  return "这次测试没有跑通。先检查 Key、接口地址、模型名字，再试一次。";
+}
+
+async function testAiSettings() {
+  if (!appState.viewer) {
+    setStatus("先登录云端控制台，再测试 AI 接入。");
+    return;
+  }
+
+  if (testAiSettingsButton) {
+    testAiSettingsButton.disabled = true;
+    testAiSettingsButton.textContent = "正在测试...";
+  }
+  if (saveAiSettingsButton) {
+    saveAiSettingsButton.disabled = true;
+  }
+
+  try {
+    setStatus("正在保存设置，然后只用一条小样本测试 AI 接入。这个测试会消耗很少量 API 额度。");
+    const saved = await saveAiSettings();
+    if (!saved) {
+      return;
+    }
+
+    const result = await requestJson("/api/ai-settings/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+
+    if (!result.ok || !result.data || !result.data.ok || !result.data.test) {
+      const message = getAiProviderTestMessage(result && result.data ? result.data.error : "");
+      if (aiSettingsStatus) {
+        aiSettingsStatus.textContent = message;
+      }
+      setStatus(message);
+      return;
+    }
+
+    const test = result.data.test;
+    const modelText = test.model ? `模型 ${test.model}` : "模型已响应";
+    const decisionText = test.action === "hide" ? "能返回隐藏判断" : "能返回有效判断";
+    const latencyText = Number(test.latencyMs || 0) > 0 ? `约 ${Math.round(Number(test.latencyMs || 0) / 100) / 10} 秒` : "";
+    if (aiSettingsStatus) {
+      aiSettingsStatus.textContent = ["测试通过", modelText, decisionText, latencyText].filter(Boolean).join(" · ");
+    }
+    setStatus("AI 接入测试通过：Key、接口地址和模型名都能正常调用。");
+  } catch (error) {
+    const message = "这次测试没有跑通。先检查网络和 AI 平台余额，再试一次。";
+    if (aiSettingsStatus) {
+      aiSettingsStatus.textContent = message;
+    }
+    setStatus(message);
+  } finally {
+    if (testAiSettingsButton) {
+      testAiSettingsButton.disabled = false;
+      testAiSettingsButton.textContent = "测试一次 AI 接入";
+    }
+    if (saveAiSettingsButton) {
+      saveAiSettingsButton.disabled = false;
+    }
+  }
 }
 
 async function confirmDeveloperFeed(item, button) {
@@ -1982,6 +2069,12 @@ if (aiEnabledToggle) {
 if (saveAiSettingsButton) {
   saveAiSettingsButton.addEventListener("click", function () {
     saveAiSettings();
+  });
+}
+
+if (testAiSettingsButton) {
+  testAiSettingsButton.addEventListener("click", function () {
+    testAiSettings();
   });
 }
 

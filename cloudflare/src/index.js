@@ -500,6 +500,10 @@ async function handleApi(request, env, ctx, url) {
     return handleUpdateAiSettings(request, env, ctx);
   }
 
+  if (request.method === "POST" && url.pathname === "/api/ai-settings/test") {
+    return handleTestAiSettings(request, env);
+  }
+
   if (request.method === "POST" && url.pathname === "/api/auth/request-code") {
     return handleRequestCode(request, env);
   }
@@ -936,6 +940,103 @@ async function handleUpdateAiSettings(request, env, ctx) {
         error: error && error.message ? error.message : "save-ai-settings-failed"
       },
       500,
+      request,
+      true,
+      buildSessionRefreshHeaders(request, viewer, env)
+    );
+  }
+}
+
+function buildAiProviderTestItem() {
+  return {
+    id: 0,
+    threadUrl: "https://x.com/example/status/1",
+    threadStatusId: "provider-test-thread",
+    replyStatusId: "provider-test-reply",
+    replyHandle: "wx1234567890",
+    replyDisplayName: "同城免费约",
+    replyText: "主页置顶看id",
+    mainPostText: "这是一条 AI 接入连通性测试样本，不会写入数据库。",
+    accountProtected: false,
+    profilePath: "/wx1234567890",
+    profileBioText: "联系方式看主页 vx",
+    profileSignalTags: ["contact_keyword", "profile_redirect"],
+    profileLinks: [],
+    profileFetchStatus: "ready"
+  };
+}
+
+function normalizeAiProviderTestError(error) {
+  const message = error && error.message ? String(error.message) : String(error || "");
+  const statusMatch = message.match(/ai-provider-status-(\d+)/i);
+  if (statusMatch) {
+    return `ai-provider-status-${statusMatch[1]}`;
+  }
+  if (/ai-provider-invalid-json/i.test(message)) {
+    return "ai-provider-invalid-json";
+  }
+  if (/ai-provider-empty-output/i.test(message)) {
+    return "ai-provider-empty-output";
+  }
+  if (/ai-provider-adapter-not-implemented/i.test(message)) {
+    return "ai-provider-adapter-not-implemented";
+  }
+  return "ai-provider-test-failed";
+}
+
+async function handleTestAiSettings(request, env) {
+  const viewer = await requireViewer(request, env, true);
+  if (!viewer) {
+    return json({ ok: false, error: "unauthorized" }, 401, request, true);
+  }
+
+  const settings = await getUserAiSettingsWithSecret(env, viewer.id);
+  if (!String(settings && settings.apiKey ? settings.apiKey : "").trim()) {
+    return json({ ok: false, error: "missing-ai-api-key" }, 400, request, true, buildSessionRefreshHeaders(request, viewer, env));
+  }
+
+  const startedAt = Date.now();
+  try {
+    const response = await requestAiModerationTaskFromProvider(buildAiModerationTask({
+      taskType: AI_MODERATION_TASK_TYPES.REPLY_REALTIME_MODERATION,
+      providerConfig: settings,
+      schemaName: "reply_moderation_provider_test",
+      responseSchema: buildReplyAiDecisionSchema(),
+      developerPrompt: buildReplyAiProviderPrompt(settings, { isBatch: false }),
+      userPayloadText: JSON.stringify(buildReplyAiProviderInputItem("provider-test", buildAiProviderTestItem(), null)),
+      metadata: {
+        reasoningEffort: "low"
+      }
+    }));
+    const decision = normalizeReplyAiDecision(response.parsed, response.model, response.responseMeta);
+    return json(
+      {
+        ok: true,
+        test: {
+          status: decision.status,
+          action: decision.action,
+          confidence: decision.confidence,
+          matchedSafetyLabels: decision.matchedSafetyLabels,
+          matchedProfileSignals: decision.matchedProfileSignals,
+          reasonShort: decision.reasonShort,
+          model: decision.model || normalizeAiModel(settings.model),
+          providerBaseUrl: normalizeAiProviderBaseUrl(settings.providerBaseUrl),
+          responseMode: decision.rawResponseJson && decision.rawResponseJson.responseMode ? decision.rawResponseJson.responseMode : "",
+          latencyMs: Math.max(0, Date.now() - startedAt)
+        }
+      },
+      200,
+      request,
+      true,
+      buildSessionRefreshHeaders(request, viewer, env)
+    );
+  } catch (error) {
+    return json(
+      {
+        ok: false,
+        error: normalizeAiProviderTestError(error)
+      },
+      502,
       request,
       true,
       buildSessionRefreshHeaders(request, viewer, env)
@@ -7445,6 +7546,7 @@ function isCredentialedPath(pathname) {
     || pathname === "/api/me"
     || pathname === "/api/preferences"
     || pathname === "/api/ai-settings"
+    || pathname === "/api/ai-settings/test"
     || pathname === "/api/dashboard"
     || pathname === "/api/ai-feed"
     || pathname === "/api/reply-ai"
