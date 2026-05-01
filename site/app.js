@@ -770,7 +770,7 @@ function renderAiFeedSection(replyAiPayload) {
         </div>
       ` : ""}
       <div class="ai-feed-actions">
-        <button class="ghost-button small-button ai-feed-restore-button" type="button">恢复这条</button>
+        <button class="ghost-button small-button ai-feed-restore-button" type="button">恢复误判</button>
         ${openUrl ? `<a class="ghost-button small-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noreferrer">在 X 里打开</a>` : ""}
       </div>
     `;
@@ -778,6 +778,7 @@ function renderAiFeedSection(replyAiPayload) {
     if (restoreButton) {
       restoreButton.addEventListener("click", function () {
         restoreItem(item, restoreButton, {
+          buttonText: "恢复误判",
           replyAiItemId: item && (item.replyAiItemId || item.id) ? (item.replyAiItemId || item.id) : 0
         });
       });
@@ -955,6 +956,7 @@ async function restoreItem(item, button, options) {
   }
 
   const replyAiItemId = Number(options && options.replyAiItemId ? options.replyAiItemId : 0);
+  const buttonText = String(options && options.buttonText ? options.buttonText : "恢复这条");
   if (button) {
     button.disabled = true;
     button.textContent = "正在恢复...";
@@ -990,13 +992,13 @@ async function restoreItem(item, button, options) {
       throw new Error("reply-ai-restore-failed");
     }
 
-    await refreshDashboard("这条内容已经恢复。");
+    await refreshDashboard(replyAiItemId > 0 ? "这条 AI 误判已经恢复，并会作为纠错记录保留。" : "这条内容已经恢复。");
   } catch (error) {
     setStatus("恢复失败了，点刷新再试一次。");
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = "恢复这条";
+      button.textContent = buttonText;
     }
   }
 }
