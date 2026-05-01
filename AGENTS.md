@@ -6,6 +6,7 @@ This file is the first thing future Codex sessions should read. The user does no
 
 - Default to doing the full maintenance loop yourself: inspect, edit, test, commit, push, deploy, update the local Safari app, and verify the installed result.
 - Do not only explain what should happen when the user clearly wants the project updated.
+- For official website / console frontend changes, deploy to the public Cloudflare site immediately after verification and confirm the public URL works. Local preview alone does not count as done because the user checks from other devices.
 - Continue until there is no reasonable next engineering step left. If blocked by account login, CAPTCHA, payment, or another action only the user can complete, record the exact blocker and the last successful verification.
 - Keep user-facing explanations simple and concrete. Avoid developer jargon unless it is explained in plain language. For AI/API/deployment topics, first answer in plain Chinese whether it is ready, what is still missing, and what Codex will do next; do not make the user interpret API names, model parameters, command output, or engineering details.
 - If a change affects the extension filtering behavior, update both local extension code and Cloudflare Worker code in the same pass.
