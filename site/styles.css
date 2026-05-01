@@ -801,6 +801,11 @@ button.ghost-button:disabled {
   background: rgba(255, 255, 255, 0.94);
 }
 
+.metric-card-button:focus-visible {
+  outline: 3px solid rgba(29, 107, 255, 0.22);
+  outline-offset: 3px;
+}
+
 .metric-card-button.active {
   border-color: rgba(29, 107, 255, 0.34);
   background: var(--accent-soft);
@@ -1213,6 +1218,14 @@ button.ghost-button:disabled {
   outline: none;
 }
 
+.metric-detail-page {
+  margin-top: 0;
+  padding: 24px;
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
 .source-detail-head {
   display: flex;
   align-items: flex-start;
@@ -1220,9 +1233,23 @@ button.ghost-button:disabled {
   gap: 12px;
 }
 
+.source-detail-head h2,
 .source-detail-head h4 {
   margin: 4px 0 0;
-  font-size: 17px;
+  font-size: clamp(1.8rem, 2.6vw, 2.5rem);
+  line-height: 1.05;
+}
+
+.detail-page-hint {
+  max-width: 680px;
+  margin-top: 10px;
+}
+
+.detail-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .review-tools.review-tools-collapsed {
@@ -1750,6 +1777,14 @@ button.ghost-button:disabled {
 
   .review-head-actions {
     flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .source-detail-head {
+    display: grid;
+  }
+
+  .detail-head-actions {
     justify-content: flex-start;
   }
 

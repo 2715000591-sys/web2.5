@@ -21,7 +21,9 @@ const aiFeedPager = document.getElementById("aiFeedPager");
 const sourceDetailPanel = document.getElementById("sourceDetailPanel");
 const sourceDetailEyebrow = document.getElementById("sourceDetailEyebrow");
 const sourceDetailTitle = document.getElementById("sourceDetailTitle");
+const sourceDetailDescription = document.getElementById("sourceDetailDescription");
 const sourceDetailCountPill = document.getElementById("sourceDetailCountPill");
+const sourceDetailBackButton = document.getElementById("sourceDetailBackButton");
 const aiFeedCountPill = document.getElementById("aiFeedCountPill");
 const aiEnabledToggle = document.getElementById("aiEnabledToggle");
 const aiEnabledStatus = document.getElementById("aiEnabledStatus");
@@ -581,6 +583,10 @@ function buildAiPostUrl(item) {
 }
 
 function buildReplyAiOpenUrl(item) {
+  const explicitUrl = String(item && item.threadUrl ? item.threadUrl : "").trim();
+  if (/^https?:\/\//i.test(explicitUrl)) {
+    return explicitUrl;
+  }
   const statusId = String(item && (item.replyStatusId || item.threadStatusId) ? (item.replyStatusId || item.threadStatusId) : "").trim();
   const handle = String(item && item.replyHandle ? item.replyHandle : "").trim().replace(/^@/, "");
   if (!statusId || !handle) {
@@ -700,11 +706,105 @@ const SOURCE_BUCKET_META = SOURCE_BUCKETS.reduce((map, item) => {
   return map;
 }, {});
 
+const EXTRA_METRIC_DETAIL_META = {
+  auto: {
+    id: "auto",
+    title: "累计自动整理",
+    note: "系统自动处理",
+    eyebrow: "回复审查",
+    empty: "当前没有系统自动处理的近期记录。"
+  },
+  ad_home: {
+    id: "ad_home",
+    title: "已在主页跳过广告",
+    note: "主页官方广告",
+    eyebrow: "官方广告记录",
+    empty: "当前没有主页官方广告的近期记录。"
+  },
+  ad_reply: {
+    id: "ad_reply",
+    title: "已在回复区跳过广告",
+    note: "回复区官方广告",
+    eyebrow: "官方广告记录",
+    empty: "当前没有回复区官方广告的近期记录。"
+  }
+};
+
+const METRIC_DETAIL_ALIASES = {
+  ad: "ad_home",
+  ad_home_hide: "ad_home",
+  ad_hide: "ad_home",
+  ad_reply_hide: "ad_reply",
+  local: "local_rule",
+  account: "account_blocklist",
+  global_blocklist: "account_blocklist",
+  manual_hide: "manual",
+  manual_allow: "restored"
+};
+
 const AI_REUSE_HIDE_LAYERS = new Set([
   "reuse_exact_hide",
   "reuse_template_hide",
   "reuse_account_hide"
 ]);
+
+function normalizeMetricDetailId(value) {
+  const raw = String(value || "").trim().replace(/-/g, "_");
+  if (!raw) {
+    return "";
+  }
+  const normalized = METRIC_DETAIL_ALIASES[raw] || raw;
+  if (SOURCE_BUCKET_META[normalized] || EXTRA_METRIC_DETAIL_META[normalized]) {
+    return normalized;
+  }
+  return "";
+}
+
+function getRequestedMetricDetailId() {
+  const params = new URLSearchParams(window.location.search);
+  return normalizeMetricDetailId(params.get("detail") || params.get("source") || "");
+}
+
+function isMetricDetailMode() {
+  return Boolean(getRequestedMetricDetailId());
+}
+
+function getMetricDetailMeta(detailId) {
+  const normalized = normalizeMetricDetailId(detailId);
+  if (SOURCE_BUCKET_META[normalized]) {
+    const sourceMeta = SOURCE_BUCKET_META[normalized];
+    return Object.assign({
+      eyebrow: "屏蔽来源明细"
+    }, sourceMeta, {
+      id: normalized
+    });
+  }
+  return EXTRA_METRIC_DETAIL_META[normalized] || Object.assign({
+    eyebrow: "明细",
+    empty: "当前没有这个分类的近期记录。"
+  }, EXTRA_METRIC_DETAIL_META.auto);
+}
+
+function buildConsoleDetailUrl(detailId) {
+  const normalized = normalizeMetricDetailId(detailId);
+  const url = new URL("/console/", window.location.origin || DEFAULT_PUBLIC_BACKEND_BASE_URL);
+  if (normalized) {
+    url.searchParams.set("detail", normalized);
+  }
+  return `${url.pathname}${url.search}`;
+}
+
+function navigateToMetricDetail(detailId) {
+  const normalized = normalizeMetricDetailId(detailId);
+  if (!normalized) {
+    return;
+  }
+  window.location.href = buildConsoleDetailUrl(normalized);
+}
+
+function buildConsoleHomeUrl() {
+  return "/console/";
+}
 
 function clearAiFeedPager() {
   if (aiFeedPager) {
@@ -775,6 +875,10 @@ function changeAiFeedPage(page) {
     return;
   }
   appState.aiFeedPage = nextPage;
+  if (isMetricDetailMode()) {
+    renderMetricDetailPage(appState.dashboardCache);
+    return;
+  }
   renderAiFeedSection(getCachedReplyAiPayload());
 }
 
@@ -926,7 +1030,8 @@ function buildSourceBuckets(replyAiPayload) {
         : "高置信命中达到全局账号名单条件。",
       createdAt: item && (item.updatedAt || item.globalBlockedAt) ? (item.updatedAt || item.globalBlockedAt) : "",
       replyDisplayName: "",
-      replyHandle: item && item.replyHandle ? item.replyHandle : ""
+      replyHandle: item && item.replyHandle ? item.replyHandle : "",
+      canRestoreEvent: true
     }));
   });
 
@@ -965,13 +1070,14 @@ function updateSourceMetricCards(buckets) {
 
   Array.from(document.querySelectorAll("[data-source-bucket]")).forEach((button) => {
     const bucketId = String(button.getAttribute("data-source-bucket") || "");
-    button.classList.toggle("active", Boolean(bucketId && appState.sourceBucket === bucketId));
+    button.classList.toggle("active", Boolean(bucketId && getRequestedMetricDetailId() === bucketId));
   });
 }
 
 function renderSourceDetailRow(item) {
   const bucketId = String(item && item.sourceBucket ? item.sourceBucket : "local_rule");
-  const meta = getBucketMeta(bucketId);
+  const detailId = normalizeMetricDetailId(item && item.metricDetailId ? item.metricDetailId : bucketId);
+  const meta = getMetricDetailMeta(detailId || bucketId);
   const title = [item && item.replyDisplayName, item && item.replyHandle].filter(Boolean).join(" ");
   const openUrl = buildReplyAiOpenUrl(item);
   const safetyLabels = Array.isArray(item && item.matchedSafetyLabels) ? item.matchedSafetyLabels : [];
@@ -979,7 +1085,12 @@ function renderSourceDetailRow(item) {
   const row = document.createElement("article");
   row.className = "review-row ai-feed-row source-detail-row";
   const canRestoreAi = Boolean(item && item.canRestoreAi && item.replyAiItemId);
-  const canRestoreEvent = Boolean(item && item.canRestoreEvent);
+  const canRestoreEvent = Boolean(item && (item.canRestoreEvent || item.canRestoreAd));
+  const isAdEvent = item && item.detailType === "ad_event";
+  const bodyText = isAdEvent
+    ? `${getAdAdvertiserLabel(item)} · ${getAdScopeMeta(getReviewEventType(item)).placementLabel}`
+    : (item && item.replyText ? item.replyText : "这条记录里没有保存正文。");
+  const reasonText = isAdEvent ? getAdScopeMeta(getReviewEventType(item)).placementLabel : getBucketReason(item);
   row.innerHTML = `
     <div class="review-row-top">
       <div class="review-row-title">
@@ -990,10 +1101,10 @@ function renderSourceDetailRow(item) {
         <time>${escapeHtml(formatRelativeTime(item && (item.updatedAt || item.createdAt || item.globalBlockedAt) ? (item.updatedAt || item.createdAt || item.globalBlockedAt) : ""))}</time>
       </div>
     </div>
-    <p class="review-body">${escapeHtml(item && item.replyText ? item.replyText : "这条记录里没有保存正文。")}</p>
+    <p class="review-body">${escapeHtml(bodyText)}</p>
     <div class="ai-feed-secondary">
       <p>屏蔽来源：${escapeHtml(meta.title)}</p>
-      <p>简短原因：${escapeHtml(getBucketReason(item))}</p>
+      <p>简短原因：${escapeHtml(reasonText)}</p>
       ${(item && item.mainPostText) ? `<p>原帖上下文：${escapeHtml(item.mainPostText)}</p>` : ""}
       ${(safetyLabels.length || profileSignals.length) ? `
         ${safetyLabels.length ? `<p>命中标签：${escapeHtml(safetyLabels.map(formatReplyAiLabel).join("、"))}</p>` : ""}
@@ -1027,6 +1138,112 @@ function renderSourceDetailRow(item) {
   }
 
   return row;
+}
+
+function makeMetricDetailItem(item, detailId, overrides) {
+  const meta = getMetricDetailMeta(detailId);
+  return Object.assign({}, item || {}, overrides || {}, {
+    metricDetailId: detailId,
+    sourceBucketLabel: meta.title
+  });
+}
+
+function buildAutoMetricDetailItems(payload) {
+  const recentItems = payload && Array.isArray(payload.recent) ? payload.recent : [];
+  return getChronologicalReviewItems(recentItems)
+    .filter((item) => getReviewEventType(item) === "auto_hide")
+    .map((item) => makeMetricDetailItem(item, "auto", {
+      detailType: "moderation_event",
+      sourceBucket: "local_rule",
+      bucketReason: "系统自动下沉或隐藏的回复。",
+      canRestoreEvent: true
+    }));
+}
+
+function buildAdMetricDetailItems(payload, detailId) {
+  const adEvents = payload && Array.isArray(payload.adEvents) ? payload.adEvents : [];
+  const targetEventType = detailId === "ad_reply" ? "ad_reply_hide" : "ad_home_hide";
+  return getChronologicalReviewItems(adEvents)
+    .filter((item) => {
+      const eventType = getReviewEventType(item);
+      return targetEventType === "ad_home_hide"
+        ? eventType === "ad_home_hide" || eventType === "ad_hide"
+        : eventType === targetEventType;
+    })
+    .map((item) => makeMetricDetailItem(item, detailId, {
+      detailType: "ad_event",
+      sourceBucket: detailId,
+      bucketReason: getAdScopeMeta(getReviewEventType(item)).placementLabel,
+      canRestoreAd: true
+    }));
+}
+
+function getMetricDetailItems(detailId, payload) {
+  const normalized = normalizeMetricDetailId(detailId);
+  const dashboardPayload = payload || appState.dashboardCache || {};
+  if (SOURCE_BUCKET_META[normalized]) {
+    const buckets = buildSourceBuckets(dashboardPayload.replyAi || null);
+    return Array.isArray(buckets[normalized]) ? buckets[normalized] : [];
+  }
+  if (normalized === "auto") {
+    return buildAutoMetricDetailItems(dashboardPayload);
+  }
+  if (normalized === "ad_home" || normalized === "ad_reply") {
+    return buildAdMetricDetailItems(dashboardPayload, normalized);
+  }
+  return [];
+}
+
+function renderMetricDetailPage(payload) {
+  if (!aiFeedList) {
+    return;
+  }
+
+  const detailId = getRequestedMetricDetailId();
+  if (!detailId) {
+    setHidden(sourceDetailPanel, true);
+    clearAiFeedPager();
+    aiFeedList.innerHTML = "";
+    return;
+  }
+
+  const meta = getMetricDetailMeta(detailId);
+  const list = getMetricDetailItems(detailId, payload);
+  const totalPages = Math.max(1, Math.ceil(list.length / SOURCE_DETAIL_PAGE_SIZE));
+  const currentPage = Math.min(totalPages, Math.max(1, Number(appState.aiFeedPage || 1) || 1));
+  const pageStartIndex = (currentPage - 1) * SOURCE_DETAIL_PAGE_SIZE;
+  const pageItems = list.slice(pageStartIndex, pageStartIndex + SOURCE_DETAIL_PAGE_SIZE);
+  appState.aiFeedPage = currentPage;
+  appState.sourceBucket = SOURCE_BUCKET_META[detailId] ? detailId : "";
+  setHidden(sourceDetailPanel, false);
+
+  if (sourceDetailEyebrow) {
+    sourceDetailEyebrow.textContent = meta.eyebrow || "明细";
+  }
+  if (sourceDetailTitle) {
+    sourceDetailTitle.textContent = meta.title;
+  }
+  if (sourceDetailDescription) {
+    sourceDetailDescription.textContent = `${meta.note || "点击进入的分类"}。这里直接显示这个方格背后的具体记录，每条记录旁边都放了恢复入口。`;
+  }
+  if (sourceDetailCountPill) {
+    sourceDetailCountPill.textContent = `${list.length} 条`;
+  }
+  if (sourceDetailBackButton) {
+    sourceDetailBackButton.href = buildConsoleHomeUrl();
+  }
+
+  aiFeedList.innerHTML = "";
+  if (!list.length) {
+    clearAiFeedPager();
+    renderEmpty(aiFeedList, meta.empty);
+    return;
+  }
+
+  pageItems.forEach((item) => {
+    aiFeedList.appendChild(renderSourceDetailRow(item));
+  });
+  renderSourcePager(list.length, currentPage, totalPages);
 }
 
 function renderSourceDetail(buckets) {
@@ -1103,10 +1320,7 @@ function openSourceBucket(bucketId) {
   if (!SOURCE_BUCKET_META[bucketId]) {
     return;
   }
-  appState.sourceBucket = bucketId;
-  appState.aiFeedPage = 1;
-  renderAiFeedSection(appState.dashboardCache && appState.dashboardCache.replyAi ? appState.dashboardCache.replyAi : null);
-  jumpToSourceDetailPanel();
+  navigateToMetricDetail(bucketId);
 }
 
 function renderAiFeedSection(replyAiPayload) {
@@ -1157,6 +1371,11 @@ function renderAiFeedSection(replyAiPayload) {
     return;
   }
 
+  if (isMetricDetailMode()) {
+    updateSourceMetricCards(sourceBuckets);
+    return;
+  }
+
   if (!loggedIn) {
     updateSourceMetricCards(sourceBuckets);
     setHidden(sourceDetailPanel, true);
@@ -1166,7 +1385,9 @@ function renderAiFeedSection(replyAiPayload) {
   }
 
   updateSourceMetricCards(sourceBuckets);
-  renderSourceDetail(sourceBuckets);
+  setHidden(sourceDetailPanel, true);
+  clearAiFeedPager();
+  aiFeedList.innerHTML = "";
 }
 
 function setMetricGroup(statNodes, stats) {
@@ -2063,22 +2284,25 @@ function getActiveSyncKey() {
 }
 
 function renderCloudMode(loggedIn) {
+  const detailMode = isMetricDetailMode();
   appState.mode = "cloud";
   setHidden(loggedOutState, Boolean(loggedIn));
   setHidden(loggedInState, !loggedIn);
   setHidden(legacyState, true);
-  setHidden(cloudDashboardSection, !loggedIn);
-  setHidden(aiFeedSection, false);
+  setHidden(cloudDashboardSection, !loggedIn || detailMode);
+  setHidden(aiFeedSection, detailMode);
   setHidden(developerSection, true);
-  setHidden(personalDashboardSection, !loggedIn);
-  setHidden(adSection, !loggedIn);
-  setHidden(reviewSection, !loggedIn);
+  setHidden(personalDashboardSection, !loggedIn || detailMode);
+  setHidden(adSection, true);
+  setHidden(reviewSection, true);
+  setHidden(sourceDetailPanel, !loggedIn || !detailMode);
   if (syncModePill) {
     syncModePill.textContent = loggedIn ? "已登录云端控制台" : "登录后查看个人控制台";
   }
 }
 
 function renderLegacyMode() {
+  const detailMode = isMetricDetailMode();
   appState.mode = "legacy";
   setHidden(loggedOutState, true);
   setHidden(loggedInState, true);
@@ -2086,9 +2310,10 @@ function renderLegacyMode() {
   setHidden(cloudDashboardSection, true);
   setHidden(aiFeedSection, true);
   setHidden(developerSection, true);
-  setHidden(personalDashboardSection, false);
-  setHidden(adSection, false);
-  setHidden(reviewSection, false);
+  setHidden(personalDashboardSection, detailMode);
+  setHidden(adSection, true);
+  setHidden(reviewSection, true);
+  setHidden(sourceDetailPanel, !detailMode);
   if (syncModePill) {
     syncModePill.textContent = "本地控制台";
   }
@@ -2300,6 +2525,7 @@ function renderCloudDashboard(payload) {
   renderBindings(payload && payload.bindings ? payload.bindings : []);
   renderDeveloperSection(payload && payload.developer ? payload.developer : null);
   renderAiFeedSection(payload && payload.replyAi ? payload.replyAi : null);
+  renderMetricDetailPage(payload || null);
   renderAdList(payload && payload.adEvents ? payload.adEvents : []);
   renderReviewList(payload && payload.recent ? payload.recent : []);
   if (syncModePill) {
@@ -2311,6 +2537,7 @@ function renderLegacyDashboard(payload) {
   appState.dashboardCache = payload || null;
   setMetricGroup(personalStatNodes, payload && payload.stats ? payload.stats : {});
   renderAiFeedSection(null);
+  renderMetricDetailPage(payload || null);
   renderAdList(payload && payload.adEvents ? payload.adEvents : []);
   renderReviewList(payload && payload.recent ? payload.recent : []);
   if (syncModePill) {
@@ -2524,6 +2751,13 @@ Array.from(document.querySelectorAll("[data-source-bucket]")).forEach((button) =
   button.addEventListener("click", function () {
     const bucketId = String(button.getAttribute("data-source-bucket") || "");
     openSourceBucket(bucketId);
+  });
+});
+
+Array.from(document.querySelectorAll("[data-metric-detail]")).forEach((button) => {
+  button.addEventListener("click", function () {
+    const detailId = String(button.getAttribute("data-metric-detail") || "");
+    navigateToMetricDetail(detailId);
   });
 });
 
