@@ -61,7 +61,7 @@ tell application "Safari"
       set u to URL of t
       if u starts with "https://x.com" or u starts with "https://twitter.com" then
         try
-          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebar=root.dataset.web25SidebarColumn||(document.querySelector('[data-testid=sidebarColumn]')?'1':'0');const manual=root.dataset.web25ManualButtons||'0';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual;})()" in t
+          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebarColumn=document.querySelector('[data-testid=sidebarColumn]');const sidebar=sidebarColumn&&sidebarColumn.innerText.trim()?(root.dataset.web25SidebarColumn||'1'):'0';const manual=root.dataset.web25ManualButtons||'0';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual;})()" in t
           set out to out & u & " | " & info & linefeed
         on error errMsg number errNum
           set out to out & u & " | " & "JS_ERROR=" & errNum & ":" & errMsg & linefeed
@@ -107,6 +107,39 @@ if [[ -n "$DETAIL_WITHOUT_FLUSH" ]]; then
 fi
 
 SIDEBAR_WITHOUT_BUTTONS="$(awk '/sidebar=1/ && /sideButtons=0/ {print}' <<<"$RESULT")"
+if [[ -n "$SIDEBAR_WITHOUT_BUTTONS" ]]; then
+  echo "Sidebar controls were not visible immediately; waiting for X sidebar hydration..."
+  sleep 15
+  STABILIZED_RESULT="$(osascript <<'OSA'
+tell application "Safari"
+  set out to ""
+  repeat with w in windows
+    repeat with t in tabs of w
+      set u to URL of t
+      if u starts with "https://x.com" or u starts with "https://twitter.com" then
+        try
+          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebarColumn=document.querySelector('[data-testid=sidebarColumn]');const sidebar=sidebarColumn&&sidebarColumn.innerText.trim()?(root.dataset.web25SidebarColumn||'1'):'0';const manual=root.dataset.web25ManualButtons||'0';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual;})()" in t
+          set out to out & u & " | " & info & linefeed
+        on error errMsg number errNum
+          set out to out & u & " | " & "JS_ERROR=" & errNum & ":" & errMsg & linefeed
+        end try
+      end if
+    end repeat
+  end repeat
+
+  if out is "" then
+    return "NO_X_TABS"
+  end if
+  return out
+end tell
+OSA
+)"
+  printf '%s\n' "$STABILIZED_RESULT"
+  if [[ "$STABILIZED_RESULT" != "NO_X_TABS" ]] && ! grep -q "JS_ERROR=" <<<"$STABILIZED_RESULT"; then
+    RESULT="$STABILIZED_RESULT"
+    SIDEBAR_WITHOUT_BUTTONS="$(awk '/sidebar=1/ && /sideButtons=0/ {print}' <<<"$RESULT")"
+  fi
+fi
 if [[ -n "$SIDEBAR_WITHOUT_BUTTONS" ]]; then
   echo "Warning: at least one page has a sidebar but no visible sidebar close buttons yet:" >&2
   printf '%s\n' "$SIDEBAR_WITHOUT_BUTTONS" >&2

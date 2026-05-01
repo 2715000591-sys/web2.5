@@ -16,6 +16,7 @@
    - `docs/current-stable-filter-state.md`
    - `docs/current-stable-ui-state.md`
    - `docs/moderation-database-training-plan.md`
+   - 如果下一步是接大模型 API，再读 `docs/ai-api-provider-handoff.md`
 4. 再根据用户最新一句话行动，不要被旧上下文带偏。
 
 不要假设工作区是干净的。不要回退自己没改过的东西。
@@ -107,6 +108,8 @@
   - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
+  - API 接入下一步详见 `docs/ai-api-provider-handoff.md`。
+  - 2026-05-01 已验证公网首页、控制台、`/downloads/latest.json`、Safari 下载包、Chrome/Edge 下载包都可从 Cloudflare 线上地址直接访问，不依赖本地部署。
   - 本机直连 `https://colorful-toilet.colorful-toilet.workers.dev/` 会连接超时；原因是命令行直连没有走 macOS 系统代理。`scripts/audit-data-layer.mjs` 已修复：检测到 macOS HTTPS 代理时会自动用 `NODE_USE_ENV_PROXY=1` 重启自己。
   - 2026-05-01 `npm run cloud:audit-data-layer` 已直接跑通，线上分层审计全部 PASS：`total_users=2`，真实事件 `total_events=691`、`bound_events=691`、`unbound_events=0`、`event_user_count=1`；`single_contributor_blocked_candidates=8`。
 - Cloudflare D1：
@@ -355,6 +358,7 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 - `cloudflare/schema.sql`
 - `wrangler.jsonc`
 - `docs/moderation-database-training-plan.md`
+- `docs/ai-api-provider-handoff.md`
 
 网站和控制台：
 
