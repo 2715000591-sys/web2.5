@@ -1209,6 +1209,8 @@ button.ghost-button:disabled {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--panel-strong);
+  scroll-margin-top: 18px;
+  outline: none;
 }
 
 .source-detail-head {

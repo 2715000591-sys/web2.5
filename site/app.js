@@ -1077,6 +1077,38 @@ function renderSourceDetail(buckets) {
   renderSourcePager(list.length, currentPage, totalPages);
 }
 
+function jumpToSourceDetailPanel() {
+  if (!sourceDetailPanel || sourceDetailPanel.classList.contains("hidden")) {
+    return;
+  }
+  if (window.history && window.history.replaceState) {
+    window.history.replaceState(null, "", "#sourceDetailPanel");
+  }
+  window.requestAnimationFrame(() => {
+    sourceDetailPanel.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+    try {
+      sourceDetailPanel.focus({
+        preventScroll: true
+      });
+    } catch (error) {
+      sourceDetailPanel.focus();
+    }
+  });
+}
+
+function openSourceBucket(bucketId) {
+  if (!SOURCE_BUCKET_META[bucketId]) {
+    return;
+  }
+  appState.sourceBucket = bucketId;
+  appState.aiFeedPage = 1;
+  renderAiFeedSection(appState.dashboardCache && appState.dashboardCache.replyAi ? appState.dashboardCache.replyAi : null);
+  jumpToSourceDetailPanel();
+}
+
 function renderAiFeedSection(replyAiPayload) {
   const loggedIn = Boolean(appState.viewer);
   setHidden(aiFeedSection, false);
@@ -2491,12 +2523,7 @@ if (adToggleButton) {
 Array.from(document.querySelectorAll("[data-source-bucket]")).forEach((button) => {
   button.addEventListener("click", function () {
     const bucketId = String(button.getAttribute("data-source-bucket") || "");
-    if (!SOURCE_BUCKET_META[bucketId]) {
-      return;
-    }
-    appState.sourceBucket = bucketId;
-    appState.aiFeedPage = 1;
-    renderAiFeedSection(appState.dashboardCache && appState.dashboardCache.replyAi ? appState.dashboardCache.replyAi : null);
+    openSourceBucket(bucketId);
   });
 });
 
