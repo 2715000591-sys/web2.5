@@ -12,7 +12,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png?v=3" />
     <link rel="shortcut icon" href="/favicon-32.png?v=3" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3" />
-    <link rel="stylesheet" href="/styles.css?v=2026-04-23-ai-entry-3" />
+    <link rel="stylesheet" href="/styles.css?v=2026-05-01-source-buckets" />
   </head>
   <body class="console-body">
     <div class="site-shell">
@@ -178,7 +178,7 @@
           <div class="surface-head">
             <div>
               <p class="eyebrow">回复区 AI 审核</p>
-              <h3>这里管理 AI 开关、接入方式、最近 AI 隐藏记录和全局屏蔽账号</h3>
+              <h3>这里管理 AI 开关、接入方式和屏蔽来源入口</h3>
             </div>
             <div class="review-head-actions">
               <span id="aiFeedCountPill" class="surface-note">本地可配置</span>
@@ -225,26 +225,26 @@
               <span id="aiSettingsStatus" class="surface-note">登录后会保存到你的云端账号</span>
             </div>
           </div>
-          <div class="ai-section-columns">
-            <section class="ai-section-column">
-              <div class="surface-head surface-head-mini">
+          <section class="source-dashboard" id="sourceDashboard">
+            <div class="surface-head surface-head-mini">
+              <div>
+                <p class="eyebrow">屏蔽来源入口</p>
+                <h4>点一个小方格，看这一类具体挡掉了什么</h4>
+              </div>
+            </div>
+            <div class="source-bucket-grid" id="sourceBucketGrid"></div>
+            <div class="source-detail-panel">
+              <div class="source-detail-head">
                 <div>
-                  <p class="eyebrow">最近 AI 隐藏记录</p>
-                  <h4>这里专门看 AI 判掉的回复</h4>
+                  <p class="eyebrow" id="sourceDetailEyebrow">当前分类</p>
+                  <h4 id="sourceDetailTitle">AI 智能屏蔽</h4>
                 </div>
+                <span id="sourceDetailCountPill" class="surface-note">0 条</span>
               </div>
               <div class="review-list ai-feed-list" id="aiFeedList"></div>
-            </section>
-            <section class="ai-section-column">
-              <div class="surface-head surface-head-mini">
-                <div>
-                  <p class="eyebrow">全局屏蔽账号列表</p>
-                  <h4>高置信命中 2 次后，会进入所有用户共用名单</h4>
-                </div>
-              </div>
-              <div class="review-list ai-feed-list" id="globalBlockedAccountsList"></div>
-            </section>
-          </div>
+              <div class="ai-feed-pager" id="aiFeedPager"></div>
+            </div>
+          </section>
         </section>
 
         <section class="surface-card review-section" id="adSection">
@@ -298,6 +298,6 @@
       </main>
     </div>
 
-    <script src="/app.js?v=2026-04-23-ai-entry-3"></script>
+    <script src="/app.js?v=2026-05-01-source-buckets"></script>
   </body>
 </html>

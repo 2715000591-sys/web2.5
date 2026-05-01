@@ -107,7 +107,7 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`8039945b-87ba-4a4c-8eca-775775e9b7fa`
+  - Version ID：`305286c7-1812-4399-97bf-b3b3d60b0229`
   - 2026-05-01 `npm run cloud:deploy` 已成功部署。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
@@ -121,7 +121,8 @@
     - 2026-05-01 修复了扩展侧 AI 排队保护：只有本地规则先判定为可疑候选、且本地/数据库规则还没有直接隐藏的回复才会进入 AI 队列，避免打开详情页后把所有回复都送去模型，也避免 `找个同城的哥哥` 这类模板已经能本地隐藏时还消耗 API。
     - 2026-05-01 收紧 AI 基础审核边界：正常成人话题、色情讨论、性教育/平台治理讨论不能只因为含有色情词就隐藏；基础层要保护正常表达，只隐藏诈骗、约见引流、联系方式、木马/安装包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。头像/图片只有在未来真的采集并提供给 AI 时才能作为辅助证据，不能让模型凭空脑补。4 条真实 DeepSeek 临时样本测试通过：2 条正常成人讨论放过，2 条导流/安装包风险隐藏。
     - 2026-05-01 再次加强默认提示词和线上补充提示词：色情内容本身允许；只屏蔽色情引流、约见导流、联系方式导流、主页/置顶/简介诱导、空洞低信息诱饵、诈骗、木马、安装包、资源包和不安全外链。普通短句不能只因短就隐藏，`meaningless_bait` 必须有风险账号或导流证据支撑。
-    - 线上控制台“最近 AI 隐藏记录”已新增“恢复误判”：会写入 `manual_allow`，并把对应 `reply_ai_results` 标成 `manual_allow/allow`，让该条从 AI 隐藏列表消失；同账号同文案短期会复用放过结果。不要把这个恢复当成广泛反向训练，只表示这条 AI 误判。
+  - 线上控制台“最近 AI 隐藏记录”已新增“恢复误判”：会写入 `manual_allow`，并把对应 `reply_ai_results` 标成 `manual_allow/allow`，让该条从 AI 隐藏列表消失；同账号同文案短期会复用放过结果。不要把这个恢复当成广泛反向训练，只表示这条 AI 误判。
+    - 2026-05-01 控制台前端已部署“屏蔽来源入口”小方格到公网 Version ID `305286c7-1812-4399-97bf-b3b3d60b0229`：`AI 智能屏蔽`、`AI 结果复用`、`数据库历史命中`、`公共数据库规则`、`账号黑名单`、`本地规则下沉`、`你手动冲走`、`恢复误判`。`global_blocklist` 在界面上叫 `账号黑名单`，不要再叫“AI 全局屏蔽”；`reuse_exact_hide` / `reuse_template_hide` / `reuse_account_hide` 归入 `AI 结果复用`，不算新的 AI 调用。当前 dashboard 近期事件还不能稳定区分公共规则和本地规则，前端已保留独立卡片，缺字段时显示待接入/0。
     - 轻量样本分类方向：不要做用户直接写压缩包；应自动从现有 `moderation_events`、`reply_ai_items`、`reply_ai_results` 抽到 `moderation_samples` / `moderation_sample_labels`。`manual_hide` 是垃圾候选，AI 高置信 hide 是辅助证据，`manual_allow` / “恢复误判”是抑制和纠错证据，只有多贡献者或开发者确认后才升级公共规则。
   - API 接入下一步详见 `docs/ai-api-provider-handoff.md`。
   - 2026-05-01 已验证公网首页、控制台、`/downloads/latest.json`、Safari 下载包、Chrome/Edge 下载包都可从 Cloudflare 线上地址直接访问，不依赖本地部署。

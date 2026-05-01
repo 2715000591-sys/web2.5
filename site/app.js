@@ -17,7 +17,11 @@ const adCountPill = document.getElementById("adCountPill");
 const reviewSection = document.getElementById("reviewSection");
 const aiFeedSection = document.getElementById("aiFeedSection");
 const aiFeedList = document.getElementById("aiFeedList");
-const globalBlockedAccountsList = document.getElementById("globalBlockedAccountsList");
+const aiFeedPager = document.getElementById("aiFeedPager");
+const sourceBucketGrid = document.getElementById("sourceBucketGrid");
+const sourceDetailEyebrow = document.getElementById("sourceDetailEyebrow");
+const sourceDetailTitle = document.getElementById("sourceDetailTitle");
+const sourceDetailCountPill = document.getElementById("sourceDetailCountPill");
 const aiFeedCountPill = document.getElementById("aiFeedCountPill");
 const aiEnabledToggle = document.getElementById("aiEnabledToggle");
 const aiEnabledStatus = document.getElementById("aiEnabledStatus");
@@ -83,6 +87,7 @@ const developerStatNodes = {
 };
 
 const POLL_INTERVAL_MS = 30000;
+const SOURCE_DETAIL_PAGE_SIZE = 4;
 const LOCAL_AI_SETTINGS_KEY = "web25_local_ai_settings_v1";
 const LOCAL_BLOCKED_TOPICS_KEY = "web25_local_blocked_topics_v1";
 const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
@@ -107,7 +112,9 @@ const appState = {
   developerLoginEnabled: false,
   selectedDeveloperEventIds: new Set(),
   developerPendingPage: 1,
-  developerRulePage: 1
+  developerRulePage: 1,
+  aiFeedPage: 1,
+  sourceBucket: "ai"
 };
 
 function getBackendBaseUrl() {
@@ -581,7 +588,7 @@ function formatReplyAiLabel(label) {
     scam_or_fraud: "诈骗风险",
     meaningless_bait: "空洞钓鱼",
     profile_link_risk: "主页导流风险",
-    global_blocklist: "全局名单"
+    global_blocklist: "账号黑名单"
   };
   return mapping[label] || label || "AI 标签";
 }
@@ -623,38 +630,444 @@ function renderLocalAiSettings(settings, options) {
   }
 }
 
-function renderGlobalBlockedAccounts(list) {
-  if (!globalBlockedAccountsList) {
+function getCachedReplyAiPayload() {
+  const cache = appState.dashboardCache || {};
+  return cache && cache.replyAi ? cache.replyAi : null;
+}
+
+const SOURCE_BUCKETS = [
+  {
+    id: "ai",
+    title: "AI 智能屏蔽",
+    note: "AI 已判定",
+    empty: "当前没有真正由 AI 新判断隐藏的回复。"
+  },
+  {
+    id: "ai_reuse",
+    title: "AI 结果复用",
+    note: "没有调用 AI",
+    empty: "当前没有复用同账号、同文案或同模板的 AI 结果。"
+  },
+  {
+    id: "history",
+    title: "数据库历史命中",
+    note: "来自历史冲走",
+    empty: "当前记录还没有带历史命中来源；等来源标记接入后会显示在这里。"
+  },
+  {
+    id: "public_rule",
+    title: "公共数据库规则",
+    note: "全局规则命中",
+    empty: "当前记录还没有带公共规则来源；等来源标记接入后会显示在这里。"
+  },
+  {
+    id: "account_blocklist",
+    title: "账号黑名单",
+    note: "来自账号名单",
+    empty: "当前还没有进入账号黑名单的记录。"
+  },
+  {
+    id: "local_rule",
+    title: "本地规则下沉",
+    note: "没有调用 AI",
+    empty: "当前没有本地规则直接下沉的近期记录。"
+  },
+  {
+    id: "manual",
+    title: "你手动冲走",
+    note: "你的手动标记",
+    empty: "当前没有你手动冲走的近期记录。"
+  },
+  {
+    id: "restored",
+    title: "恢复误判",
+    note: "纠错记录",
+    empty: "当前没有恢复误判的近期记录。"
+  }
+];
+
+const SOURCE_BUCKET_META = SOURCE_BUCKETS.reduce((map, item) => {
+  map[item.id] = item;
+  return map;
+}, {});
+
+const AI_REUSE_HIDE_LAYERS = new Set([
+  "reuse_exact_hide",
+  "reuse_template_hide",
+  "reuse_account_hide"
+]);
+
+function clearAiFeedPager() {
+  if (aiFeedPager) {
+    aiFeedPager.innerHTML = "";
+  }
+}
+
+function getSourcePagerPages(currentPage, totalPages) {
+  if (totalPages <= 6) {
+    return Array.from({ length: totalPages }, function (_, index) {
+      return index + 1;
+    });
+  }
+  if (currentPage <= 3) {
+    return [1, 2, 3, 4, "ellipsis", totalPages];
+  }
+  if (currentPage >= totalPages - 2) {
+    return [1, "ellipsis", totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+  }
+  return [1, "ellipsis", currentPage - 1, currentPage, currentPage + 1, "ellipsis", totalPages];
+}
+
+function renderSourcePager(totalItems, currentPage, totalPages) {
+  if (!aiFeedPager) {
     return;
   }
 
-  if (!Array.isArray(list) || !list.length) {
-    renderEmpty(globalBlockedAccountsList, "当前还没有进入所有用户共用名单的高风险账号。");
+  if (totalPages <= 1) {
+    aiFeedPager.innerHTML = "";
     return;
   }
 
-  globalBlockedAccountsList.innerHTML = "";
-  list.forEach((item) => {
-    const row = document.createElement("article");
-    row.className = "review-row ai-feed-row";
-    row.innerHTML = `
-      <div class="review-row-top">
-        <div class="review-row-title">
-          <span class="timeline-pill">全局屏蔽</span>
-          <strong>${escapeHtml(item && item.replyHandle ? item.replyHandle : "未识别账号")}</strong>
-        </div>
-        <div class="review-row-meta">
-          <time>${escapeHtml(formatRelativeTime(item && item.updatedAt ? item.updatedAt : ""))}</time>
-        </div>
-      </div>
-      <p class="review-body">${escapeHtml(item && item.lastReasonShort ? item.lastReasonShort : "这个账号已经被系统判定为高风险，后续回复会直接对所有用户隐藏。")}</p>
-      <div class="ai-feed-meta-line">
-        <span class="surface-note">总高置信命中 ${escapeHtml(String(item && item.totalHighConfidenceHideCount ? item.totalHighConfidenceHideCount : 0))} 次</span>
-        <span class="surface-note">近 7 天 ${escapeHtml(String(item && item.recentHighConfidenceHideCount ? item.recentHighConfidenceHideCount : 0))} 次</span>
-      </div>
-    `;
-    globalBlockedAccountsList.appendChild(row);
+  const startItem = ((currentPage - 1) * SOURCE_DETAIL_PAGE_SIZE) + 1;
+  const endItem = Math.min(totalItems, currentPage * SOURCE_DETAIL_PAGE_SIZE);
+  const pages = getSourcePagerPages(currentPage, totalPages);
+  aiFeedPager.innerHTML = `
+    <div class="ai-feed-pager-summary">第 ${escapeHtml(String(currentPage))} / ${escapeHtml(String(totalPages))} 页 · 正在看 ${escapeHtml(String(startItem))}-${escapeHtml(String(endItem))} 条 · 共 ${escapeHtml(String(totalItems))} 条</div>
+    <div class="ai-feed-pager-buttons">
+      <button class="ghost-button small-button ai-feed-page-button" type="button" data-ai-feed-page-action="prev" ${currentPage > 1 ? "" : "disabled"}>上一页</button>
+      ${pages.map((page) => page === "ellipsis"
+        ? `<span class="ai-feed-page-ellipsis">…</span>`
+        : `<button class="ghost-button small-button ai-feed-page-button${page === currentPage ? " active" : ""}" type="button" data-ai-feed-page="${page}">${page}</button>`
+      ).join("")}
+      <button class="ghost-button small-button ai-feed-page-button" type="button" data-ai-feed-page-action="next" ${currentPage < totalPages ? "" : "disabled"}>下一页</button>
+    </div>
+  `;
+
+  Array.from(aiFeedPager.querySelectorAll("[data-ai-feed-page]")).forEach((button) => {
+    button.addEventListener("click", function () {
+      const nextPage = Number(button.getAttribute("data-ai-feed-page") || 0);
+      if (nextPage) {
+        changeAiFeedPage(nextPage);
+      }
+    });
   });
+
+  Array.from(aiFeedPager.querySelectorAll("[data-ai-feed-page-action]")).forEach((button) => {
+    button.addEventListener("click", function () {
+      const action = String(button.getAttribute("data-ai-feed-page-action") || "");
+      changeAiFeedPage(action === "prev" ? currentPage - 1 : currentPage + 1);
+    });
+  });
+}
+
+function changeAiFeedPage(page) {
+  const nextPage = Math.max(1, Number(page || 1) || 1);
+  if (nextPage === appState.aiFeedPage) {
+    return;
+  }
+  appState.aiFeedPage = nextPage;
+  renderAiFeedSection(getCachedReplyAiPayload());
+}
+
+function getBucketMeta(bucketId) {
+  return SOURCE_BUCKET_META[bucketId] || SOURCE_BUCKET_META.local_rule;
+}
+
+function getReplyRecordKey(item) {
+  if (!item) {
+    return "";
+  }
+  const statusId = String(item.replyStatusId || item.threadStatusId || "").trim();
+  if (statusId) {
+    return `status:${statusId}`;
+  }
+  const handle = String(item.replyHandle || "").trim().toLowerCase();
+  const text = String(item.compactText || item.normalizedText || item.replyText || "").trim().toLowerCase();
+  return handle || text ? `fallback:${handle}:${text}` : "";
+}
+
+function getExplicitSourceBucket(item) {
+  const raw = String((item && (item.sourceBucket || item.hiddenSource || item.hidden_source)) || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const mapping = {
+    ai: "ai",
+    ai_reuse: "ai_reuse",
+    history: "history",
+    public_rule: "public_rule",
+    account_blocklist: "account_blocklist",
+    "ai-global": "account_blocklist",
+    global_blocklist: "account_blocklist",
+    local_rule: "local_rule",
+    auto: "local_rule",
+    manual: "manual",
+    manual_hide: "manual",
+    restored: "restored",
+    manual_allow: "restored"
+  };
+  return mapping[raw] || "";
+}
+
+function getReplyAiBucket(item) {
+  const decisionLayer = String(item && item.decisionLayer ? item.decisionLayer : "").trim();
+  if (decisionLayer === "global_blocklist") {
+    return "account_blocklist";
+  }
+  if (AI_REUSE_HIDE_LAYERS.has(decisionLayer)) {
+    return "ai_reuse";
+  }
+  return "ai";
+}
+
+function getRecentEventBucket(item) {
+  const explicit = getExplicitSourceBucket(item);
+  if (explicit) {
+    return explicit;
+  }
+  const eventType = getReviewEventType(item);
+  if (eventType === "manual_hide") {
+    return "manual";
+  }
+  if (eventType === "manual_allow") {
+    return "restored";
+  }
+  return "local_rule";
+}
+
+function getBucketReason(item) {
+  const bucketId = String(item && item.sourceBucket ? item.sourceBucket : "");
+  if (item && item.reasonShort) {
+    return item.reasonShort;
+  }
+  if (item && item.bucketReason) {
+    return item.bucketReason;
+  }
+  if (bucketId === "ai_reuse") {
+    return "复用同账号、同文案或同模板的已有结果，没有重新调用 AI。";
+  }
+  if (bucketId === "history") {
+    return "命中你以前冲走过的历史记录。";
+  }
+  if (bucketId === "public_rule") {
+    return "命中公共数据库规则或开发者确认规则。";
+  }
+  if (bucketId === "account_blocklist") {
+    return "来自账号黑名单，后续同账号回复会直接隐藏。";
+  }
+  if (bucketId === "manual") {
+    return "你手动点过冲走。";
+  }
+  if (bucketId === "restored") {
+    return "你恢复过这条内容，它会作为纠错记录保留。";
+  }
+  if (bucketId === "local_rule") {
+    return "本地规则或当前规则层直接下沉，没有调用 AI。";
+  }
+  return "AI 已判定为需要隐藏。";
+}
+
+function makeSourceItem(item, bucketId, overrides) {
+  return Object.assign({}, item || {}, overrides || {}, {
+    sourceBucket: bucketId,
+    sourceBucketLabel: getBucketMeta(bucketId).title
+  });
+}
+
+function createEmptySourceBuckets() {
+  return SOURCE_BUCKETS.reduce((map, bucket) => {
+    map[bucket.id] = [];
+    return map;
+  }, {});
+}
+
+function buildSourceBuckets(replyAiPayload) {
+  const buckets = createEmptySourceBuckets();
+  const replyAiItems = replyAiPayload && Array.isArray(replyAiPayload.recentHides)
+    ? replyAiPayload.recentHides.slice()
+    : [];
+  const recentItems = appState.dashboardCache && Array.isArray(appState.dashboardCache.recent)
+    ? appState.dashboardCache.recent.slice()
+    : [];
+  const globalAccounts = replyAiPayload && Array.isArray(replyAiPayload.globalBlockedAccounts)
+    ? replyAiPayload.globalBlockedAccounts.slice()
+    : [];
+  const aiRecordKeys = new Set();
+
+  replyAiItems.forEach((item) => {
+    const bucketId = getReplyAiBucket(item);
+    const normalized = makeSourceItem(item, bucketId, {
+      detailType: "reply_ai",
+      createdAt: item && item.updatedAt ? item.updatedAt : "",
+      canRestoreAi: true
+    });
+    const key = getReplyRecordKey(normalized);
+    if (key) {
+      aiRecordKeys.add(key);
+    }
+    buckets[bucketId].push(normalized);
+  });
+
+  globalAccounts.forEach((item) => {
+    buckets.account_blocklist.push(makeSourceItem(item, "account_blocklist", {
+      detailType: "account_blocklist",
+      replyText: "这个账号已经进入账号黑名单，后续高风险回复会直接隐藏。",
+      bucketReason: item && item.lastReasonShort
+        ? item.lastReasonShort
+        : "高置信命中达到全局账号名单条件。",
+      createdAt: item && (item.updatedAt || item.globalBlockedAt) ? (item.updatedAt || item.globalBlockedAt) : "",
+      replyDisplayName: "",
+      replyHandle: item && item.replyHandle ? item.replyHandle : ""
+    }));
+  });
+
+  recentItems.forEach((item) => {
+    const eventType = getReviewEventType(item);
+    const key = getReplyRecordKey(item);
+    if (eventType === "auto_hide" && key && aiRecordKeys.has(key)) {
+      return;
+    }
+    const bucketId = getRecentEventBucket(item);
+    buckets[bucketId].push(makeSourceItem(item, bucketId, {
+      detailType: "moderation_event",
+      canRestoreEvent: eventType === "auto_hide" || eventType === "manual_hide"
+    }));
+  });
+
+  SOURCE_BUCKETS.forEach((bucket) => {
+    buckets[bucket.id].sort((left, right) => {
+      const rightTime = new Date(right && (right.updatedAt || right.createdAt || right.globalBlockedAt) ? (right.updatedAt || right.createdAt || right.globalBlockedAt) : 0).getTime();
+      const leftTime = new Date(left && (left.updatedAt || left.createdAt || left.globalBlockedAt) ? (left.updatedAt || left.createdAt || left.globalBlockedAt) : 0).getTime();
+      return rightTime - leftTime;
+    });
+  });
+
+  return buckets;
+}
+
+function renderSourceBucketGrid(buckets) {
+  if (!sourceBucketGrid) {
+    return;
+  }
+
+  sourceBucketGrid.innerHTML = SOURCE_BUCKETS.map((bucket) => {
+    const count = buckets && Array.isArray(buckets[bucket.id]) ? buckets[bucket.id].length : 0;
+    const active = appState.sourceBucket === bucket.id;
+    return `
+      <button class="source-bucket-card${active ? " active" : ""}" type="button" data-source-bucket="${escapeHtml(bucket.id)}">
+        <span>${escapeHtml(bucket.title)}</span>
+        <strong>${escapeHtml(String(count))}</strong>
+        <small>${escapeHtml(count ? bucket.note : (bucket.id === "history" || bucket.id === "public_rule" ? "待接入来源标记" : bucket.note))}</small>
+      </button>
+    `;
+  }).join("");
+
+  Array.from(sourceBucketGrid.querySelectorAll("[data-source-bucket]")).forEach((button) => {
+    button.addEventListener("click", function () {
+      const bucketId = String(button.getAttribute("data-source-bucket") || "ai");
+      appState.sourceBucket = bucketId;
+      appState.aiFeedPage = 1;
+      renderAiFeedSection(getCachedReplyAiPayload());
+    });
+  });
+}
+
+function renderSourceDetailRow(item) {
+  const bucketId = String(item && item.sourceBucket ? item.sourceBucket : "local_rule");
+  const meta = getBucketMeta(bucketId);
+  const title = [item && item.replyDisplayName, item && item.replyHandle].filter(Boolean).join(" ");
+  const openUrl = buildReplyAiOpenUrl(item);
+  const safetyLabels = Array.isArray(item && item.matchedSafetyLabels) ? item.matchedSafetyLabels : [];
+  const profileSignals = Array.isArray(item && item.matchedProfileSignals) ? item.matchedProfileSignals : [];
+  const row = document.createElement("article");
+  row.className = "review-row ai-feed-row source-detail-row";
+  const canRestoreAi = Boolean(item && item.canRestoreAi && item.replyAiItemId);
+  const canRestoreEvent = Boolean(item && item.canRestoreEvent);
+  row.innerHTML = `
+    <div class="review-row-top">
+      <div class="review-row-title">
+        <span class="timeline-pill">${escapeHtml(meta.title)}</span>
+        <strong>${escapeHtml(title || "未识别账号")}</strong>
+      </div>
+      <div class="review-row-meta">
+        <time>${escapeHtml(formatRelativeTime(item && (item.updatedAt || item.createdAt || item.globalBlockedAt) ? (item.updatedAt || item.createdAt || item.globalBlockedAt) : ""))}</time>
+      </div>
+    </div>
+    <p class="review-body">${escapeHtml(item && item.replyText ? item.replyText : "这条记录里没有保存正文。")}</p>
+    <div class="ai-feed-secondary">
+      <p>屏蔽来源：${escapeHtml(meta.title)}</p>
+      <p>简短原因：${escapeHtml(getBucketReason(item))}</p>
+      ${(item && item.mainPostText) ? `<p>原帖上下文：${escapeHtml(item.mainPostText)}</p>` : ""}
+      ${(safetyLabels.length || profileSignals.length) ? `
+        ${safetyLabels.length ? `<p>命中标签：${escapeHtml(safetyLabels.map(formatReplyAiLabel).join("、"))}</p>` : ""}
+        ${profileSignals.length ? `<p>主页辅助信号：${escapeHtml(profileSignals.map(formatProfileSignalLabel).join("、"))}</p>` : ""}
+      ` : ""}
+    </div>
+    <div class="ai-feed-actions">
+      ${canRestoreAi ? `<button class="ghost-button small-button ai-feed-restore-button" type="button">恢复误判</button>` : ""}
+      ${canRestoreEvent ? `<button class="ghost-button small-button review-restore-button" type="button">恢复这条</button>` : ""}
+      ${openUrl ? `<a class="ghost-button small-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noreferrer">在 X 里打开</a>` : ""}
+    </div>
+  `;
+
+  const aiRestoreButton = row.querySelector(".ai-feed-restore-button");
+  if (aiRestoreButton) {
+    aiRestoreButton.addEventListener("click", function () {
+      restoreItem(item, aiRestoreButton, {
+        buttonText: "恢复误判",
+        replyAiItemId: item && (item.replyAiItemId || item.id) ? (item.replyAiItemId || item.id) : 0
+      });
+    });
+  }
+
+  const eventRestoreButton = row.querySelector(".review-restore-button");
+  if (eventRestoreButton) {
+    eventRestoreButton.addEventListener("click", function () {
+      restoreItem(item, eventRestoreButton, {
+        buttonText: "恢复这条"
+      });
+    });
+  }
+
+  return row;
+}
+
+function renderSourceDetail(buckets) {
+  if (!aiFeedList) {
+    return;
+  }
+
+  const bucketId = SOURCE_BUCKET_META[appState.sourceBucket] ? appState.sourceBucket : "ai";
+  const meta = getBucketMeta(bucketId);
+  const list = buckets && Array.isArray(buckets[bucketId]) ? buckets[bucketId] : [];
+  const totalPages = Math.max(1, Math.ceil(list.length / SOURCE_DETAIL_PAGE_SIZE));
+  const currentPage = Math.min(totalPages, Math.max(1, Number(appState.aiFeedPage || 1) || 1));
+  const pageStartIndex = (currentPage - 1) * SOURCE_DETAIL_PAGE_SIZE;
+  const pageItems = list.slice(pageStartIndex, pageStartIndex + SOURCE_DETAIL_PAGE_SIZE);
+  appState.sourceBucket = bucketId;
+  appState.aiFeedPage = currentPage;
+
+  if (sourceDetailEyebrow) {
+    sourceDetailEyebrow.textContent = "当前分类";
+  }
+  if (sourceDetailTitle) {
+    sourceDetailTitle.textContent = meta.title;
+  }
+  if (sourceDetailCountPill) {
+    sourceDetailCountPill.textContent = `${list.length} 条`;
+  }
+
+  aiFeedList.innerHTML = "";
+  if (!list.length) {
+    clearAiFeedPager();
+    renderEmpty(aiFeedList, meta.empty);
+    return;
+  }
+
+  pageItems.forEach((item) => {
+    aiFeedList.appendChild(renderSourceDetailRow(item));
+  });
+  renderSourcePager(list.length, currentPage, totalPages);
 }
 
 function renderAiFeedSection(replyAiPayload) {
@@ -674,30 +1087,18 @@ function renderAiFeedSection(replyAiPayload) {
   renderLocalAiSettings(settings, {
     loggedIn
   });
-  const list = loggedIn && replyAiPayload && Array.isArray(replyAiPayload.recentHides)
-    ? replyAiPayload.recentHides.slice()
-    : [];
-  const globalBlockedAccounts = loggedIn && replyAiPayload && Array.isArray(replyAiPayload.globalBlockedAccounts)
-    ? replyAiPayload.globalBlockedAccounts.slice()
-    : [];
-  list.sort((left, right) => {
-    const rightTime = new Date(right && (right.updatedAt || right.seenAt) ? (right.updatedAt || right.seenAt) : 0).getTime();
-    const leftTime = new Date(left && (left.updatedAt || left.seenAt) ? (left.updatedAt || left.seenAt) : 0).getTime();
-    return rightTime - leftTime;
-  });
-  globalBlockedAccounts.sort((left, right) => {
-    const rightTime = new Date(right && right.updatedAt ? right.updatedAt : 0).getTime();
-    const leftTime = new Date(left && left.updatedAt ? left.updatedAt : 0).getTime();
-    return rightTime - leftTime;
-  });
+  const sourceBuckets = loggedIn ? buildSourceBuckets(replyAiPayload) : createEmptySourceBuckets();
+  const totalSourceItems = SOURCE_BUCKETS.reduce((sum, bucket) => {
+    return sum + (Array.isArray(sourceBuckets[bucket.id]) ? sourceBuckets[bucket.id].length : 0);
+  }, 0);
 
   if (aiFeedCountPill) {
     if (!settings.enabled) {
-      aiFeedCountPill.textContent = "当前已关闭";
+      aiFeedCountPill.textContent = "AI 已关闭 · 规则入口仍可看";
     } else {
-      aiFeedCountPill.textContent = list.length
-        ? `最近 AI 隐藏 ${list.length} 条`
-        : (loggedIn ? "设置已就绪" : "登录后才会真正生效");
+      aiFeedCountPill.textContent = totalSourceItems
+        ? `来源记录 ${totalSourceItems} 条`
+        : (loggedIn ? "来源入口已就绪" : "登录后才会真正生效");
     }
   }
 
@@ -717,74 +1118,21 @@ function renderAiFeedSection(replyAiPayload) {
     return;
   }
 
-  renderGlobalBlockedAccounts(globalBlockedAccounts);
-
-  if (!settings.enabled) {
-    renderEmpty(aiFeedList, "你已经把回复区 AI 审核先关掉了。现有硬规则会继续工作，想让 AI 补抓边界垃圾时再打开。");
-    return;
-  }
-
   if (!loggedIn) {
-    renderEmpty(aiFeedList, "先登录云端控制台，再把共享 AI Key 和模型配好，这里才会出现真正的回复区 AI 审核记录。");
-    return;
-  }
-
-  if (!list.length) {
-    renderEmpty(aiFeedList, "当前还没有 AI 亲自隐藏的回复。先把回复区开关和共享 AI Key 配好，等边界垃圾样本进来后，这里会开始累计。");
-    return;
-  }
-
-  aiFeedList.innerHTML = "";
-  list.forEach((item) => {
-    const title = [item.replyDisplayName, item.replyHandle].filter(Boolean).join(" ");
-    const row = document.createElement("article");
-    row.className = "review-row ai-feed-row";
-    const openUrl = buildReplyAiOpenUrl(item);
-    const safetyLabels = Array.isArray(item && item.matchedSafetyLabels) ? item.matchedSafetyLabels : [];
-    const profileSignals = Array.isArray(item && item.matchedProfileSignals) ? item.matchedProfileSignals : [];
-    const confidenceLabel = item && item.confidence === "high" ? "高置信" : (item && item.confidence === "medium" ? "中置信" : "低置信");
-    row.innerHTML = `
-      <div class="review-row-top">
-        <div class="review-row-title">
-          <span class="timeline-pill">${escapeHtml(item && item.decisionLayer === "global_blocklist" ? "全局名单" : "AI 隐藏")}</span>
-          <strong>${escapeHtml(title || "未识别账号")}</strong>
-        </div>
-        <div class="review-row-meta">
-          <time>${escapeHtml(formatRelativeTime(item && (item.updatedAt || item.seenAt) ? (item.updatedAt || item.seenAt) : ""))}</time>
-        </div>
-      </div>
-      <p class="review-body">${escapeHtml(item && item.replyText ? item.replyText : "这条回复没有保存正文。")}</p>
-      ${(item && item.mainPostText) ? `
-        <div class="ai-feed-secondary">
-          <p>原帖上下文：${escapeHtml(item.mainPostText)}</p>
-        </div>
-      ` : ""}
-      <div class="ai-feed-meta-line">
-        <span class="surface-note">${escapeHtml(confidenceLabel)}</span>
-        ${item && item.reasonShort ? `<span class="surface-note">${escapeHtml(item.reasonShort)}</span>` : ""}
-      </div>
-      ${(safetyLabels.length || profileSignals.length) ? `
-        <div class="ai-feed-secondary">
-          ${safetyLabels.length ? `<p>命中标签：${escapeHtml(safetyLabels.map(formatReplyAiLabel).join("、"))}</p>` : ""}
-          ${profileSignals.length ? `<p>主页辅助信号：${escapeHtml(profileSignals.map(formatProfileSignalLabel).join("、"))}</p>` : ""}
-        </div>
-      ` : ""}
-      <div class="ai-feed-actions">
-        <button class="ghost-button small-button ai-feed-restore-button" type="button">恢复误判</button>
-        ${openUrl ? `<a class="ghost-button small-button" href="${escapeHtml(openUrl)}" target="_blank" rel="noreferrer">在 X 里打开</a>` : ""}
-      </div>
-    `;
-    const restoreButton = row.querySelector(".ai-feed-restore-button");
-    if (restoreButton) {
-      restoreButton.addEventListener("click", function () {
-        restoreItem(item, restoreButton, {
-          buttonText: "恢复误判",
-          replyAiItemId: item && (item.replyAiItemId || item.id) ? (item.replyAiItemId || item.id) : 0
-        });
-      });
+    renderSourceBucketGrid(sourceBuckets);
+    clearAiFeedPager();
+    if (sourceDetailTitle) {
+      sourceDetailTitle.textContent = getBucketMeta(appState.sourceBucket).title;
     }
-    aiFeedList.appendChild(row);
-  });
+    if (sourceDetailCountPill) {
+      sourceDetailCountPill.textContent = "0 条";
+    }
+    renderEmpty(aiFeedList, "先登录云端控制台，这里才会显示各类屏蔽来源记录。");
+    return;
+  }
+
+  renderSourceBucketGrid(sourceBuckets);
+  renderSourceDetail(sourceBuckets);
 }
 
 function setMetricGroup(statNodes, stats) {
