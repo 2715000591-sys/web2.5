@@ -116,7 +116,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`21564319-d282-4bda-ab22-4777a9f0c72e`
+  - Version ID：`8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`
+  - 2026-05-02 19:34 已修复手动反馈刷新数据库候选的后台缺口：`recordModerationTrainingLabelFromEvent` 以前写入样本和标注后，刷新候选处引用了不存在的 AI `decision` 变量，错误被保护逻辑吞掉，导致新 `manual_hide` / `manual_allow` 没有实时刷新 `moderation_rule_candidates`。现在手动冲走或恢复都会刷新候选；单用户冲走仍只是候选证据，不直接变公共规则。已部署公网 Worker Version ID `8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`。随后运行 `npm run cloud:rebuild-rule-candidates`，先备份 D1 到 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，整理结果：`active=223`、`candidate=66`、写入候选 289 条。`npm run cloud:audit-data-layer` 通过；公网 `/downloads/latest.json` 仍为 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`；官网和控制台 200；本机 App 签名与真实 Safari 详情页验证通过。
   - 2026-05-02 19:12 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。本次修复用户截图 `🐇有狗.（月固定 @vaughan_jo90233 / 找个温柔的哥哥🌹💐❤️ 0`：`月固定/周固定/长期固定` 现在是强风险昵称；`找/求/蹲 + 温柔/固定/长期/月固定/帅/乖/可爱/宠人/有钱 + 哥哥/姐姐/弟弟/妹妹` 进入强关系诱导模板。回归：截图同款隐藏，`找个温柔的哥哥帮我修电脑`、`这个哥哥很温柔`、`固定收益产品风险很高`、`附近有家面馆不错` 放过。真实 Safari 详情页验证 `build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。
   - 2026-05-02 18:46 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1846`、`extensionVersion=0.1.45`，官网和控制台返回 200。按用户要求，回复 AI 输入现在按“证据卡”组织：昵称、@用户名、正文、主贴文字、主页简介、主页外链、主页风险标签都作为独立证据；当回复像随机诗句/空洞词、和主贴上下文脱节、且账号 handle 可疑时，插件会附加头像图片地址、头像 alt 文本和 `avatar_vision_requested`。后台遇到头像证据项会单条送 AI，不混入批量；如果外接模型支持图片输入，头像会作为图片辅助证据送入。发布前已备份 D1：`backups/d1/web25-2026-05-02T10-53-58-3NZ-before-avatar-evidence-schema.sql`，线上 `reply_ai_items` 已确认存在 5 个头像证据字段。
   - 2026-05-02 18:22 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`，官网和控制台返回 200。本次修复用户截图里的“全国安排头像 + 随机英文数字 handle + 诗句式空洞回复”漏网：本地和 Worker 都新增 `烟火暖了相逢`、`人海有幸擦肩`、`缘分引线人海逢`、`遇见温柔满人间`、`旧城偶遇故人`、`晚风撞我相逢`、`一念恰好相逢` 这类低信息诱饵模板。回复区 AI prompt 也已写入这些例子，因为外接 API 只看单条短正文时容易不知道这是一组批量号。7 条截图同款本地回归全部隐藏；普通账号发类似正常感慨仍放过。
@@ -393,9 +394,11 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 
 - 先确认插件不是每条回复都调用 AI：本地 `buildReplyAiModerationCandidate` 必须只把强风险或弱风险组合送进队列。
 - 再确认云端优先查 `reply_ai_memory`：命中记忆时归入 `AI 学习库屏蔽`，不再花 API 钱。
-- 只有记忆没命中、又是可疑候选时，才进入真实模型调用。
-- AI 直接高置信隐藏写入 `reply_ai_results`，再写入 `moderation_sample_labels`，并沉淀到 `reply_ai_memory`。
-- 用户点 `恢复误判` / `恢复这条` 后，应写入 `manual_allow`，停用对应 AI 记忆，并把旧隐藏从当前统计和当前明细里移走。
+- 记忆没命中时再查 `moderation_rule_candidates`：命中 `db_rule_*` 时由数据库学习库直接挡住，不再花 API 钱。
+- 只有记忆和数据库候选都没命中、又是可疑候选时，才进入真实模型调用。
+- AI 直接高置信隐藏写入 `reply_ai_results`，再写入 `moderation_sample_labels`，沉淀到 `reply_ai_memory`，并刷新 `moderation_rule_candidates`。
+- 用户点 `恢复误判` / `恢复这条` 后，应写入 `manual_allow`，停用对应 AI 记忆，压低对应数据库候选，并把旧隐藏从当前统计和当前明细里移走。
+- 2026-05-02 19:29 已修 `recordModerationTrainingLabelFromEvent`：手动 `冲走` / `恢复` 写完 label 后会刷新候选规则；单用户反馈仍只算候选证据，不直接变公共规则。
 
 第二优先级：调 API 调度和省钱策略
 
@@ -473,7 +476,7 @@ Safari App：
 
 可以直接把下面这段发给新对话：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`、`docs/ai-api-provider-handoff.md`，然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前 X / Safari 插件主链路稳定，`BUILD_ID=2026-05-02-1307`，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽和数据库同步都不能改坏。下一步重点是调试 AI 数据库、AI 审核和 API 调度的关系：不要让每条回复都调用 AI；优先复用 `reply_ai_memory`；只有可疑候选才走真实模型；AI 判断和用户反馈先进入 `moderation_samples` / `moderation_sample_labels`，不要把单用户冲走直接变公共规则。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`、`docs/ai-api-provider-handoff.md`，然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前 X / Safari 插件主链路稳定，`BUILD_ID=2026-05-02-1912`，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；云端必须先查 `reply_ai_memory`，再查 `moderation_rule_candidates`，都没命中才调用外部模型；AI 直接高置信隐藏要写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，并刷新数据库候选规则；用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
 
 ## 12. 维护这份文件的规则
 

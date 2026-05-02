@@ -81,6 +81,8 @@
 
 2026-05-02 17:56 已修复回复区 AI 提示词缺口：之前控制台保存的补充审核要求只加到了主页时间线 AI prompt，回复区 AI prompt 没有追加 `settings.moderationPrompt`，所以用户补充口径可能没有真正喂给外接模型。现在回复区 AI prompt 会同时包含默认规则、中文垃圾昵称示例和控制台补充审核要求。同步新增中文风险昵称样例：`每晚准时大秀`、`今晚准时涩播/色播`、`找固定泡友/炮友`、`蹲一个弟弟/哥哥`、`免费破处`、`无偿线下`、`看我主页`、`附近真实约见`；这些昵称搭配数字/emoji 极薄回复和随机数字 handle 应隐藏。2026-05-02 18:06 用户完成 Cloudflare 重新登录后已部署到公网 Worker Version ID `13ae7164-3096-4169-a3d9-2706b97cfc42`，外接 API 的回复区提示词修复已在线上生效。
 
+2026-05-02 19:29 已修复手动反馈进入数据库候选的实时刷新缺口：`manual_hide` / `manual_allow` 原本会写入 `moderation_samples` 和 `moderation_sample_labels`，但刷新 `moderation_rule_candidates` 时误用了 AI 决策变量，导致这一步被保护性捕获后没有实时生效。现在用户冲走或恢复后会刷新对应候选；AI 高置信隐藏继续写入 `reply_ai_memory`，数据库候选规则仍只在 AI 高置信、多人共识或开发者确认时活跃，避免单用户误伤。已部署公网 Worker Version ID `8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`，并重新整理候选规则：备份 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，结果 `active=223`、`candidate=66`。
+
 ## 4. 用户去买 API 时怎么说
 
 只有用户还没有 API，或者明确要换一个新平台时，才这样说：

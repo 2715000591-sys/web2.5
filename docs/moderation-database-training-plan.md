@@ -230,11 +230,13 @@
 
 1. 从 `manual_hide` 和 `manual_allow` 事件抽取样本
 2. 给每条样本写入对应 label，其中 `manual_allow` 只写成“不应隐藏 / 不应升级”的抑制信号
-3. 统计重复出现的 `pattern_key`
-4. 只把高共识候选项展示给开发者确认
-5. 确认后再进入现有全局规则机制
+3. 立刻刷新对应 `moderation_rule_candidates`，让数据库候选规则能接住重复模式
+4. 只把 AI 高置信、多人共识或开发者确认的候选升级为活跃规则
+5. 误判恢复会压低候选，不会当成“用户喜欢这类内容”的反向训练
 
 这条路线最省 API，也最不容易误伤。
+
+2026-05-02 19:29 已修正实时手动反馈刷新：`manual_hide` / `manual_allow` 以前会写入样本和标注，但候选刷新处引用了不存在的 AI `decision` 变量，导致这一步被保护性捕获后静默失败。现在手动冲走或恢复写完 label 后都会刷新对应数据库候选规则；单用户冲走仍然只是候选证据，不会直接变公共规则。AI 首次直接判断链路原本已能写入 `moderation_sample_labels`，高置信隐藏也会继续写入 `reply_ai_memory`。2026-05-02 19:34 已重新整理线上候选规则，整理前 D1 备份为 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，结果为 `moderation_rule_candidates active=223`、`candidate=66`。
 
 ## 下一任重点：AI、数据库、API 调度关系
 
@@ -255,6 +257,10 @@
   ↓
 命中则直接复用，显示为 AI 学习库屏蔽
   ↓
+没命中再查 moderation_rule_candidates
+  ↓
+命中则由数据库学习库直接屏蔽，不调用外部模型 API
+  ↓
 没命中才调用外部模型 API
   ↓
 AI 结果写 reply_ai_results
@@ -262,15 +268,19 @@ AI 结果写 reply_ai_results
 AI 标注写 moderation_sample_labels
   ↓
 高置信隐藏再沉淀进 reply_ai_memory
+  ↓
+刷新 moderation_rule_candidates，供以后同类模式优先命中数据库
 ```
 
 调试时优先看这些问题：
 
 - 是否每条回复都进 AI 队列。如果是，这是 bug，先查 `extension/content/content.js` 的 `buildReplyAiModerationCandidate`。
 - 是否记忆命中还继续调用模型。如果是，这是浪费 API，先查 `cloudflare/src/index.js` 的 `findReplyAiMemoryDecision` / `classifyReplyAiItemEntries`。
+- 是否数据库候选规则命中还继续调用模型。如果是，查 `findModerationRuleCandidateDecision` 在 `classifyReplyAiItemEntries` 中的位置。
 - 是否 AI 隐藏后没有进入样本标注。如果是，查 `recordModerationTrainingLabelFromReplyAiDecision`。
 - 是否高置信隐藏没有进入记忆库。如果是，查 `upsertReplyAiMemoryFromDecision`。
-- 是否用户恢复后记忆仍然生效。如果是，查 `markReplyAiItemAllowedByManualRestore` 和 `deactivateReplyAiMemoryForItem`。
+- 是否手动冲走/恢复没有刷新数据库候选。如果是，查 `recordModerationTrainingLabelFromEvent`。
+- 是否用户恢复后记忆仍然生效。如果是，查 `markReplyAiItemAllowedByManualRestore`、`deactivateReplyAiMemoryForItem` 和 `demoteModerationRuleCandidatesForReplyAiItem`。
 
 调试口径：
 

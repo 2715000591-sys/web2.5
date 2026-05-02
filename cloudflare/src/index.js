@@ -5220,7 +5220,7 @@ async function recordModerationTrainingLabelFromEvent(env, eventRow, options) {
   });
 
   const captureOptions = options && typeof options === "object" ? options : {};
-  if (!captureOptions.skipCandidateRefresh && decision.action === "hide" && decision.confidence === "high") {
+  if (!captureOptions.skipCandidateRefresh) {
     await refreshModerationRuleCandidatesForSourceRow(env, sample.sourceRow);
   }
 
