@@ -140,8 +140,9 @@
 - Safari 扩展 `BUILD_ID = 2026-05-02-1307`
 - Safari 扩展 `BUILD_ID = 2026-05-02-1541`
 - Safari 扩展 `BUILD_ID = 2026-05-02-1623`
-- 扩展版本 `0.1.36`
-- App / Extension 版本 `1.0.36 (37)`
+- Safari 扩展 `BUILD_ID = 2026-05-02-1633`
+- 扩展版本 `0.1.37`
+- App / Extension 版本 `1.0.37 (38)`
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 
@@ -152,6 +153,8 @@
 2026-05-02 15:45 已发布包含 `BUILD_ID=2026-05-02-1541` 的公网下载包，Worker Version ID 为 `8b9891cf-236d-4b89-a547-2e68f1c45697`。公网首页、控制台和 `/downloads/latest.json` 已验证可访问，`latest.json` 返回 `buildId=2026-05-02-1541`。
 
 2026-05-02 16:26 已替换本机 App 到 `BUILD_ID=2026-05-02-1623`，签名验证通过，`npm run safari:verify-live` 通过。当前打开的 X 页面能读到新版 build，但当时 X 没加载出回复列表，未看到可见 `冲走` 按钮样本。公网下载包已在本地生成，Cloudflare 发布因登录失效未完成。
+
+2026-05-02 16:35 已替换本机 App 到 `BUILD_ID=2026-05-02-1633`，签名验证通过，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1633`、详情页有可见 `冲走` 按钮、右栏有关闭按钮。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1633`。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

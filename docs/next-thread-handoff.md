@@ -163,14 +163,14 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1623`
-  - extension manifest version：`0.1.36`
-  - App / Extension version：`1.0.36 (37)`
+  - `BUILD_ID = 2026-05-02-1633`
+  - extension manifest version：`0.1.37`
+  - App / Extension version：`1.0.37 (38)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 16:34 继续按用户纠正补强并已发布公网：`梦萱/孟轩`本身不是问题，问题是 `🌸无线线下🌸`、`🌸无常线下🌸`、`🌸无偿线下🌸` 这种昵称绕写搭配随机数字 handle 和数字表情低信息回复。现在三种绕写都会被本地识别为风险昵称，也会进入云端 Worker 同构规则；回归样本仍确认 `有没有天安门附近的`、`附近有家面馆不错` 放过。线上 Worker Version ID：`71fc1d62-7185-4e64-9019-e6f10ab3bf45`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1633`、`extensionVersion=0.1.37`。线上 AI 设置测试样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `action=hide`、`confidence=high`、`model=deepseek-v4-flash`、标签 `meaningless_bait`。
   - 2026-05-02 16:23 已补截图漏网规则：`梦萱🌸无线线下🌸 @MullerChri42258` 发 `2🙃😍🧡` 这类“线下绕写昵称 + 随机数字 handle + 数字表情低信息回复”现在会进入低信息诱导账号规则。本地和 Worker 同步改了 `无线/无限 + 线下` 显示名绕写、`🌸` 招揽昵称装饰识别。回归样本：`有没有天安门附近的`、`附近有家面馆不错` 仍放过。
-  - 2026-05-02 16:26 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1623`，签名验证通过，`npm run safari:verify-live` 通过。当前打开的 X 标签页能读到新版 build，但 X 页面当时没有加载出回复列表，脚本只验证到新版注入，未看到可见 `冲走` 按钮样本。
-  - 2026-05-02 16:25 公网发布被 Cloudflare 登录失效挡住：`wrangler deploy` 返回 `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。本地下载包已生成到 `site/downloads/latest.json`，但没有成功发布到公网；Cloudflare 重新登录后需要重新跑 `npm run cloud:deploy` 并验证公网 `/downloads/latest.json`。
+  - 2026-05-02 16:35 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1633`，签名验证通过，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1633`、`flushes=7/16`、`sideButtons=3`、`stage=scan:done`。
   - 2026-05-02 15:41 用户真实检查发现 `冲走` 按钮没有默认出现。已把 `回复下方显示“冲走”` 改为默认开启，并对旧安装做一次自动迁移；用户以后主动关闭时仍保存选择。`scripts/verify-safari-extension-live.sh` 已加严：详情页有回复但没有可见 `冲走` 时直接失败，不能再只因 `BUILD_ID` 正确就放过。
   - 2026-05-02 15:45 已替换本机 App；签名验证通过；真实 Safari 详情页 `https://x.com/InfiCheesy/status/2050247194150945201` 返回 `build=2026-05-02-1541`、`detail=1`、`marking=1`、`manualButtons=8`、`flushes=8`、`sideButtons=3`、`stage=scan:done`。
   - 2026-05-02 13:59 用户准备换新 AI 前已复查插件：`BUILD_ID=2026-05-02-1307`，`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari 页面 `https://x.com/home` 返回 `build=2026-05-02-1307`。当前没有发现插件失效。
