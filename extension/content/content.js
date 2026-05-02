@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1726";
+  const BUILD_ID = "2026-05-02-1747";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -773,6 +773,13 @@
       return {
         className: "web25-hidden-badge-ai",
         label: "AI 自动下沉"
+      };
+    }
+
+    if (source === "ai-pending") {
+      return {
+        className: "web25-hidden-badge-ai",
+        label: "AI 复审中"
       };
     }
 
@@ -5291,7 +5298,12 @@
     body.textContent = entry.replyText || "这条回复没有可读取文本";
 
     let note = null;
-    if (entry && entry.aiReasonShort && (entry.hiddenSource === "ai" || entry.hiddenSource === "ai-global" || entry.hiddenSource === "ai-memory")) {
+    if (entry && entry.aiReasonShort && (
+      entry.hiddenSource === "ai"
+      || entry.hiddenSource === "ai-global"
+      || entry.hiddenSource === "ai-memory"
+      || entry.hiddenSource === "ai-pending"
+    )) {
       note = document.createElement("div");
       note.className = "web25-bottom-card-note";
       note.textContent = entry.aiReasonShort;
@@ -5451,6 +5463,24 @@
           && Boolean(aiCacheKey)
           && Boolean(aiCandidate && aiCandidate.shouldQueue)
           && (!cachedAiDecision || failedAiRetryDue);
+        const awaitingAiDecision = !isAllowed
+          && !hasPinnedHide
+          && !hasHistoryHide
+          && !isGloballyBlocked
+          && !readyAiDecision
+          && Boolean(state.replyAiEnabled && state.backendBaseUrl && state.syncKey && state.deviceId)
+          && Boolean(aiCacheKey)
+          && Boolean(aiCandidate && aiCandidate.shouldQueue);
+        const localBaselineDecision = !protectedAccount
+          && window.Web25Rules
+          && typeof window.Web25Rules.evaluateReply === "function"
+          ? window.Web25Rules.evaluateReply(replyText, mainText, {
+            displayName: authorMeta.displayName || "",
+            handle: authorMeta.handle || "",
+            templateRuleMatched: templateRuleMatched,
+            isRepeatSuspiciousHandle: repeatSuspiciousHandle
+          })
+          : null;
 
         if (isAllowed) {
           decision = {
@@ -5489,6 +5519,22 @@
             const aiLayer = String(readyAiDecision.decisionLayer || "");
             hiddenSource = aiLayer === "ai" ? "ai" : "ai-memory";
           }
+        } else if (localBaselineDecision && localBaselineDecision.hide === true) {
+          decision = {
+            hide: true,
+            score: Number(localBaselineDecision.score || 100),
+            reasons: Array.isArray(localBaselineDecision.reasons) && localBaselineDecision.reasons.length
+              ? localBaselineDecision.reasons
+              : ["local-baseline-hide"]
+          };
+          hiddenSource = "auto";
+        } else if (awaitingAiDecision) {
+          decision = {
+            hide: true,
+            score: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 1),
+            reasons: ["waiting-for-cloud-ai"]
+          };
+          hiddenSource = "ai-pending";
         } else {
           decision = {
             hide: false,
@@ -5510,13 +5556,17 @@
           decision: decision,
           hiddenSource: hiddenSource,
           isManuallyHidden: isManuallyHidden,
-          shouldQueueAi: shouldQueueAi && !(decision && decision.hide),
+          shouldQueueAi: shouldQueueAi,
           aiCacheKey: aiCacheKey,
           aiCandidateScore: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0),
           aiReady: Boolean(readyAiDecision),
           aiReasonShort: readyAiDecision && readyAiDecision.shouldHide === true
             ? String(readyAiDecision.reasonShort || "")
-            : (hiddenSource === "ai-memory" ? "命中 AI 学习库。" : "")
+            : (
+              hiddenSource === "ai-memory"
+                ? "命中 AI 学习库。"
+                : (hiddenSource === "ai-pending" ? "等待 AI 复审，放过后会自动显示。" : "")
+            )
         };
       });
 
