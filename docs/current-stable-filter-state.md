@@ -127,9 +127,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-02-1307`
+  - `BUILD_ID = 2026-05-02-1541`
   - 扩展版本 `0.1.34`
   - App / Extension 版本 `1.0.34 (35)`
+  - 2026-05-02 15:41 已修复 `冲走` 按钮默认关闭问题：新版扩展默认开启回复下方 `冲走`，并会把旧安装里没有迁移标记的关闭状态自动改回开启。该改动只修主动标记按钮的可见性，不改变筛选阈值和自动下沉策略。
   - 2026-05-02 AI 学习库改造后，评论区本地规则不再作为最终自动隐藏裁判；本地继续采集作者、正文、风险名字、handle、主页信号和排序分数，最终隐藏由云端 AI 直接结果或 AI 学习库复用结果返回。
   - 2026-05-02 13:07 已补强回复正文采集：如果 X 没给正文，插件会尽量保存作者显示名和 handle 作为 `账号线索`，避免后续学习样本完全没有内容。已替换本机 Safari App，并验证真实 `https://x.com/home` 加载 `BUILD_ID=2026-05-02-1307`。
   - 2026-05-02 12:22 已修复 AI 排队入口：`buildReplyAiModerationCandidate` 不再把每条回复都送去 AI；只有强风险触发或弱风险组合才排队。已替换本机 Safari App，并验证真实 `https://x.com/home` 加载 `BUILD_ID=2026-05-02-1222`。
@@ -137,7 +138,7 @@
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID: `3d44a89e-52c4-477c-967f-47eed7d72a6c`
-  - 2026-05-02 15:24 已上线数据库接管层，当前 Worker Version ID 为 `a2bf52e2-5377-48d2-85c8-8b696a399d8b`。云端在调用外部 AI 前会先查 `reply_ai_memory` 和 `moderation_rule_candidates`；命中候选规则时返回 `db_rule_*`，不再花外部 AI 调用。线上候选库核验：`active=222`、`candidate=64`。`找个同城的哥哥` 和 `pattern:geo-relationship-bait` 已可由数据库直接接管；`pattern:geo-meetup-bait` / `template:hook+meetup` 保持候选，避免把正常附近讨论一刀切。
+  - 2026-05-02 15:24 已上线数据库接管层，随后 15:45 为发布新版 Safari 下载包重新部署，当前 Worker Version ID 为 `8b9891cf-236d-4b89-a547-2e68f1c45697`。云端在调用外部 AI 前会先查 `reply_ai_memory` 和 `moderation_rule_candidates`；命中候选规则时返回 `db_rule_*`，不再花外部 AI 调用。线上候选库核验：`active=222`、`candidate=64`。`找个同城的哥哥` 和 `pattern:geo-relationship-bait` 已可由数据库直接接管；`pattern:geo-meetup-bait` / `template:hook+meetup` 保持候选，避免把正常附近讨论一刀切。
   - 2026-05-02 15:26 已用真实云端接口验证：测试样本 `找个同城弟弟` 命中 `db_rule_pattern` 并隐藏，测试 item `1097/1098` 没有产生新的外部 AI 调用。
   - 2026-05-02 13:55 已上线旧数据回填学习库接口：`POST /api/developer/backfill-training`。已把旧 `manual_hide/冲走`、`manual_allow/恢复`、AI 首次判断整理成样本和标注，并把旧 AI 高置信隐藏补进 AI 记忆库。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。
   - 2026-05-02 已完成并部署 `AI 首判、云端记忆复用`：新增 `reply_ai_memory`，只学习 AI 直接高置信隐藏结果；命中记忆展示为 `AI 学习库屏蔽`；`manual_hide/冲走` 不直接教数据库，`manual_allow/恢复` 会停用对应 AI 记忆。

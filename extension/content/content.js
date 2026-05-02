@@ -1,6 +1,7 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1307";
+  const BUILD_ID = "2026-05-02-1541";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
+  const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
   const PAGE_CONTROLLER_KEY = "__web25PageController__";
@@ -186,7 +187,8 @@
   const root = document.documentElement;
   const storageDefaults = {
     enabled: true,
-    markingEnabled: false,
+    markingEnabled: true,
+    markingDefaultVersion: "",
     sidebarControlsEnabled: true,
     backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
     syncKey: "",
@@ -198,7 +200,7 @@
   };
   const state = {
     enabled: true,
-    markingEnabled: false,
+    markingEnabled: true,
     sidebarControlsEnabled: true,
     backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
     syncKey: "",
@@ -2575,8 +2577,17 @@
             return;
           }
 
+          if (resolvedResult.markingDefaultVersion !== MARKING_DEFAULT_VERSION) {
+            resolvedResult.markingEnabled = true;
+            resolvedResult.markingDefaultVersion = MARKING_DEFAULT_VERSION;
+            api.storage.local.set({
+              markingEnabled: true,
+              markingDefaultVersion: MARKING_DEFAULT_VERSION
+            });
+          }
+
           state.enabled = Boolean(resolvedResult.enabled);
-          state.markingEnabled = Boolean(resolvedResult.markingEnabled);
+          state.markingEnabled = resolvedResult.markingEnabled !== false;
           applySidebarControlsPreference(resolvedResult.sidebarControlsEnabled);
           state.backendBaseUrl = normalizeBackendBaseUrl(resolvedResult.backendBaseUrl || storageDefaults.backendBaseUrl);
           state.syncKey = String(resolvedResult.syncKey || "").trim();

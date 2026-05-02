@@ -129,7 +129,7 @@
   - 2026-05-02 `/api/state` 已改为不再把公共精确规则合并进插件本地手动隐藏列表；公共规则和高共识模板只作为云端 AI 判断参考信号。公网烟测显示新测试身份返回 `manualHideKeys: []`，随后已删除该临时测试 sync key。
   - 2026-05-02 控制台累计方格已固定为 5 块：`累计跳过无用内容`、`AI 直接屏蔽`、`AI 学习库屏蔽`、`你手动冲走`、`跳过官方广告`。详情入口为 `all_skipped`、`ai_direct`、`ai_memory`、`manual`、`ads`。
   - 2026-05-02 验证通过：`node --check cloudflare/src/index.js`、`node --check extension/content/rules.js`、`node --check extension/content/content.js`、`node --check site/app.js`、`git diff --check`、`npm run cloud:check`、`npm run cloud:audit-data-layer`、`npm run cloud:deploy`。公网首页、控制台、`/console/?detail=ai_memory`、`/downloads/latest.json` 均返回 200。
-  - 2026-05-02 15:24 数据库接管层上线后再次验证：`node --check cloudflare/src/index.js`、`node --check scripts/rebuild-rule-candidates.mjs`、`git diff --check`、`npm run cloud:check`、`npm run cloud:deploy`、`npm run cloud:rebuild-rule-candidates`、`npm run cloud:audit-data-layer` 均通过；公网首页、控制台、`/downloads/latest.json` 均返回 200。当前 Worker Version ID 为 `a2bf52e2-5377-48d2-85c8-8b696a399d8b`。
+  - 2026-05-02 15:24 数据库接管层上线后再次验证：`node --check cloudflare/src/index.js`、`node --check scripts/rebuild-rule-candidates.mjs`、`git diff --check`、`npm run cloud:check`、`npm run cloud:deploy`、`npm run cloud:rebuild-rule-candidates`、`npm run cloud:audit-data-layer` 均通过；公网首页、控制台、`/downloads/latest.json` 均返回 200。2026-05-02 15:45 为发布新版 Safari 下载包再次部署，当前 Worker Version ID 为 `8b9891cf-236d-4b89-a547-2e68f1c45697`。
   - 2026-05-02 `npm run cloud:deploy` 已成功部署控制台前端方格直达详情页改动。
   - 2026-05-02 用户已亲自完成 Cloudflare 网页登录授权；本机发布权限恢复。随后已再次运行 `npm run cloud:check` 和 `npm run cloud:deploy`，公网更新成功，当前 Version ID 为 `f66362e3-0f48-46e0-9639-95bf51590205`。已用系统代理验证首页、控制台、`/console/?detail=ai_hide`、`/downloads/latest.json` 均返回 200，线上 `/app.js` 已包含详情页精简模式和设备显示修正。
   - 2026-05-02 已修复控制台“恢复这条”前台不同步：用户在来源详情页恢复后，当前列表会立刻移除原来的隐藏记录；刷新后的来源分类也会用 `manual_allow` 抑制同一条 `auto_hide` / `manual_hide`，不再让它继续留在“本地规则下沉”里。已部署到公网 Version ID `f54ff4e3-e820-4f34-840f-6a6da3c72cfa`。
@@ -163,11 +163,13 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1307`
+  - `BUILD_ID = 2026-05-02-1541`
   - extension manifest version：`0.1.34`
   - App / Extension version：`1.0.34 (35)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 15:41 用户真实检查发现 `冲走` 按钮没有默认出现。已把 `回复下方显示“冲走”` 改为默认开启，并对旧安装做一次自动迁移；用户以后主动关闭时仍保存选择。`scripts/verify-safari-extension-live.sh` 已加严：详情页有回复但没有可见 `冲走` 时直接失败，不能再只因 `BUILD_ID` 正确就放过。
+  - 2026-05-02 15:45 已替换本机 App；签名验证通过；真实 Safari 详情页 `https://x.com/InfiCheesy/status/2050247194150945201` 返回 `build=2026-05-02-1541`、`detail=1`、`marking=1`、`manualButtons=8`、`flushes=8`、`sideButtons=3`、`stage=scan:done`。
   - 2026-05-02 13:59 用户准备换新 AI 前已复查插件：`BUILD_ID=2026-05-02-1307`，`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari 页面 `https://x.com/home` 返回 `build=2026-05-02-1307`。当前没有发现插件失效。
   - 2026-05-02 13:07 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 加载 `BUILD_ID=2026-05-02-1307`。
   - 2026-05-02 12:28 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 加载 `BUILD_ID=2026-05-02-1222`，右栏关闭按钮曾返回 3 个可见按钮；后续页面重载时 X 侧栏可能暂未渲染，脚本仍确认 build 注入成功。

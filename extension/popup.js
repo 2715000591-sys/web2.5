@@ -1,6 +1,7 @@
 (function () {
   const api = typeof browser !== "undefined" ? browser : chrome;
   const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
+  const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const LEGACY_BACKEND_BASE_URLS = new Set([
     "",
     "http://127.0.0.1:8787",
@@ -471,6 +472,11 @@
       patch.backendBaseUrl = DEFAULT_PUBLIC_BACKEND_BASE_URL;
     }
 
+    if (result.markingDefaultVersion !== MARKING_DEFAULT_VERSION) {
+      patch.markingEnabled = true;
+      patch.markingDefaultVersion = MARKING_DEFAULT_VERSION;
+    }
+
     if (Object.keys(patch).length === 0) {
       callback(result);
       return;
@@ -484,7 +490,8 @@
   function readSetting() {
     api.storage.local.get({
       enabled: true,
-      markingEnabled: false,
+      markingEnabled: true,
+      markingDefaultVersion: "",
       sidebarControlsEnabled: true,
       backendBaseUrl: DEFAULT_PUBLIC_BACKEND_BASE_URL,
       syncKey: "",
@@ -581,7 +588,10 @@
   }
 
   markingCheckbox.addEventListener("change", function () {
-    api.storage.local.set({ markingEnabled: markingCheckbox.checked });
+    api.storage.local.set({
+      markingEnabled: markingCheckbox.checked,
+      markingDefaultVersion: MARKING_DEFAULT_VERSION
+    });
   });
 
   if (sidebarControlsCheckbox) {

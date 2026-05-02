@@ -61,7 +61,7 @@ tell application "Safari"
       set u to URL of t
       if u starts with "https://x.com" or u starts with "https://twitter.com" then
         try
-          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebarColumn=document.querySelector('[data-testid=sidebarColumn]');const sidebar=sidebarColumn&&sidebarColumn.innerText.trim()?(root.dataset.web25SidebarColumn||'1'):'0';const manual=root.dataset.web25ManualButtons||'0';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual;})()" in t
+          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebarColumn=document.querySelector('[data-testid=sidebarColumn]');const sidebar=sidebarColumn&&sidebarColumn.innerText.trim()?(root.dataset.web25SidebarColumn||'1'):'0';const manual=root.dataset.web25ManualButtons||'0';const marking=root.dataset.web25MarkingEnabled||'0';const articles=root.dataset.web25Articles||'0';const stage=root.dataset.web25Stage||'';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual+';marking='+marking+';articles='+articles+';stage='+stage;})()" in t
           set out to out & u & " | " & info & linefeed
         on error errMsg number errNum
           set out to out & u & " | " & "JS_ERROR=" & errNum & ":" & errMsg & linefeed
@@ -100,10 +100,18 @@ if ! grep -q "build=$EXPECTED_BUILD" <<<"$RESULT"; then
   exit 1
 fi
 
-DETAIL_WITHOUT_FLUSH="$(awk '/detail=1/ && /flushes=0/ {print}' <<<"$RESULT")"
+DETAIL_MARKING_OFF="$(awk '/detail=1/ && /marking=0/ {print}' <<<"$RESULT")"
+if [[ -n "$DETAIL_MARKING_OFF" && "${WEB25_ALLOW_MARKING_OFF:-}" != "1" ]]; then
+  echo "At least one detail page has the 冲走 button preference off; expected it to be on by default:" >&2
+  printf '%s\n' "$DETAIL_MARKING_OFF" >&2
+  exit 1
+fi
+
+DETAIL_WITHOUT_FLUSH="$(awk '/detail=1/ && /marking=1/ && /flushes=0/ && !/articles=0/ && !/articles=1/ {print}' <<<"$RESULT")"
 if [[ -n "$DETAIL_WITHOUT_FLUSH" ]]; then
-  echo "Warning: at least one detail page has no visible 冲走 buttons yet:" >&2
+  echo "At least one detail page has replies but no visible 冲走 buttons:" >&2
   printf '%s\n' "$DETAIL_WITHOUT_FLUSH" >&2
+  exit 1
 fi
 
 SIDEBAR_WITHOUT_BUTTONS="$(awk '/sidebar=1/ && /sideButtons=0/ {print}' <<<"$RESULT")"
@@ -118,7 +126,7 @@ tell application "Safari"
       set u to URL of t
       if u starts with "https://x.com" or u starts with "https://twitter.com" then
         try
-          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebarColumn=document.querySelector('[data-testid=sidebarColumn]');const sidebar=sidebarColumn&&sidebarColumn.innerText.trim()?(root.dataset.web25SidebarColumn||'1'):'0';const manual=root.dataset.web25ManualButtons||'0';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual;})()" in t
+          set info to do JavaScript "(function(){const visible=function(el){const r=el.getBoundingClientRect();const s=getComputedStyle(el);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none';};const root=document.documentElement;const build=root.dataset.web25Build||'NO_WEB25_BUILD';const flushes=Array.from(document.querySelectorAll('.web25-action-hide')).filter(visible).length;const side=Array.from(document.querySelectorAll('.web25-sidebar-close,[data-web25-sidebar-close]')).filter(visible).length;const detail=root.dataset.web25Detail||(location.href.indexOf('/status/')>=0?'1':'0');const sidebarColumn=document.querySelector('[data-testid=sidebarColumn]');const sidebar=sidebarColumn&&sidebarColumn.innerText.trim()?(root.dataset.web25SidebarColumn||'1'):'0';const manual=root.dataset.web25ManualButtons||'0';const marking=root.dataset.web25MarkingEnabled||'0';const articles=root.dataset.web25Articles||'0';const stage=root.dataset.web25Stage||'';return 'build='+build+';detail='+detail+';sidebar='+sidebar+';flushes='+flushes+';sideButtons='+side+';manualButtons='+manual+';marking='+marking+';articles='+articles+';stage='+stage;})()" in t
           set out to out & u & " | " & info & linefeed
         on error errMsg number errNum
           set out to out & u & " | " & "JS_ERROR=" & errNum & ":" & errMsg & linefeed
