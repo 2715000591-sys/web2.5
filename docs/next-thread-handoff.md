@@ -16,7 +16,7 @@
    - `docs/current-stable-filter-state.md`
    - `docs/current-stable-ui-state.md`
    - `docs/moderation-database-training-plan.md`
-   - 如果下一步是接大模型 API，再读 `docs/ai-api-provider-handoff.md`
+   - `docs/ai-api-provider-handoff.md`
 4. 再根据用户最新一句话行动，不要被旧上下文带偏。
 
 不要假设工作区是干净的。不要回退自己没改过的东西。
@@ -165,6 +165,7 @@
   - App / Extension version：`1.0.34 (35)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 13:59 用户准备换新 AI 前已复查插件：`BUILD_ID=2026-05-02-1307`，`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari 页面 `https://x.com/home` 返回 `build=2026-05-02-1307`。当前没有发现插件失效。
   - 2026-05-02 13:07 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 加载 `BUILD_ID=2026-05-02-1307`。
   - 2026-05-02 12:28 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 加载 `BUILD_ID=2026-05-02-1222`，右栏关闭按钮曾返回 3 个可见按钮；后续页面重载时 X 侧栏可能暂未渲染，脚本仍确认 build 注入成功。
 
@@ -363,22 +364,39 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 
 ## 9. 下一步优先级
 
-当前阶段先收口，不抢跑。
+当前用户明确说，下一位 AI 主要要继续调试“AI 数据库、AI 审核本身、API 调度之间的关系”。这件事可以继续做，但不要重设计主页和控制台，用户已经认可当前主页和控制台形态。
 
-第一优先级：数据安全和真实验收
+第一优先级：把 AI 审核链路跑清楚
 
-- 确认 D1 真实数据分层
-- 确认开发者账号和普通账号看到的个人统计不同
-- 确认公共规则可以共享，但个人计数不共享
-- 如需清理测试行，先备份，只删确认测试行
+- 先确认插件不是每条回复都调用 AI：本地 `buildReplyAiModerationCandidate` 必须只把强风险或弱风险组合送进队列。
+- 再确认云端优先查 `reply_ai_memory`：命中记忆时归入 `AI 学习库屏蔽`，不再花 API 钱。
+- 只有记忆没命中、又是可疑候选时，才进入真实模型调用。
+- AI 直接高置信隐藏写入 `reply_ai_results`，再写入 `moderation_sample_labels`，并沉淀到 `reply_ai_memory`。
+- 用户点 `恢复误判` / `恢复这条` 后，应写入 `manual_allow`，停用对应 AI 记忆，并把旧隐藏从当前统计和当前明细里移走。
 
-第二优先级：普通用户登录闭环
+第二优先级：调 API 调度和省钱策略
+
+- 先用控制台“测试一次 AI 接入”确认 Key、接口地址、模型名可用；这一步只测 API，不写真实回复审核表。
+- 真实 X 页面调试时，只拿少量自然遇到的边界样本跑，不要大批量乱刷 API。
+- 观察每条样本最后落到哪一层：本地规则直接下沉、AI 直接屏蔽、AI 学习库复用、用户手动冲走、用户恢复。
+- 如果调用量异常，先查扩展队列和云端记忆命中，不要先改提示词。
+- 如果误判异常，先查 AI 输入证据和提示词边界，不要把 `manual_allow` 当成公共放行规则。
+
+第三优先级：数据安全和真实验收
+
+- D1 是生产数据；动 schema、清理、迁移、批量写入前必须备份。
+- `manual_hide/冲走` 是垃圾候选，不等于公共规则。
+- `manual_allow/恢复` 是抑制和纠错，不是反向训练成“用户喜欢”。
+- 单用户重复冲走不能自动升级公共规则；公共升级需要多贡献者或开发者确认。
+- 每次调试后跑 `npm run cloud:audit-data-layer`，确认个人统计和公共规则仍然分层。
+
+第四优先级：普通用户登录闭环
 
 - 接正式邮件验证码发送
 - 普通用户登录后能看自己的统计和偏好
 - 开发者模式与普通用户模式保持隔离
 
-第三优先级：完整人工验收
+第五优先级：完整人工验收
 
 - 插件里真实产生一条动作
 - 看是否进入公网 D1
@@ -432,7 +450,7 @@ Safari App：
 
 可以直接把下面这段发给新对话：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`，然后跑 `git status --branch --short`。先不要扩功能，也不要重构。X / Safari 插件主链路已经稳定，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽和数据库同步都不能改坏。用户没有计算机基础，所以默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证，不要只口头解释。Cloudflare D1 数据很重要，动 schema、清理、迁移前必须先备份；真实数据不能丢。默认优先保护数据、收口普通用户登录/邮件验证码、做完整人工验收，不要抢跑 AI 和大规模个性化。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`、`docs/ai-api-provider-handoff.md`，然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前 X / Safari 插件主链路稳定，`BUILD_ID=2026-05-02-1307`，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽和数据库同步都不能改坏。下一步重点是调试 AI 数据库、AI 审核和 API 调度的关系：不要让每条回复都调用 AI；优先复用 `reply_ai_memory`；只有可疑候选才走真实模型；AI 判断和用户反馈先进入 `moderation_samples` / `moderation_sample_labels`，不要把单用户冲走直接变公共规则。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
 
 ## 12. 维护这份文件的规则
 

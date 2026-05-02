@@ -141,6 +141,8 @@
 - 扩展版本 `0.1.34`
 - App / Extension 版本 `1.0.34 (35)`
 
+2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
+
 2026-05-02 追加硬约束：替换或重新构建 Safari App 后，必须重新确认 Safari 当前真实 X 页面已经注入扩展。只验证 app 文件、签名和 `BUILD_ID` 不够；要运行 `pluginkit -e use -i com.yourCompany.web25.extension` 和 `npm run safari:verify-live`，并看到真实 X 标签页返回当前 `BUILD_ID`、详情页有可见 `冲走` 按钮、右栏有可见关闭按钮。否则用户会看到“推特里插件都没了”。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。

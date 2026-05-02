@@ -210,3 +210,47 @@
 5. 确认后再进入现有全局规则机制
 
 这条路线最省 API，也最不容易误伤。
+
+## 下一任重点：AI、数据库、API 调度关系
+
+用户下一步主要要调试这三者的关系，不是重做 UI。
+
+当前正确链路是：
+
+```text
+插件读到回复
+  ↓
+本地先做低成本风险筛选
+  ↓
+明显正常内容不进 AI
+  ↓
+可疑内容发到云端
+  ↓
+云端先查 reply_ai_memory
+  ↓
+命中则直接复用，显示为 AI 学习库屏蔽
+  ↓
+没命中才调用外部模型 API
+  ↓
+AI 结果写 reply_ai_results
+  ↓
+AI 标注写 moderation_sample_labels
+  ↓
+高置信隐藏再沉淀进 reply_ai_memory
+```
+
+调试时优先看这些问题：
+
+- 是否每条回复都进 AI 队列。如果是，这是 bug，先查 `extension/content/content.js` 的 `buildReplyAiModerationCandidate`。
+- 是否记忆命中还继续调用模型。如果是，这是浪费 API，先查 `cloudflare/src/index.js` 的 `findReplyAiMemoryDecision` / `classifyReplyAiItemEntries`。
+- 是否 AI 隐藏后没有进入样本标注。如果是，查 `recordModerationTrainingLabelFromReplyAiDecision`。
+- 是否高置信隐藏没有进入记忆库。如果是，查 `upsertReplyAiMemoryFromDecision`。
+- 是否用户恢复后记忆仍然生效。如果是，查 `markReplyAiItemAllowedByManualRestore` 和 `deactivateReplyAiMemoryForItem`。
+
+调试口径：
+
+- 数据库不是“自己变聪明的模型”，而是事实库、标注库、记忆库。
+- AI 是老师，先判断新东西；数据库记住老师判过的可靠内容，后续少花 API 钱。
+- `manual_hide/冲走` 是用户反馈和垃圾候选。
+- `manual_allow/恢复` 是纠错和抑制。
+- 单用户反馈不能直接污染公共规则。

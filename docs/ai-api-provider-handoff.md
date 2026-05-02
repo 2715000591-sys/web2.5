@@ -1,10 +1,12 @@
 # AI API 接入交接文档
 
-最后整理日期：2026-05-01
+最后整理日期：2026-05-02
 
 这份文档给下一任 Codex / 开发助手看。用户没有编程基础，解释时必须先说大白话结论，不要让用户判断接口、模型参数、部署、命令输出。
 
 2026-05-01 用户已明确 API 已经提供。下一轮不要再默认让用户重新购买 API；先检查线上控制台里已保存的加密配置和真实测试结果。只有线上配置丢失、Key 失效、额度不足，或用户主动要换平台时，才让用户补新的 Key / 接口地址 / 模型名字。
+
+2026-05-02 用户准备让下一位 AI 重点调试：AI 数据库、AI 审核本身、API 调度之间的关系。下一位不要先重做 UI，也不要先让用户重买 API。先确认现有 DeepSeek 设置仍可用，再用少量真实 X 样本检查“本地候选筛选 -> 云端记忆复用 -> 必要时调用模型 -> 写回样本和记忆”的链路。
 
 2026-05-01 后续排查发现：线上 DeepSeek 配置的接口地址和模型还在，但 API Key 已被一次普通保存误清空。原因是 Worker 接口把“请求里没有带 apiKey”错误当成“清空 apiKey”。已修复并部署到 Worker Version ID `8039945b-87ba-4a4c-8eca-775775e9b7fa`：以后保存开关、模型或提示词时，如果没有提交新的 Key，会保留原来的加密 Key。
 
@@ -56,7 +58,7 @@
 
 - 站点：`https://colorful-toilet.colorful-toilet.workers.dev/`
 - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- Worker Version ID：`8039945b-87ba-4a4c-8eca-775775e9b7fa`
+- Worker Version ID：`3d44a89e-52c4-477c-967f-47eed7d72a6c`
 - Git commit：当前分支最新提交包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护，以及保存 AI 设置时不再误清空已有 Key 的修复
 
 ## 3. 还没完成
@@ -68,6 +70,8 @@
 - 还没有确定 DeepSeek 长期是否最稳；目前先用便宜的 `deepseek-v4-flash`。
 
 这不是功能坏了，而是下一步要去真实 X 页面看边界垃圾回复是否能被 AI 辅助层压住。
+
+2026-05-02 已完成数据库回填和 AI 记忆库整理：线上 `moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。这说明数据库学习库已经有内容。下一步不是继续盲目回填，而是看真实页面里每条可疑回复最终走的是哪一层。
 
 ## 4. 用户去买 API 时怎么说
 
@@ -205,10 +209,36 @@ AI 只能作为辅助层，不要替换当前稳定筛选主链路。
 
 下一任最应该做的是：
 
-1. 让用户提供一个便宜 API 的三项信息。
-2. 先在控制台保存。
-3. 当前 DeepSeek 小样本测试已经通过，下一步直接用一两条真实 X 回复做小额测试。
-4. 看控制台 AI 隐藏记录是否出现。
-5. 如果失败，记录具体失败原因，再补单个平台适配或提示词适配。
+1. 先确认现有 DeepSeek 设置仍显示 Key 后四位 `a6db`，不要让用户重复提供 Key。
+2. 当前 DeepSeek 小样本测试已经通过，下一步直接用一两条真实 X 回复做小额测试。
+3. 对每条真实样本记录它走哪一层：本地规则、AI 学习库、真实 AI 调用、手动冲走、恢复误判。
+4. 如果调用量异常，先查扩展候选队列和 `reply_ai_memory` 命中，不要先改提示词。
+5. 如果误判异常，先查 AI 输入证据、提示词边界和恢复后的记忆停用，不要把 `manual_allow` 做成公共放行规则。
+6. 如果 API 失败，记录具体失败原因，再补单个平台适配或提示词适配。
 
 目标不是炫技接很多平台，而是让用户买到便宜 API 后，真实能跑、不会乱花钱、不会误伤稳定筛选。
+
+## 13. API 调度关系
+
+当前调度原则：
+
+- 插件本地只负责挑可疑候选，不负责把所有内容都送 AI。
+- 云端收到候选后，先查 `reply_ai_memory`。
+- 记忆命中直接返回结果，控制台归入 `AI 学习库屏蔽`，不消耗外部 API。
+- 记忆未命中，才读取用户 AI 设置并调用外部模型 API。
+- AI 首次判断写入 `reply_ai_results`。
+- AI 判断同时写入 `moderation_sample_labels`，成为训练/评测证据。
+- AI 直接高置信隐藏再写入 `reply_ai_memory`，让后续相似内容少调用 API。
+- 用户恢复误判会把单条 AI 结果改为放过，并停用对应记忆。
+
+关键代码位置：
+
+- 扩展候选筛选：`extension/content/content.js` 的 `buildReplyAiModerationCandidate`
+- 扩展队列发送：`extension/content/content.js` 的 `enqueueReplyAiDecision` / 批量发送逻辑
+- 云端接收：`cloudflare/src/index.js` 的 `/api/reply-ai`
+- 云端分类：`classifyReplyAiItemEntries`
+- 记忆查询：`findReplyAiMemoryDecision`
+- 外部模型调用：`requestReplyAiDecisionFromProvider`
+- 标注写入：`recordModerationTrainingLabelFromReplyAiDecision`
+- 记忆写入：`upsertReplyAiMemoryFromDecision`
+- 误判恢复：`markReplyAiItemAllowedByManualRestore` / `deactivateReplyAiMemoryForItem`
