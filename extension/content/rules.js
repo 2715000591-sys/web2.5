@@ -303,6 +303,15 @@
     "立身"
   ];
   const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・]/u;
+  const POETIC_SPAM_SLOGAN_PATTERNS = [
+    /烟火.{0,4}相逢/,
+    /人海.{0,4}(擦肩|相逢|逢)/,
+    /缘分.{0,4}(引线|牵线|人海|相逢|遇见|逢)/,
+    /遇见.{0,4}(温柔|人间)/,
+    /旧城.{0,4}(偶遇|故人)/,
+    /晚风.{0,4}相逢/,
+    /一念.{0,4}(恰好|相逢)/
+  ];
 
   const SLOT_DEFINITIONS = [
     {
@@ -515,6 +524,28 @@
     return termCount >= 2 || (hasDecorativeShell && termCount >= 1);
   }
 
+  function looksLikePoeticSpamSloganBait(text) {
+    const raw = String(text || "");
+    const normalized = normalize(raw);
+    const compact = buildCompact(raw);
+    if (!compact || compact.length < 4 || compact.length > 18) {
+      return false;
+    }
+
+    if (countMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countMatches(compact, FINANCE_MARKERS) > 0) {
+      return false;
+    }
+
+    const emojiCount = countEmojiMatches(raw);
+    if (emojiCount < 1) {
+      return false;
+    }
+
+    return POETIC_SPAM_SLOGAN_PATTERNS.some(function (pattern) {
+      return pattern.test(normalized) || pattern.test(compact);
+    });
+  }
+
   function countEmojiMatches(text) {
     return Array.from(String(text || "").matchAll(EMOJI_PATTERN)).length;
   }
@@ -662,6 +693,7 @@
       return pattern.test(normalized) || pattern.test(compact);
     });
     const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(raw);
+    const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(raw);
     const hasEroticMentionRedirect = hasAccountMention && (
       hasExplicitEroticBait
       || EROTIC_MENTION_REDIRECT_MARKERS.some(function (term) {
@@ -703,6 +735,7 @@
       hasExplicitEroticBait: hasExplicitEroticBait,
       hasSpamTemplateSignal: hasSpamTemplateSignal,
       hasDecorativeSloganBait: hasDecorativeSloganBait,
+      hasPoeticSpamSloganBait: hasPoeticSpamSloganBait,
       hasEroticMentionRedirect: hasEroticMentionRedirect
     };
   }
@@ -1073,6 +1106,11 @@
       reasons.push("spam-template-emoji-noise");
     }
 
+    if (reply.hasPoeticSpamSloganBait && suspiciousHandle) {
+      score += 5;
+      reasons.push("poetic-slogan-from-suspicious-handle");
+    }
+
     if (suspiciousHandle && (lureDisplayName || reply.hasMinimalTextPayload || reply.matchedSlots.length > 0)) {
       score += 1;
       reasons.push("suspicious-handle");
@@ -1127,6 +1165,7 @@
     buildHighRiskDisplayNameKey: buildHighRiskDisplayNameKey,
     looksLikeShareLinkScam: looksLikeShareLinkScam,
     looksLikeDecorativeSloganBait: looksLikeDecorativeSloganBait,
+    looksLikePoeticSpamSloganBait: looksLikePoeticSpamSloganBait,
     looksLikeInnocentPetContext: looksLikeInnocentPetContext
   };
 })();

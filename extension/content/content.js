@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1756";
+  const BUILD_ID = "2026-05-02-1822";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -4896,6 +4896,7 @@
         || analysis.hasExplicitEroticBait
         || analysis.hasSpamTemplateSignal
         || analysis.hasDecorativeSloganBait
+        || analysis.hasPoeticSpamSloganBait
         || analysis.hasEroticMentionRedirect
         || (Array.isArray(analysis.matchedSlots) && analysis.matchedSlots.length > 0)
         )
@@ -4954,6 +4955,9 @@
     if (!protectedAccount && analysis && analysis.hasDecorativeSloganBait) {
       score += 2;
     }
+    if (!protectedAccount && analysis && analysis.hasPoeticSpamSloganBait) {
+      score += 3;
+    }
     if (analysis && analysis.hasEroticMentionRedirect) {
       score += 3;
     }
@@ -5009,6 +5013,7 @@
         || analysis.hasExplicitEroticBait
         || analysis.hasSpamTemplateSignal
         || analysis.hasDecorativeSloganBait
+        || analysis.hasPoeticSpamSloganBait
         || analysis.hasAccountMention
       ))
       || matchedSlots.length >= 2

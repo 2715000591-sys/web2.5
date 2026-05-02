@@ -367,6 +367,15 @@ const DECORATIVE_SLOGAN_TERMS = [
   "立身"
 ];
 const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・]/u;
+const POETIC_SPAM_SLOGAN_PATTERNS = [
+  /烟火.{0,4}相逢/,
+  /人海.{0,4}(擦肩|相逢|逢)/,
+  /缘分.{0,4}(引线|牵线|人海|相逢|遇见|逢)/,
+  /遇见.{0,4}(温柔|人间)/,
+  /旧城.{0,4}(偶遇|故人)/,
+  /晚风.{0,4}相逢/,
+  /一念.{0,4}(恰好|相逢)/
+];
 const GEO_MEETUP_BAIT_PATTERNS = [
   /^(?:有|求|蹲).{0,10}(万达广场附近|附近|离得近|同城|线下).{0,4}(吗|嘛|呢|的嘛|的吗|的么|的人|的人吗)$/,
   /^(?:万达广场附近|附近|离得近|同城|线下).{0,6}(有吗|有人吗|的吗|嘛|吗|么|呢)$/,
@@ -4616,7 +4625,8 @@ function isHighValueModerationPatternKey(key) {
     "pattern:spam-template-signal",
     "pattern:mention-lure-redirect",
     "pattern:explicit-erotic-bait",
-    "pattern:decorative-slogan-lure-account"
+    "pattern:decorative-slogan-lure-account",
+    "pattern:poetic-slogan-lure-account"
   ].includes(String(key || "").trim());
 }
 
@@ -4629,7 +4639,8 @@ function canAutoActivateModerationPatternKey(key) {
     "pattern:spam-template-signal",
     "pattern:mention-lure-redirect",
     "pattern:explicit-erotic-bait",
-    "pattern:decorative-slogan-lure-account"
+    "pattern:decorative-slogan-lure-account",
+    "pattern:poetic-slogan-lure-account"
   ].includes(String(key || "").trim());
 }
 
@@ -7811,6 +7822,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const hasEroticMentionRedirect = looksLikeEroticMentionRedirect(replyText);
   const hasSpamTemplateSignal = looksLikeSpamTemplateSignal(replyText);
   const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(replyText);
+  const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(replyText);
   const accountMetadataRisk = highRiskDisplayName
     || (lureDisplayName && suspiciousHandle)
     || (lureDisplayName && hasLongDigitHandle)
@@ -7855,6 +7867,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasDecorativeSloganBait && suspiciousHandle) {
     evidenceNotes.push("reply is a decorative low-substance slogan from a disposable-looking account");
   }
+  if (hasPoeticSpamSloganBait && suspiciousHandle) {
+    evidenceNotes.push("reply is a poetic low-substance slogan from a disposable-looking account");
+  }
   if (hasGeoMeetupBait || hasBaitQuestionShape) {
     evidenceNotes.push("reply shape resembles meetup/contact bait");
   }
@@ -7885,6 +7900,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasEroticMentionRedirect,
     hasSpamTemplateSignal,
     hasDecorativeSloganBait,
+    hasPoeticSpamSloganBait,
     evidenceNotes
   };
 }
@@ -7935,6 +7951,9 @@ function buildReplyAiMemoryContextKey(itemRow, heuristicSummary) {
   }
   if (heuristicSummary.hasDecorativeSloganBait) {
     contextFlags.push("decorative-slogan");
+  }
+  if (heuristicSummary.hasPoeticSpamSloganBait) {
+    contextFlags.push("poetic-slogan");
   }
   profileSignals.forEach((signal) => {
     if (["contact_keyword", "contact_payload", "profile_redirect", "external_link", "suspicious_bio"].includes(signal)) {
@@ -8275,6 +8294,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "You must evaluate supplied account metadata as first-class evidence, not just reply text.",
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, profile bio, profile links, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
     "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
+    "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 遇见温柔满人间, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
     "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
     "If avatar or image evidence is supplied, use it only as supporting evidence; never invent avatar evidence when it is not supplied.",
     "Combined weak signals across name, handle, reply text, profile, and prior risk history can justify a high-confidence hide when they clearly form a lure/spam pattern.",
@@ -9693,6 +9713,22 @@ function looksLikeDecorativeSloganBait(text) {
   return termCount >= 2 || (hasDecorativeShell && termCount >= 1);
 }
 
+function looksLikePoeticSpamSloganBait(text) {
+  const raw = String(text || "");
+  const normalized = normalizeRuleText(raw);
+  const compact = buildCompactRuleText(raw);
+  if (!compact || compact.length < 4 || compact.length > 18) {
+    return false;
+  }
+
+  const emojiCount = Array.from(raw.matchAll(EMOJI_PATTERN)).length;
+  if (emojiCount < 1) {
+    return false;
+  }
+
+  return POETIC_SPAM_SLOGAN_PATTERNS.some((pattern) => pattern.test(normalized) || pattern.test(compact));
+}
+
 function looksLikeCivicLandmarkNearbyQuestion(text) {
   const compact = buildCompactRuleText(text);
   if (!compact || compact.length > 18) {
@@ -10052,6 +10088,12 @@ function buildRowKeys(row) {
       looksLikeDecorativeSloganBait(replyText || normalized)
       && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
     );
+  const poeticSloganLureAccount = protectedGuardApplies
+    ? false
+    : (
+      looksLikePoeticSpamSloganBait(replyText || normalized)
+      && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
+    );
   const lowInformationStrongLureName = protectedGuardApplies
     ? false
     : (
@@ -10115,9 +10157,13 @@ function buildRowKeys(row) {
                                     : (
                                       decorativeSloganLureAccount
                                         ? "pattern:decorative-slogan-lure-account"
-                                        : (matchedTerms.length > 0
-                                          ? "pattern:" + matchedTerms.join("|")
-                                          : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                        : (
+                                          poeticSloganLureAccount
+                                            ? "pattern:poetic-slogan-lure-account"
+                                            : (matchedTerms.length > 0
+                                              ? "pattern:" + matchedTerms.join("|")
+                                              : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                        )
                                     )
                                 )
                               )

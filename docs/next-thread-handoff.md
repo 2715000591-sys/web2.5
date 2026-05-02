@@ -116,7 +116,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`13ae7164-3096-4169-a3d9-2706b97cfc42`
+  - Version ID：`2b0354eb-32b3-49a9-a27f-95d23c007687`
+  - 2026-05-02 18:22 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`，官网和控制台返回 200。本次修复用户截图里的“全国安排头像 + 随机英文数字 handle + 诗句式空洞回复”漏网：本地和 Worker 都新增 `烟火暖了相逢`、`人海有幸擦肩`、`缘分引线人海逢`、`遇见温柔满人间`、`旧城偶遇故人`、`晚风撞我相逢`、`一念恰好相逢` 这类低信息诱饵模板。回复区 AI prompt 也已写入这些例子，因为外接 API 只看单条短正文时容易不知道这是一组批量号。7 条截图同款本地回归全部隐藏；普通账号发类似正常感慨仍放过。
   - 2026-05-02 18:06 用户完成 Cloudflare 重新登录后，已成功部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`，官网和控制台返回 200。外接 API 的回复区提示词修复已经在线上 Worker 生效。
   - 2026-05-02 17:56 用户质疑“我把中文拿给你你能判断，为什么外接 API 不行”。根因分两层：一是这些样本把风险藏在昵称里，正文只发数字/emoji，旧基础规则没有收进 `每晚准时大秀`、`找固定泡友`、`今晚准时涩播`、`蹲一个弟弟` 等新昵称模板；二是 Worker 的回复区 AI 提示词没有把控制台补充审核要求附加进去，导致用户补的口径对回复区 AI 没生效。已同步修本地和 Worker：新增上述风险昵称模式，补充 AI 提示词中文样例，并把 `settings.moderationPrompt` 附加到回复区 AI prompt。5 条截图同款样本本地全部隐藏，`附近有家面馆不错`、`有没有天安门附近的`、`今晚准时看直播吗` 放过。
   - 2026-05-02 17:47 用户再次追问“为什么 AI / 数据库没挡住这些明显引流”。根因已确认：之前插件扫描到可疑回复后，主要把本地规则当作 AI 候选筛选和排序；如果云端结果还没回来，部分高风险候选会先露在页面上，流程没有严格做到“基础层没截住就 AI 扫，AI 没放过前不显示”。已修正本机链路：本地基础规则会立即下沉明确垃圾；高风险候选在等待云端数据库 / AI 期间显示为 `AI 复审中` 并临时下沉；AI 明确放过后自动显示。已新增 `Pe/CL她好涩 我不行了 👉 @...`、`看我主页 + 附近真实约见` 风险昵称和纯表情薄回复组合识别。本地回归 4 条截图同款样本全部隐藏，`附近有家面馆不错`、`有没有天安门附近的` 放过。Worker 源码已同步新增规则并通过 `npm run cloud:check`，但公网发布失败：Cloudflare 返回 `Invalid access token [code: 9109]` / `Authentication error [code: 10000]`。当前公网仍停在 17:31 的 Worker Version ID `0e62a0bf-38d6-47ff-8834-369a59cb8524` 和 `/downloads/latest.json buildId=2026-05-02-1726`；用户完成 Cloudflare 重新登录后，必须补跑 `npm run cloud:deploy`。
@@ -168,11 +169,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1756`
-  - extension manifest version：`0.1.43`
-  - App / Extension version：`1.0.43 (44)`
+  - `BUILD_ID = 2026-05-02-1822`
+  - extension manifest version：`0.1.44`
+  - App / Extension version：`1.0.44 (45)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 18:22 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1822`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1822`、`flushes=4`、`manualButtons=4`、`sideButtons=3`、`articles=46`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`。
   - 2026-05-02 17:56 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1756`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 标签页返回 `build=2026-05-02-1756`，但 X 当时没加载出回复列表，结果为 `articles=0`、`stage=scan:not-enough-articles`，所以只证明注入成功。2026-05-02 18:06 公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`。
   - 2026-05-02 17:47 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1747`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1747`、`flushes=7`、`manualButtons=7`、`sideButtons=3`、`articles=29`、`stage=scan:done`。公网下载包已在本地生成，但 Cloudflare 登录令牌失效导致发布失败，公网 `/downloads/latest.json` 仍是上一版 `buildId=2026-05-02-1726`。
   - 2026-05-02 17:31 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1726`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1726`、`flushes=19/18`、`manualButtons=19/18`、`sideButtons=3`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1726`、`extensionVersion=0.1.40`。
