@@ -304,6 +304,10 @@ const DISPLAY_NAME_STRONG_LURE_PATTERNS = [
   /(男大|女大|男高|女高|体育生).{0,4}(接|找|蹲|约|聊|撩)/,
   /(接|找|蹲).{0,3}(男大|女大|男高|女高|体育生)/,
   /(看我主页|主页).{0,8}(附近真实约见|真实约见|真实可约|附近约见|线下约见|可约见)/,
+  /(每晚|今晚).{0,3}准时.{0,3}(大秀|涩播|色播|直播|开播)/,
+  /准时.{0,3}(大秀|涩播|色播)/,
+  /(找|求|蹲).{0,4}(固定)?(泡友|炮友|固炮|性友)/,
+  /(蹲|找|求).{0,3}(一个)?(弟弟|哥哥|姐姐|妹妹)/,
   /可约.{0,4}(私|主页|置顶|简介|资料|id|号|vx|wx|tg)/
 ];
 const SHARE_LINK_PATTERNS = [
@@ -8270,6 +8274,8 @@ function buildReplyAiProviderPrompt(settings, options) {
     "A decorative, motto-like, low-substance slogan reply can be meaningless bait when it comes from a disposable-looking numeric account, but allow normal quotes, jokes, and substantive conversation.",
     "You must evaluate supplied account metadata as first-class evidence, not just reply text.",
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, profile bio, profile links, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
+    "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
+    "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
     "If avatar or image evidence is supplied, use it only as supporting evidence; never invent avatar evidence when it is not supplied.",
     "Combined weak signals across name, handle, reply text, profile, and prior risk history can justify a high-confidence hide when they clearly form a lure/spam pattern.",
     "Do not ignore suspicious names or suspicious handles merely because the reply text itself is short.",
@@ -8282,6 +8288,9 @@ function buildReplyAiProviderPrompt(settings, options) {
     "When action is hide, matchedLabels must contain at least one provided safety label that explains the hide decision.",
     isBatch
       ? "Return exactly one decision for every clientItemId in the batch, and preserve each clientItemId exactly."
+      : "",
+    settings && settings.moderationPrompt
+      ? `Additional operator guidance: ${settings.moderationPrompt}`
       : ""
   ].filter(Boolean).join(" ");
 }

@@ -117,6 +117,7 @@
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID：`0e62a0bf-38d6-47ff-8834-369a59cb8524`
+  - 2026-05-02 17:56 用户质疑“我把中文拿给你你能判断，为什么外接 API 不行”。根因分两层：一是这些样本把风险藏在昵称里，正文只发数字/emoji，旧基础规则没有收进 `每晚准时大秀`、`找固定泡友`、`今晚准时涩播`、`蹲一个弟弟` 等新昵称模板；二是 Worker 的回复区 AI 提示词没有把控制台补充审核要求附加进去，导致用户补的口径对回复区 AI 没生效。已同步修本地和 Worker：新增上述风险昵称模式，补充 AI 提示词中文样例，并把 `settings.moderationPrompt` 附加到回复区 AI prompt。5 条截图同款样本本地全部隐藏，`附近有家面馆不错`、`有没有天安门附近的`、`今晚准时看直播吗` 放过。`npm run cloud:check` 通过；`npm run cloud:deploy` 构建成功但公网发布失败，Cloudflare 返回 `Invalid access token [code: 9109]` / `Authentication error [code: 10000]`。需要用户重新登录 Cloudflare 后补跑发布。
   - 2026-05-02 17:47 用户再次追问“为什么 AI / 数据库没挡住这些明显引流”。根因已确认：之前插件扫描到可疑回复后，主要把本地规则当作 AI 候选筛选和排序；如果云端结果还没回来，部分高风险候选会先露在页面上，流程没有严格做到“基础层没截住就 AI 扫，AI 没放过前不显示”。已修正本机链路：本地基础规则会立即下沉明确垃圾；高风险候选在等待云端数据库 / AI 期间显示为 `AI 复审中` 并临时下沉；AI 明确放过后自动显示。已新增 `Pe/CL她好涩 我不行了 👉 @...`、`看我主页 + 附近真实约见` 风险昵称和纯表情薄回复组合识别。本地回归 4 条截图同款样本全部隐藏，`附近有家面馆不错`、`有没有天安门附近的` 放过。Worker 源码已同步新增规则并通过 `npm run cloud:check`，但公网发布失败：Cloudflare 返回 `Invalid access token [code: 9109]` / `Authentication error [code: 10000]`。当前公网仍停在 17:31 的 Worker Version ID `0e62a0bf-38d6-47ff-8834-369a59cb8524` 和 `/downloads/latest.json buildId=2026-05-02-1726`；用户完成 Cloudflare 重新登录后，必须补跑 `npm run cloud:deploy`。
   - 2026-05-02 17:31 用户截图反馈仍有多条漏网：`比她好看的没她强，比她强的没她好看 @designksh1/@xiaonm88`、`刷了半天的X就她的主页能打✈️了 @designksh1/@xiaonm88`、`线下我就日过这个骚货 @designksh1`、以及 `免费破处` 风险昵称发 `十🙈`。根因：前两种重复导流话术没有被收进明确垃圾模板；云端候选规则也没把“风险昵称 + 一个字/表情薄回复”当作低信息诱导账号模式，所以部分样本没有稳定命中数据库层。已同步补本地规则和 Worker：新增两条模板，云端 `buildRowKeys` 把 minimal emoji payload 纳入 `low-information-lure-account` / `low-information-strong-lure-name`。公网 7 条截图同款样本全部返回 `db_rule_pattern` 或 `db_rule_template`、`action=hide`、`confidence=high`，`model=moderation-rule-candidates-2026-05-02-v1`，说明由数据库学习库接管，不调用外部 AI。测试 item 为 `1100`-`1106`，属于 `sync_dev_test_screenshot_templates_*` 开发验收数据。
   - 2026-05-02 17:11 已按用户追问验收并发布“数据库优先截住低信息风险账号回复”补强：`2🙃😍🧡` 这类数字/符号/表情薄回复会和风险昵称、随机数字 handle 组合进本地与 Worker 同构规则。公网真实测试样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `decisionLayer=db_rule_pattern`、`action=hide`、`confidence=high`、`model=moderation-rule-candidates-2026-05-02-v1`，说明命中数据库学习库，不调用外部 AI。测试 item 为 `1099`，使用 `sync_dev_test_db_rule_1650_*` / `device_test_db_rule_1650_*`，属于开发验收数据。
@@ -166,11 +167,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1747`
-  - extension manifest version：`0.1.42`
-  - App / Extension version：`1.0.42 (43)`
+  - `BUILD_ID = 2026-05-02-1756`
+  - extension manifest version：`0.1.43`
+  - App / Extension version：`1.0.43 (44)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 17:56 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1756`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 标签页返回 `build=2026-05-02-1756`，但 X 当时没加载出回复列表，结果为 `articles=0`、`stage=scan:not-enough-articles`，所以只证明注入成功。公网下载包已在本地生成，但 Cloudflare 登录令牌失效导致发布失败，公网 `/downloads/latest.json` 仍是上一版 `buildId=2026-05-02-1726`。
   - 2026-05-02 17:47 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1747`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1747`、`flushes=7`、`manualButtons=7`、`sideButtons=3`、`articles=29`、`stage=scan:done`。公网下载包已在本地生成，但 Cloudflare 登录令牌失效导致发布失败，公网 `/downloads/latest.json` 仍是上一版 `buildId=2026-05-02-1726`。
   - 2026-05-02 17:31 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1726`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1726`、`flushes=19/18`、`manualButtons=19/18`、`sideButtons=3`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1726`、`extensionVersion=0.1.40`。
   - 2026-05-02 17:11 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1650`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1650`、`flushes=16`、`manualButtons=16`、`sideButtons=3`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1650`、`extensionVersion=0.1.39`。
