@@ -127,9 +127,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-02-1633`
-  - 扩展版本 `0.1.37`
-  - App / Extension 版本 `1.0.37 (38)`
+  - `BUILD_ID = 2026-05-02-1650`
+  - 扩展版本 `0.1.39`
+  - App / Extension 版本 `1.0.39 (40)`
+  - 2026-05-02 17:11 已继续补强低信息回复识别：`2🙃😍🧡` 这种去掉表情后只剩极薄数字/符号的回复，会和风险昵称、随机数字 handle 组合进 `low-information-lure-account` / `low-information-strong-lure-name`，但普通账号发同样短回复不会被一刀切。本地回归：`孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 隐藏；普通账号同文案放过；`有没有天安门附近的`、`附近有家面馆不错` 放过。
   - 2026-05-02 16:34 已按用户纠正补强：`梦萱/孟轩`这种普通名字本身不算问题，问题是 `🌸无线线下🌸`、`🌸无常线下🌸`、`🌸无偿线下🌸` 这类昵称绕写。新版三种写法都会被识别为风险昵称；搭配随机数字 handle 和 `2🙃😍🧡` 这类数字表情低信息回复会隐藏。`有没有天安门附近的`、`附近有家面馆不错` 仍放过。线上 AI 设置测试样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `action=hide`、`confidence=high`。
   - 2026-05-02 16:23 已补截图漏网规则：`梦萱🌸无线线下🌸 @MullerChri42258` 发 `2🙃😍🧡` 这类“线下绕写昵称 + 随机数字 handle + 数字表情低信息回复”应隐藏。原因是旧规则只把 `线下` 当单个弱信号，且没把 `🌸` 当招揽式昵称装饰，最终只到 4 分、低于自动下沉线 5 分；新版把 `无线/无限 + 线下` 绕写和 `🌸` 装饰纳入风险昵称。本地回归确认该样本隐藏，`有没有天安门附近的`、`附近有家面馆不错` 仍放过。
   - 2026-05-02 15:41 已修复 `冲走` 按钮默认关闭问题：新版扩展默认开启回复下方 `冲走`，并会把旧安装里没有迁移标记的关闭状态自动改回开启。该改动只修主动标记按钮的可见性，不改变筛选阈值和自动下沉策略。
@@ -139,7 +140,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `3d44a89e-52c4-477c-967f-47eed7d72a6c`
+  - Version ID: `acf3c06b-3ad1-4b92-9d7d-76ef54602252`
+  - 2026-05-02 17:11 已部署数据库优先截住低信息风险账号回复补强。公网真实接口测试 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `db_rule_pattern/hide/high`，`model=moderation-rule-candidates-2026-05-02-v1`，说明命中数据库学习库，不调用外部 AI。公网首页、控制台和 `/downloads/latest.json` 均返回 200，下载清单为 `buildId=2026-05-02-1650`。
   - 2026-05-02 15:24 已上线数据库接管层，随后 15:45 为发布新版 Safari 下载包重新部署，当前 Worker Version ID 为 `8b9891cf-236d-4b89-a547-2e68f1c45697`。云端在调用外部 AI 前会先查 `reply_ai_memory` 和 `moderation_rule_candidates`；命中候选规则时返回 `db_rule_*`，不再花外部 AI 调用。线上候选库核验：`active=222`、`candidate=64`。`找个同城的哥哥` 和 `pattern:geo-relationship-bait` 已可由数据库直接接管；`pattern:geo-meetup-bait` / `template:hook+meetup` 保持候选，避免把正常附近讨论一刀切。
   - 2026-05-02 15:26 已用真实云端接口验证：测试样本 `找个同城弟弟` 命中 `db_rule_pattern` 并隐藏，测试 item `1097/1098` 没有产生新的外部 AI 调用。
   - 2026-05-02 13:55 已上线旧数据回填学习库接口：`POST /api/developer/backfill-training`。已把旧 `manual_hide/冲走`、`manual_allow/恢复`、AI 首次判断整理成样本和标注，并把旧 AI 高置信隐藏补进 AI 记忆库。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。

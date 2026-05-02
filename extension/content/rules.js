@@ -512,6 +512,17 @@
     return Array.from(String(text || "").matchAll(EMOJI_PATTERN)).length;
   }
 
+  function looksLikeThinSymbolOrNumberPayload(text) {
+    const raw = String(text || "").replace(ZERO_WIDTH_PATTERN, "");
+    const chars = Array.from(raw.replace(EMOJI_PATTERN, "").replace(/\s+/g, ""));
+    if (!chars.length || chars.length > 3) {
+      return false;
+    }
+    return chars.every(function (char) {
+      return /[\p{N}\p{S}\p{P}]/u.test(char);
+    });
+  }
+
   function findEarliestSlotIndex(compact, slotDefinition) {
     let earliest = -1;
 
@@ -616,6 +627,7 @@
         || /[%/\\|]/.test(raw)
         || /[\r\n]/.test(raw)
       );
+    const hasThinSymbolOrNumberPayload = looksLikeThinSymbolOrNumberPayload(raw);
     const hasGeoMeetupBait = compact.length > 0
       && compact.length <= 16
       && !hasCivicLandmarkNearbyQuestion
@@ -676,6 +688,7 @@
       hasLongDigitRun: hasLongDigitRun,
       hasLowInformationBadge: hasLowInformationBadge,
       hasFragmentedSymbolicReply: hasFragmentedSymbolicReply,
+      hasThinSymbolOrNumberPayload: hasThinSymbolOrNumberPayload,
       hasCivicLandmarkNearbyQuestion: hasCivicLandmarkNearbyQuestion,
       hasGeoMeetupBait: hasGeoMeetupBait,
       hasGeoRelationshipBait: hasGeoRelationshipBait,
@@ -969,12 +982,12 @@
       reasons.push("bait-question-shape");
     }
 
-    if (reply.hasLowInformationBadge && lureDisplayName && suspiciousHandle) {
+    if ((reply.hasLowInformationBadge || reply.hasThinSymbolOrNumberPayload) && lureDisplayName && suspiciousHandle) {
       score += 2;
       reasons.push("low-information-badge-from-lure-account");
     }
 
-    if (reply.hasFragmentedSymbolicReply && lureDisplayName && suspiciousHandle) {
+    if ((reply.hasFragmentedSymbolicReply || reply.hasThinSymbolOrNumberPayload) && lureDisplayName && suspiciousHandle) {
       score += 2;
       reasons.push("fragmented-symbolic-reply-from-lure-account");
     }
@@ -993,7 +1006,7 @@
       reasons.push("lure-display-name");
     }
 
-    if (strongLureDisplayName && (reply.hasLowInformationBadge || reply.hasFragmentedSymbolicReply || reply.hasMinimalTextPayload)) {
+    if (strongLureDisplayName && (reply.hasLowInformationBadge || reply.hasFragmentedSymbolicReply || reply.hasMinimalTextPayload || reply.hasThinSymbolOrNumberPayload)) {
       score += 3;
       reasons.push("strong-lure-display-name-low-info");
     }

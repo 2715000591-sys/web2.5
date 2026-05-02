@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1633";
+  const BUILD_ID = "2026-05-02-1650";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -2296,6 +2296,19 @@
   }
 
   function requestBackendJson(method, endpoint, payload, callback, withCredentials) {
+    let settled = false;
+    const finish = function (data) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      callback(data);
+    };
+    const timeoutId = setTimeout(function () {
+      finish(null);
+    }, 8000);
+
     if (api.runtime && typeof api.runtime.sendMessage === "function") {
       api.runtime.sendMessage({
         type: "web25-http-request",
@@ -2305,16 +2318,16 @@
         credentials: withCredentials ? "include" : "omit"
       }, function (response) {
         if (api.runtime && api.runtime.lastError) {
-          callback(null);
+          finish(null);
           return;
         }
 
         if (!response || !response.ok || !response.data) {
-          callback(null);
+          finish(null);
           return;
         }
 
-        callback(response.data);
+        finish(response.data);
       });
       return;
     }
@@ -2335,9 +2348,9 @@
         return null;
       });
     }).then(function (data) {
-      callback(data);
+      finish(data);
     }).catch(function () {
-      callback(null);
+      finish(null);
     });
   }
 
@@ -3070,12 +3083,22 @@
     if (
       analysis
       && strongDisplayNameRisk
-      && (analysis.hasLowInformationBadge || analysis.hasFragmentedSymbolicReply || analysis.hasMinimalTextPayload)
+      && (analysis.hasLowInformationBadge || analysis.hasFragmentedSymbolicReply || analysis.hasMinimalTextPayload || analysis.hasThinSymbolOrNumberPayload)
     ) {
       return "pattern:low-information-strong-lure-name";
     }
 
-    if (analysis && analysis.hasLowInformationBadge && displayNameRisk && suspiciousHandle) {
+    if (
+      analysis
+      && displayNameRisk
+      && suspiciousHandle
+      && (
+        analysis.hasLowInformationBadge
+        || analysis.hasFragmentedSymbolicReply
+        || analysis.hasMinimalTextPayload
+        || analysis.hasThinSymbolOrNumberPayload
+      )
+    ) {
       return "pattern:low-information-lure-account";
     }
 
@@ -4855,6 +4878,7 @@
         && (
         analysis.hasMinimalTextPayload
         || analysis.hasFragmentedSymbolicReply
+        || analysis.hasThinSymbolOrNumberPayload
         || analysis.hasLowInformationBadge
         || analysis.hasLureEmoji
         || analysis.hasShareLinkScam
@@ -4897,6 +4921,9 @@
       score += 2;
     }
     if (analysis && analysis.hasFragmentedSymbolicReply) {
+      score += 2;
+    }
+    if (analysis && analysis.hasThinSymbolOrNumberPayload) {
       score += 2;
     }
     if (analysis && analysis.hasLowInformationBadge) {
@@ -4967,6 +4994,7 @@
       || Boolean(analysis && (
         analysis.hasMinimalTextPayload
         || analysis.hasFragmentedSymbolicReply
+        || analysis.hasThinSymbolOrNumberPayload
         || analysis.hasLowInformationBadge
         || analysis.hasGeoMeetupBait
         || analysis.hasGeoRelationshipBait

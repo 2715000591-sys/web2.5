@@ -7790,6 +7790,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const hasMinimalTextPayload = emojiCount > 0 && Array.from(payloadText).length <= 1;
   const hasFragmentedSymbolicReply = looksLikeFragmentedSymbolicReply(replyText);
   const hasLowInformationBadge = looksLikeLowInformationBadge(replyText);
+  const hasThinSymbolOrNumberPayload = looksLikeThinSymbolOrNumberPayload(replyText);
   const hasLongDigitHandle = /\d{6,}/.test(rawHandle);
   const suspiciousHandle = handleLooksSuspicious(handle);
   const lureDisplayName = displayNameLooksLure(displayName);
@@ -7811,7 +7812,8 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     || compactReply.length <= 12
     || hasMinimalTextPayload
     || hasFragmentedSymbolicReply
-    || hasLowInformationBadge;
+    || hasLowInformationBadge
+    || hasThinSymbolOrNumberPayload;
   const evidenceNotes = [];
 
   if (highRiskDisplayName) {
@@ -7825,7 +7827,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasLongDigitHandle) {
     evidenceNotes.push("handle contains a long digit run");
   }
-  if (hasFragmentedSymbolicReply) {
+  if (hasFragmentedSymbolicReply || hasThinSymbolOrNumberPayload) {
     evidenceNotes.push("reply is fragmented emoji/symbol noise rather than normal conversation");
   }
   if (hasLowInformationBadge) {
@@ -7865,6 +7867,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasMinimalTextPayload,
     hasFragmentedSymbolicReply,
     hasLowInformationBadge,
+    hasThinSymbolOrNumberPayload,
     shortOrThinReply,
     hasShareLinkScam,
     hasCivicLandmarkNearbyQuestion,
@@ -9628,6 +9631,15 @@ function looksLikeLowInformationBadge(text) {
   return compact.length <= 6 && LOW_INFORMATION_BADGE_PATTERNS.some((pattern) => pattern.test(compact));
 }
 
+function looksLikeThinSymbolOrNumberPayload(text) {
+  const raw = String(text || "").replace(ZERO_WIDTH_PATTERN, "");
+  const chars = Array.from(raw.replace(EMOJI_PATTERN, "").replace(/\s+/g, ""));
+  if (!chars.length || chars.length > 3) {
+    return false;
+  }
+  return chars.every((char) => /[\p{N}\p{S}\p{P}]/u.test(char));
+}
+
 function looksLikeFragmentedSymbolicReply(text) {
   const raw = String(text || "");
   const compact = buildCompactRuleText(text);
@@ -10019,13 +10031,21 @@ function buildRowKeys(row) {
   const lowInformationStrongLureName = protectedGuardApplies
     ? false
     : (
-      (looksLikeLowInformationBadge(replyText || normalized) || looksLikeFragmentedSymbolicReply(replyText || normalized))
+      (
+        looksLikeLowInformationBadge(replyText || normalized)
+        || looksLikeFragmentedSymbolicReply(replyText || normalized)
+        || looksLikeThinSymbolOrNumberPayload(replyText || normalized)
+      )
       && displayNameLooksStrongLure(row.reply_display_name || row.replyDisplayName || "")
     );
   const lowInformationLureAccount = protectedGuardApplies
     ? false
     : (
-      (looksLikeLowInformationBadge(replyText || normalized) || looksLikeFragmentedSymbolicReply(replyText || normalized))
+      (
+        looksLikeLowInformationBadge(replyText || normalized)
+        || looksLikeFragmentedSymbolicReply(replyText || normalized)
+        || looksLikeThinSymbolOrNumberPayload(replyText || normalized)
+      )
       && displayNameLooksLure(row.reply_display_name || row.replyDisplayName || "")
       && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
     );
