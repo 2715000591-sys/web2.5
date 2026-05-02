@@ -115,10 +115,11 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`f54ff4e3-e820-4f34-840f-6a6da3c72cfa`
+  - Version ID：`29714654-a468-4df3-b5fb-2ce99b3dbb44`
   - 2026-05-02 `npm run cloud:deploy` 已成功部署控制台前端方格直达详情页改动。
   - 2026-05-02 用户已亲自完成 Cloudflare 网页登录授权；本机发布权限恢复。随后已再次运行 `npm run cloud:check` 和 `npm run cloud:deploy`，公网更新成功，当前 Version ID 为 `f66362e3-0f48-46e0-9639-95bf51590205`。已用系统代理验证首页、控制台、`/console/?detail=ai_hide`、`/downloads/latest.json` 均返回 200，线上 `/app.js` 已包含详情页精简模式和设备显示修正。
   - 2026-05-02 已修复控制台“恢复这条”前台不同步：用户在来源详情页恢复后，当前列表会立刻移除原来的隐藏记录；刷新后的来源分类也会用 `manual_allow` 抑制同一条 `auto_hide` / `manual_hide`，不再让它继续留在“本地规则下沉”里。已部署到公网 Version ID `f54ff4e3-e820-4f34-840f-6a6da3c72cfa`。
+  - 2026-05-02 后续发现“累计自动整理”详情页仍独立读取 `auto_hide`，没有套用同一条 `manual_allow` 抑制逻辑。已修复为所有相关明细入口共用恢复结果：`本地规则下沉`、`累计自动整理`、底部近期审查列表、广告详情页都会在同一条恢复后隐藏原来的被挡记录。已部署到公网 Version ID `29714654-a468-4df3-b5fb-2ce99b3dbb44`，并验证 `/console/?detail=auto` 和线上 `/app.js` 可访问。
   - 2026-05-02 已按用户判断收窄地点搭讪误伤：`有没有天安门附近的` / `有没有天安门广场附近的` / `有没有北京天安门附近的` 这类明显公共地标玩梗或阴阳怪气句式，不应仅因“有没有 + 附近”直接被本地规则挡下；但 `有万达广场附近的吗`、`有附近的吗`、`找个同城的哥哥`、`有没有天安门附近可约吗` 仍应隐藏。已同步改本地规则和 Worker。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。

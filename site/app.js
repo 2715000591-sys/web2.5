@@ -466,8 +466,13 @@ function getReviewWeightCounts(items) {
 function getFilteredReviewItems(items) {
   const list = getChronologicalReviewItems(items);
   const query = String(appState.reviewQuery || "").trim().toLowerCase();
+  const allowedRecordKeys = getManualAllowRecordKeys(list);
 
   return list.filter((item) => {
+    if (isRestoredHiddenRecord(item, allowedRecordKeys)) {
+      return false;
+    }
+
     const eventType = getReviewEventType(item);
     const matchFilter = appState.reviewFilter === "all"
       || (appState.reviewFilter === "auto" && eventType === "auto_hide")
@@ -899,6 +904,29 @@ function getReplyRecordKey(item) {
   return handle || text ? `fallback:${handle}:${text}` : "";
 }
 
+function getManualAllowRecordKeys(items) {
+  const allowedRecordKeys = new Set();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    if (getReviewEventType(item) !== "manual_allow") {
+      return;
+    }
+    const key = getReplyRecordKey(item);
+    if (key) {
+      allowedRecordKeys.add(key);
+    }
+  });
+  return allowedRecordKeys;
+}
+
+function isRestoredHiddenRecord(item, allowedRecordKeys) {
+  const eventType = getReviewEventType(item);
+  if (eventType !== "auto_hide" && eventType !== "manual_hide" && eventType !== "ad_home_hide" && eventType !== "ad_hide" && eventType !== "ad_reply_hide") {
+    return false;
+  }
+  const key = getReplyRecordKey(item);
+  return Boolean(key && allowedRecordKeys && allowedRecordKeys.has(key));
+}
+
 function getExplicitSourceBucket(item) {
   const raw = String((item && (item.sourceBucket || item.hiddenSource || item.hidden_source)) || "").trim();
   if (!raw) {
@@ -1035,21 +1063,12 @@ function buildSourceBuckets(replyAiPayload) {
     }));
   });
 
-  const allowedRecordKeys = new Set();
-  recentItems.forEach((item) => {
-    if (getReviewEventType(item) !== "manual_allow") {
-      return;
-    }
-    const key = getReplyRecordKey(item);
-    if (key) {
-      allowedRecordKeys.add(key);
-    }
-  });
+  const allowedRecordKeys = getManualAllowRecordKeys(recentItems);
 
   recentItems.forEach((item) => {
     const eventType = getReviewEventType(item);
     const key = getReplyRecordKey(item);
-    if ((eventType === "auto_hide" || eventType === "manual_hide") && key && allowedRecordKeys.has(key)) {
+    if (isRestoredHiddenRecord(item, allowedRecordKeys)) {
       return;
     }
     if (eventType === "auto_hide" && key && aiRecordKeys.has(key)) {
@@ -1164,8 +1183,9 @@ function makeMetricDetailItem(item, detailId, overrides) {
 
 function buildAutoMetricDetailItems(payload) {
   const recentItems = payload && Array.isArray(payload.recent) ? payload.recent : [];
+  const allowedRecordKeys = getManualAllowRecordKeys(recentItems);
   return getChronologicalReviewItems(recentItems)
-    .filter((item) => getReviewEventType(item) === "auto_hide")
+    .filter((item) => getReviewEventType(item) === "auto_hide" && !isRestoredHiddenRecord(item, allowedRecordKeys))
     .map((item) => makeMetricDetailItem(item, "auto", {
       detailType: "moderation_event",
       sourceBucket: "local_rule",
@@ -1176,9 +1196,14 @@ function buildAutoMetricDetailItems(payload) {
 
 function buildAdMetricDetailItems(payload, detailId) {
   const adEvents = payload && Array.isArray(payload.adEvents) ? payload.adEvents : [];
+  const recentItems = payload && Array.isArray(payload.recent) ? payload.recent : [];
+  const allowedRecordKeys = getManualAllowRecordKeys(recentItems);
   const targetEventType = detailId === "ad_reply" ? "ad_reply_hide" : "ad_home_hide";
   return getChronologicalReviewItems(adEvents)
     .filter((item) => {
+      if (isRestoredHiddenRecord(item, allowedRecordKeys)) {
+        return false;
+      }
       const eventType = getReviewEventType(item);
       return targetEventType === "ad_home_hide"
         ? eventType === "ad_home_hide" || eventType === "ad_hide"
