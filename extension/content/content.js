@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-0943";
+  const BUILD_ID = "2026-05-02-1033";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -734,7 +734,7 @@
     }
 
     if (historyCount > 0) {
-      parts.push("命中历史标记 " + historyCount + " 条");
+      parts.push("你手动冲走 " + historyCount + " 条");
     }
 
     if (manualCount > 0) {
@@ -756,14 +756,14 @@
     if (source === "history") {
       return {
         className: "web25-hidden-badge-history",
-        label: "命中历史标记"
+        label: "你手动冲走"
       };
     }
 
-    if (source === "ai-global") {
+    if (source === "ai-global" || source === "ai-memory") {
       return {
         className: "web25-hidden-badge-ai-global",
-        label: "AI 全局屏蔽"
+        label: "AI 学习库屏蔽"
       };
     }
 
@@ -4930,9 +4930,7 @@
 
     if (protectedAccount) {
       return {
-        shouldQueue: highRiskDisplayName
-          || Boolean(analysis && analysis.hasExternalContactPayload)
-          || (lureDisplayName && shortOrThinReply),
+        shouldQueue: true,
         score: score
       };
     }
@@ -4962,7 +4960,7 @@
     );
 
     return {
-      shouldQueue: Boolean((analysisSignals || accountMetadataSignals) && (hasStrongTrigger || hasWeakTriggerCombo)),
+      shouldQueue: true,
       score: score
     };
   }
@@ -5245,7 +5243,7 @@
     body.textContent = entry.replyText || "这条回复没有可读取文本";
 
     let note = null;
-    if (entry && entry.aiReasonShort && (entry.hiddenSource === "ai" || entry.hiddenSource === "ai-global")) {
+    if (entry && entry.aiReasonShort && (entry.hiddenSource === "ai" || entry.hiddenSource === "ai-global" || entry.hiddenSource === "ai-memory")) {
       note = document.createElement("div");
       note.className = "web25-bottom-card-note";
       note.textContent = entry.aiReasonShort;
@@ -5396,7 +5394,7 @@
         const hasPinnedHide = replyCell.getAttribute("data-web25-manual-pinned") === "1";
         const hasHistoryHide = hasDecisionKey(state.manualHideTexts, storedManualKeys);
         const isManuallyHidden = !isAllowed && (hasPinnedHide || hasHistoryHide);
-        const isGloballyBlocked = !isAllowed && isReplyHandleGloballyBlocked(authorMeta);
+        const isGloballyBlocked = false;
         const shouldQueueAi = !isAllowed
           && !hasPinnedHide
           && !hasHistoryHide
@@ -5425,7 +5423,7 @@
             score: 100,
             reasons: ["manual-hide"]
           };
-          hiddenSource = "history";
+          hiddenSource = "manual";
         } else if (isGloballyBlocked) {
           decision = {
             hide: true,
@@ -5439,34 +5437,15 @@
             score: readyAiDecision.shouldHide === true ? 100 : -10,
             reasons: ["reply-ai:" + String(readyAiDecision.reasonShort || readyAiDecision.decisionLayer || "checked")]
           };
-          hiddenSource = readyAiDecision.shouldHide === true
-            ? (readyAiDecision.decisionLayer === "global_blocklist" ? "ai-global" : "ai")
-            : null;
-        } else if (AUTO_HIDE_ENABLED && window.Web25Rules && typeof window.Web25Rules.evaluateReply === "function") {
-          decision = window.Web25Rules.evaluateReply(replyText, mainText, {
-            isVerified: protectedAccount && isVerifiedAccount(replyArticle),
-            isFollowed: protectedAccount && isFollowedAccount(replyArticle),
-            handle: authorMeta.handle,
-            displayName: authorMeta.displayName,
-            isRepeatSuspiciousHandle: repeatSuspiciousHandle,
-            templateRuleMatched: templateRuleMatched
-          });
-          if (decision.hide) {
-            hiddenSource = "auto";
-            if (!AUTO_HIDE_ENABLED) {
-              decision = {
-                hide: false,
-                score: decision.score,
-                reasons: (decision.reasons || []).concat(["auto-hide-disabled"])
-              };
-              hiddenSource = null;
-            }
+          if (readyAiDecision.shouldHide === true) {
+            const aiLayer = String(readyAiDecision.decisionLayer || "");
+            hiddenSource = aiLayer === "ai" ? "ai" : "ai-memory";
           }
         } else {
           decision = {
             hide: false,
             score: 0,
-            reasons: AUTO_HIDE_ENABLED ? ["rules-missing"] : ["auto-disabled"]
+            reasons: ["waiting-for-cloud-ai"]
           };
         }
 
@@ -5489,7 +5468,7 @@
           aiReady: Boolean(readyAiDecision),
           aiReasonShort: readyAiDecision && readyAiDecision.shouldHide === true
             ? String(readyAiDecision.reasonShort || "")
-            : (hiddenSource === "ai-global" ? "命中 AI 共用的高风险账号名单。" : "")
+            : (hiddenSource === "ai-memory" ? "命中 AI 学习库。" : "")
         };
       });
 
@@ -5516,11 +5495,9 @@
           hiddenCount += 1;
           if (hiddenSource === "manual") {
             manualHiddenCount += 1;
-          } else if (hiddenSource === "history") {
-            historyHiddenCount += 1;
           } else {
             autoHiddenCount += 1;
-            if (hiddenSource === "ai" || hiddenSource === "ai-global") {
+            if (hiddenSource === "ai" || hiddenSource === "ai-global" || hiddenSource === "ai-memory") {
               aiHiddenCount += 1;
             }
           }

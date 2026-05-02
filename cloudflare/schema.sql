@@ -206,6 +206,37 @@ CREATE TABLE IF NOT EXISTS reply_ai_results (
 CREATE INDEX IF NOT EXISTS idx_reply_ai_results_status_updated_at
 ON reply_ai_results(status, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS reply_ai_memory (
+  id TEXT PRIMARY KEY,
+  memory_key TEXT NOT NULL,
+  memory_key_type TEXT NOT NULL DEFAULT 'exact_text',
+  action TEXT NOT NULL DEFAULT 'hide',
+  confidence TEXT NOT NULL DEFAULT 'high',
+  matched_safety_labels_json TEXT NOT NULL DEFAULT '[]',
+  matched_profile_signals_json TEXT NOT NULL DEFAULT '[]',
+  reason_short TEXT NOT NULL DEFAULT '',
+  prompt_version TEXT NOT NULL DEFAULT '',
+  source_item_id INTEGER,
+  source_result_updated_at TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  disabled_reason TEXT NOT NULL DEFAULT '',
+  expires_at TEXT,
+  hit_count INTEGER NOT NULL DEFAULT 0,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reply_ai_memory_key_version_unique
+ON reply_ai_memory(memory_key, prompt_version);
+
+CREATE INDEX IF NOT EXISTS idx_reply_ai_memory_status_expires
+ON reply_ai_memory(status, expires_at, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_reply_ai_memory_source_item
+ON reply_ai_memory(source_item_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS reply_ai_account_risk (
   reply_handle TEXT PRIMARY KEY,
   total_high_confidence_hide_count INTEGER NOT NULL DEFAULT 0,

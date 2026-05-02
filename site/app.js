@@ -62,22 +62,23 @@ const refreshDashboardButton = document.getElementById("refreshDashboard");
 const legacyRefreshDashboard = document.getElementById("legacyRefreshDashboard");
 
 const personalStatNodes = {
+  totalSkippedCount: document.getElementById("totalSkippedCount"),
   autoHideCount: document.getElementById("autoHideCount"),
   manualHideCount: document.getElementById("manualHideCount"),
   manualAllowCount: document.getElementById("manualAllowCount"),
   distinctHandleCount: document.getElementById("distinctHandleCount"),
   heroPhraseCount: document.getElementById("heroPhraseCount"),
   adHomeHideCount: document.getElementById("adHomeHideCount"),
-  adReplyHideCount: document.getElementById("adReplyHideCount")
+  adReplyHideCount: document.getElementById("adReplyHideCount"),
+  adHideCount: document.getElementById("adHideCount")
 };
 
 const sourceStatNodes = {
-  ai: document.getElementById("sourceAiCount"),
-  ai_reuse: document.getElementById("sourceAiReuseCount"),
-  history: document.getElementById("sourceHistoryCount"),
-  public_rule: document.getElementById("sourcePublicRuleCount"),
-  account_blocklist: document.getElementById("sourceAccountBlocklistCount"),
-  local_rule: document.getElementById("sourceLocalRuleCount")
+  all_skipped: document.getElementById("totalSkippedCount"),
+  ai_direct: document.getElementById("sourceAiDirectCount"),
+  ai_memory: document.getElementById("sourceAiMemoryCount"),
+  manual: document.getElementById("manualHideCount"),
+  ads: document.getElementById("adHideCount")
 };
 
 const globalStatNodes = {
@@ -657,40 +658,22 @@ function getCachedReplyAiPayload() {
 
 const SOURCE_BUCKETS = [
   {
-    id: "ai",
-    title: "AI 智能屏蔽",
-    note: "AI 已判定",
+    id: "all_skipped",
+    title: "累计跳过无用内容",
+    note: "全部合计",
+    empty: "当前还没有跳过记录。"
+  },
+  {
+    id: "ai_direct",
+    title: "AI 直接屏蔽",
+    note: "第一次交给 AI 判定",
     empty: "当前没有真正由 AI 新判断隐藏的回复。"
   },
   {
-    id: "ai_reuse",
-    title: "AI 结果复用",
-    note: "没有调用 AI",
-    empty: "当前没有复用同账号、同文案或同模板的 AI 结果。"
-  },
-  {
-    id: "history",
-    title: "数据库历史命中",
-    note: "来自历史冲走",
-    empty: "当前记录还没有带历史命中来源；等来源标记接入后会显示在这里。"
-  },
-  {
-    id: "public_rule",
-    title: "公共数据库规则",
-    note: "全局规则命中",
-    empty: "当前记录还没有带公共规则来源；等来源标记接入后会显示在这里。"
-  },
-  {
-    id: "account_blocklist",
-    title: "账号黑名单",
-    note: "来自账号名单",
-    empty: "当前还没有进入账号黑名单的记录。"
-  },
-  {
-    id: "local_rule",
-    title: "本地规则下沉",
-    note: "没有调用 AI",
-    empty: "当前没有本地规则直接下沉的近期记录。"
+    id: "ai_memory",
+    title: "AI 学习库屏蔽",
+    note: "没有再次调用 AI",
+    empty: "当前没有命中 AI 学习库的记录。"
   },
   {
     id: "manual",
@@ -699,10 +682,10 @@ const SOURCE_BUCKETS = [
     empty: "当前没有你手动冲走的近期记录。"
   },
   {
-    id: "restored",
-    title: "恢复误判",
-    note: "纠错记录",
-    empty: "当前没有恢复误判的近期记录。"
+    id: "ads",
+    title: "跳过官方广告",
+    note: "主页和回复区官方广告",
+    empty: "当前没有官方广告跳过记录。"
   }
 ];
 
@@ -711,46 +694,36 @@ const SOURCE_BUCKET_META = SOURCE_BUCKETS.reduce((map, item) => {
   return map;
 }, {});
 
-const EXTRA_METRIC_DETAIL_META = {
-  auto: {
-    id: "auto",
-    title: "累计自动整理",
-    note: "系统自动处理",
-    eyebrow: "回复审查",
-    empty: "当前没有系统自动处理的近期记录。"
-  },
-  ad_home: {
-    id: "ad_home",
-    title: "已在主页跳过广告",
-    note: "主页官方广告",
-    eyebrow: "官方广告记录",
-    empty: "当前没有主页官方广告的近期记录。"
-  },
-  ad_reply: {
-    id: "ad_reply",
-    title: "已在回复区跳过广告",
-    note: "回复区官方广告",
-    eyebrow: "官方广告记录",
-    empty: "当前没有回复区官方广告的近期记录。"
-  }
-};
+const EXTRA_METRIC_DETAIL_META = {};
 
 const METRIC_DETAIL_ALIASES = {
-  ad: "ad_home",
-  ad_home_hide: "ad_home",
-  ad_hide: "ad_home",
-  ad_reply_hide: "ad_reply",
-  local: "local_rule",
-  account: "account_blocklist",
-  global_blocklist: "account_blocklist",
+  ad: "ads",
+  ad_home: "ads",
+  ad_reply: "ads",
+  ad_home_hide: "ads",
+  ad_hide: "ads",
+  ad_reply_hide: "ads",
+  ai: "ai_direct",
+  ai_hide: "ai_direct",
+  ai_reuse: "ai_memory",
+  reuse: "ai_memory",
+  ai_global: "ai_memory",
+  ai_memory_exact: "ai_memory",
+  local: "ai_memory",
+  account: "ai_memory",
+  global_blocklist: "ai_memory",
   manual_hide: "manual",
-  manual_allow: "restored"
+  manual_allow: "manual"
 };
 
 const AI_REUSE_HIDE_LAYERS = new Set([
   "reuse_exact_hide",
   "reuse_template_hide",
-  "reuse_account_hide"
+  "reuse_account_hide",
+  "global_blocklist",
+  "ai_memory_exact_text",
+  "ai_memory_thin_context",
+  "ai_memory_template"
 ]);
 
 function normalizeMetricDetailId(value) {
@@ -787,7 +760,7 @@ function getMetricDetailMeta(detailId) {
   return EXTRA_METRIC_DETAIL_META[normalized] || Object.assign({
     eyebrow: "明细",
     empty: "当前没有这个分类的近期记录。"
-  }, EXTRA_METRIC_DETAIL_META.auto);
+  }, SOURCE_BUCKET_META.all_skipped);
 }
 
 function buildConsoleDetailUrl(detailId) {
@@ -888,7 +861,7 @@ function changeAiFeedPage(page) {
 }
 
 function getBucketMeta(bucketId) {
-  return SOURCE_BUCKET_META[bucketId] || SOURCE_BUCKET_META.local_rule;
+  return SOURCE_BUCKET_META[bucketId] || SOURCE_BUCKET_META.ai_memory || SOURCE_BUCKETS[0];
 }
 
 function getReplyRecordKey(item) {
@@ -933,32 +906,36 @@ function getExplicitSourceBucket(item) {
     return "";
   }
   const mapping = {
-    ai: "ai",
-    ai_reuse: "ai_reuse",
-    history: "history",
-    public_rule: "public_rule",
-    account_blocklist: "account_blocklist",
-    "ai-global": "account_blocklist",
-    global_blocklist: "account_blocklist",
-    local_rule: "local_rule",
-    auto: "local_rule",
+    all_skipped: "all_skipped",
+    ai: "ai_direct",
+    ai_direct: "ai_direct",
+    ai_reuse: "ai_memory",
+    ai_memory: "ai_memory",
+    history: "ai_memory",
+    public_rule: "ai_memory",
+    account_blocklist: "ai_memory",
+    "ai-global": "ai_memory",
+    "ai-memory": "ai_memory",
+    global_blocklist: "ai_memory",
+    local_rule: "ai_memory",
+    auto: "ai_memory",
     manual: "manual",
     manual_hide: "manual",
-    restored: "restored",
-    manual_allow: "restored"
+    restored: "manual",
+    manual_allow: "manual",
+    ads: "ads",
+    ad_home: "ads",
+    ad_reply: "ads"
   };
   return mapping[raw] || "";
 }
 
 function getReplyAiBucket(item) {
   const decisionLayer = String(item && item.decisionLayer ? item.decisionLayer : "").trim();
-  if (decisionLayer === "global_blocklist") {
-    return "account_blocklist";
-  }
   if (AI_REUSE_HIDE_LAYERS.has(decisionLayer)) {
-    return "ai_reuse";
+    return "ai_memory";
   }
-  return "ai";
+  return "ai_direct";
 }
 
 function getRecentEventBucket(item) {
@@ -970,10 +947,7 @@ function getRecentEventBucket(item) {
   if (eventType === "manual_hide") {
     return "manual";
   }
-  if (eventType === "manual_allow") {
-    return "restored";
-  }
-  return "local_rule";
+  return "ai_memory";
 }
 
 function getBucketReason(item) {
@@ -984,26 +958,14 @@ function getBucketReason(item) {
   if (item && item.bucketReason) {
     return item.bucketReason;
   }
-  if (bucketId === "ai_reuse") {
-    return "复用同账号、同文案或同模板的已有结果，没有重新调用 AI。";
-  }
-  if (bucketId === "history") {
-    return "命中你以前冲走过的历史记录。";
-  }
-  if (bucketId === "public_rule") {
-    return "命中公共数据库规则或开发者确认规则。";
-  }
-  if (bucketId === "account_blocklist") {
-    return "来自账号黑名单，后续同账号回复会直接隐藏。";
+  if (bucketId === "ai_memory") {
+    return "命中 AI 已经学过的内容，没有重新调用 AI。";
   }
   if (bucketId === "manual") {
     return "你手动点过冲走。";
   }
-  if (bucketId === "restored") {
-    return "你恢复过这条内容，它会作为纠错记录保留。";
-  }
-  if (bucketId === "local_rule") {
-    return "本地规则或当前规则层直接下沉，没有调用 AI。";
+  if (bucketId === "ads") {
+    return "跳过 X 官方广告。";
   }
   return "AI 已判定为需要隐藏。";
 }
@@ -1030,8 +992,8 @@ function buildSourceBuckets(replyAiPayload) {
   const recentItems = appState.dashboardCache && Array.isArray(appState.dashboardCache.recent)
     ? appState.dashboardCache.recent.slice()
     : [];
-  const globalAccounts = replyAiPayload && Array.isArray(replyAiPayload.globalBlockedAccounts)
-    ? replyAiPayload.globalBlockedAccounts.slice()
+  const adEvents = appState.dashboardCache && Array.isArray(appState.dashboardCache.adEvents)
+    ? appState.dashboardCache.adEvents.slice()
     : [];
   const aiRecordKeys = new Set();
 
@@ -1049,20 +1011,6 @@ function buildSourceBuckets(replyAiPayload) {
     buckets[bucketId].push(normalized);
   });
 
-  globalAccounts.forEach((item) => {
-    buckets.account_blocklist.push(makeSourceItem(item, "account_blocklist", {
-      detailType: "account_blocklist",
-      replyText: "这个账号已经进入账号黑名单，后续高风险回复会直接隐藏。",
-      bucketReason: item && item.lastReasonShort
-        ? item.lastReasonShort
-        : "高置信命中达到全局账号名单条件。",
-      createdAt: item && (item.updatedAt || item.globalBlockedAt) ? (item.updatedAt || item.globalBlockedAt) : "",
-      replyDisplayName: "",
-      replyHandle: item && item.replyHandle ? item.replyHandle : "",
-      canRestoreEvent: true
-    }));
-  });
-
   const allowedRecordKeys = getManualAllowRecordKeys(recentItems);
 
   recentItems.forEach((item) => {
@@ -1075,11 +1023,31 @@ function buildSourceBuckets(replyAiPayload) {
       return;
     }
     const bucketId = getRecentEventBucket(item);
+    if (bucketId !== "manual" || eventType !== "manual_hide") {
+      return;
+    }
     buckets[bucketId].push(makeSourceItem(item, bucketId, {
       detailType: "moderation_event",
       canRestoreEvent: eventType === "auto_hide" || eventType === "manual_hide"
     }));
   });
+
+  adEvents.forEach((item) => {
+    if (isRestoredHiddenRecord(item, allowedRecordKeys)) {
+      return;
+    }
+    buckets.ads.push(makeSourceItem(item, "ads", {
+      detailType: "ad_event",
+      bucketReason: getAdScopeMeta(getReviewEventType(item)).placementLabel,
+      canRestoreAd: true
+    }));
+  });
+
+  buckets.all_skipped = []
+    .concat(buckets.ai_direct || [])
+    .concat(buckets.ai_memory || [])
+    .concat(buckets.manual || [])
+    .concat(buckets.ads || []);
 
   SOURCE_BUCKETS.forEach((bucket) => {
     buckets[bucket.id].sort((left, right) => {
@@ -1092,9 +1060,33 @@ function buildSourceBuckets(replyAiPayload) {
   return buckets;
 }
 
+function getSkippedStatsFromDashboard() {
+  const hasSkippedStats = Boolean(appState.dashboardCache && appState.dashboardCache.skippedStats);
+  const stats = appState.dashboardCache && appState.dashboardCache.skippedStats
+    ? appState.dashboardCache.skippedStats
+    : {};
+  const fallbackPersonal = appState.dashboardCache && appState.dashboardCache.personalStats
+    ? appState.dashboardCache.personalStats
+    : {};
+  const adFallback = Number(fallbackPersonal.adHomeHideEvents || 0) + Number(fallbackPersonal.adReplyHideEvents || 0);
+  const manualFallback = Number(fallbackPersonal.manualHideEvents || 0);
+  const aiDirectCount = Number(stats.aiDirectHideCount || 0);
+  const aiMemoryCount = Number(stats.aiMemoryHideCount || 0);
+  return {
+    __ready: hasSkippedStats,
+    all_skipped: hasSkippedStats ? Number(stats.totalSkippedCount || 0) : 0,
+    ai_direct: aiDirectCount,
+    ai_memory: aiMemoryCount,
+    manual: Number(stats.manualHideCount || manualFallback || 0),
+    ads: Number(stats.adHideCount || adFallback || 0)
+  };
+}
+
 function updateSourceMetricCards(buckets) {
+  const stats = getSkippedStatsFromDashboard();
   SOURCE_BUCKETS.forEach((bucket) => {
-    const count = buckets && Array.isArray(buckets[bucket.id]) ? buckets[bucket.id].length : 0;
+    const fallbackCount = buckets && Array.isArray(buckets[bucket.id]) ? buckets[bucket.id].length : 0;
+    const count = stats.__ready ? stats[bucket.id] : fallbackCount;
     const node = sourceStatNodes[bucket.id];
     if (node) {
       node.textContent = String(count);
@@ -1380,9 +1372,7 @@ function renderAiFeedSection(replyAiPayload) {
     loggedIn
   });
   const sourceBuckets = loggedIn ? buildSourceBuckets(replyAiPayload) : createEmptySourceBuckets();
-  const totalSourceItems = SOURCE_BUCKETS.reduce((sum, bucket) => {
-    return sum + (Array.isArray(sourceBuckets[bucket.id]) ? sourceBuckets[bucket.id].length : 0);
-  }, 0);
+  const totalSourceItems = Array.isArray(sourceBuckets.all_skipped) ? sourceBuckets.all_skipped.length : 0;
 
   if (aiFeedCountPill) {
     if (!settings.enabled) {
@@ -1432,11 +1422,18 @@ function renderAiFeedSection(replyAiPayload) {
 function setMetricGroup(statNodes, stats) {
   const adHomeHideEvents = stats.adHomeHideEvents || 0;
   const adReplyHideEvents = stats.adReplyHideEvents || 0;
+  const manualHideCount = typeof stats.manualHideCount === "number"
+    ? stats.manualHideCount
+    : (stats.manualHideEvents || 0);
+  const adHideCount = typeof stats.adHideCount === "number"
+    ? stats.adHideCount
+    : (adHomeHideEvents + adReplyHideEvents);
+  setNumber(statNodes.totalSkippedCount, stats.totalSkippedCount || 0);
   setNumber(statNodes.autoHideCount, stats.autoHideEvents || 0);
   if (statNodes.adTotalHideCount) {
     setNumber(statNodes.adTotalHideCount, adHomeHideEvents + adReplyHideEvents);
   }
-  setNumber(statNodes.manualHideCount, stats.manualHideEvents || 0);
+  setNumber(statNodes.manualHideCount, manualHideCount);
   if (statNodes.manualAllowCount) {
     setNumber(statNodes.manualAllowCount, stats.manualAllowEvents || 0);
   }
@@ -1444,6 +1441,7 @@ function setMetricGroup(statNodes, stats) {
   setNumber(statNodes.heroPhraseCount, stats.distinctHiddenPhrases || 0);
   setNumber(statNodes.adHomeHideCount, adHomeHideEvents);
   setNumber(statNodes.adReplyHideCount, adReplyHideEvents);
+  setNumber(statNodes.adHideCount, adHideCount);
 }
 
 function setDeveloperStats(stats) {
@@ -2614,8 +2612,13 @@ async function logout() {
 
 function renderCloudDashboard(payload) {
   appState.dashboardCache = payload || null;
+  const personalStats = Object.assign(
+    {},
+    payload && payload.personalStats ? payload.personalStats : {},
+    payload && payload.skippedStats ? payload.skippedStats : {}
+  );
   setMetricGroup(globalStatNodes, payload && payload.globalStats ? payload.globalStats : {});
-  setMetricGroup(personalStatNodes, payload && payload.personalStats ? payload.personalStats : {});
+  setMetricGroup(personalStatNodes, personalStats);
   renderBindings(payload && payload.bindings ? payload.bindings : [], payload && payload.activeBinding ? payload.activeBinding : null);
   renderDeveloperSection(payload && payload.developer ? payload.developer : null);
   renderAiFeedSection(payload && payload.replyAi ? payload.replyAi : null);

@@ -104,7 +104,7 @@
 - 普通用户真实邮件验证码发送还没接正式发信服务
 - 普通用户正式登录闭环还没完全收口
 - 个性化屏蔽还没开始
-- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。用户已明确 API 已提供，下一轮不要再让用户重新购买。线上开发者账号曾加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过真实 AI 接入测试、6 条小样本识别测试、4 条成人内容边界小样本测试。2026-05-01 后续发现保存 AI 设置时会把空 Key 输入框误当成清空 Key，已修复并部署。用户已重新提供 Key，当前已通过线上接口加密保存，控制台只应显示后四位 `a6db`；不要把完整 Key 写入文档、代码、命令、日志或 GitHub。基础层现在明确放过正常成人/色情讨论，只压约见导流、联系方式、诈骗、木马/安装包、主页诱导和空洞钓鱼。2026-05-01 已新增提示词包 `docs/ai-prompt-packs/sexual-leadgen-foundation/`，并用线上 Key 验证：引流样本 hide，正常成人治理讨论 allow。后续还需要用真实 X 回复做页面级验收。
+- AI 判断已接入 DeepSeek 小额测试配置；2026-05-01 已部署通用大模型兼容适配，会自动尝试多种常见返回格式。用户已明确 API 已提供，下一轮不要再让用户重新购买。线上开发者账号曾加密保存 DeepSeek Key，模型为 `deepseek-v4-flash`，并已通过真实 AI 接入测试、6 条小样本识别测试、4 条成人内容边界小样本测试。2026-05-01 后续发现保存 AI 设置时会把空 Key 输入框误当成清空 Key，已修复并部署。用户已重新提供 Key，当前已通过线上接口加密保存，控制台只应显示后四位 `a6db`；不要把完整 Key 写入文档、代码、命令、日志或 GitHub。基础层现在明确放过正常成人/色情讨论，只压约见导流、联系方式、诈骗、木马/安装包、主页诱导和空洞钓鱼。2026-05-01 已新增提示词包 `docs/ai-prompt-packs/sexual-leadgen-foundation/`，并用线上 Key 验证：引流样本 hide，正常成人治理讨论 allow。2026-05-02 已确认新版插件注入真实 X 页面；后续只需用自然遇到的真实样本继续观察误判和漏网。
 - 正式自定义域名还没定
 - 远程 D1 里仍有少量开发测试原始行，只能在明确识别后清理
 
@@ -115,7 +115,11 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`d45d03b9-e4db-4ec3-838a-243f92aaffe5`
+  - Version ID：`f931af5f-32ee-459d-ba1b-62b6dee83bb3`
+  - 2026-05-02 已完成 `AI 首判、云端记忆复用`：新增并应用线上 `reply_ai_memory` 表；只把 AI 直接高置信隐藏结果写入记忆；记忆命中、旧复用、`global_blocklist` 等在控制台归入 `AI 学习库屏蔽`；用户恢复误判会停用对应记忆。发布前已备份 D1 到 `backups/d1/web25-2026-05-02-ai-memory-before-schema.sql`。
+  - 2026-05-02 `/api/state` 已改为不再把公共精确规则合并进插件本地手动隐藏列表；公共规则和高共识模板只作为云端 AI 判断参考信号。公网烟测显示新测试身份返回 `manualHideKeys: []`，随后已删除该临时测试 sync key。
+  - 2026-05-02 控制台累计方格已固定为 5 块：`累计跳过无用内容`、`AI 直接屏蔽`、`AI 学习库屏蔽`、`你手动冲走`、`跳过官方广告`。详情入口为 `all_skipped`、`ai_direct`、`ai_memory`、`manual`、`ads`。
+  - 2026-05-02 验证通过：`node --check cloudflare/src/index.js`、`node --check extension/content/rules.js`、`node --check extension/content/content.js`、`node --check site/app.js`、`git diff --check`、`npm run cloud:check`、`npm run cloud:audit-data-layer`、`npm run cloud:deploy`。公网首页、控制台、`/console/?detail=ai_memory`、`/downloads/latest.json` 均返回 200。
   - 2026-05-02 `npm run cloud:deploy` 已成功部署控制台前端方格直达详情页改动。
   - 2026-05-02 用户已亲自完成 Cloudflare 网页登录授权；本机发布权限恢复。随后已再次运行 `npm run cloud:check` 和 `npm run cloud:deploy`，公网更新成功，当前 Version ID 为 `f66362e3-0f48-46e0-9639-95bf51590205`。已用系统代理验证首页、控制台、`/console/?detail=ai_hide`、`/downloads/latest.json` 均返回 200，线上 `/app.js` 已包含详情页精简模式和设备显示修正。
   - 2026-05-02 已修复控制台“恢复这条”前台不同步：用户在来源详情页恢复后，当前列表会立刻移除原来的隐藏记录；刷新后的来源分类也会用 `manual_allow` 抑制同一条 `auto_hide` / `manual_hide`，不再让它继续留在“本地规则下沉”里。已部署到公网 Version ID `f54ff4e3-e820-4f34-840f-6a6da3c72cfa`。
@@ -149,11 +153,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-0943`
-  - extension manifest version：`0.1.33`
-  - App / Extension version：`1.0.33 (34)`
+  - `BUILD_ID = 2026-05-02-1033`
+  - extension manifest version：`0.1.34`
+  - App / Extension version：`1.0.34 (35)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 和一条详情页均加载 `BUILD_ID=2026-05-02-1033`，详情页有 12 个可见 `冲走` 按钮，右栏有 3 个关闭按钮。
 
 如果实际文件或线上状态与这里不一致，以实际检查结果为准，并更新本文件。
 

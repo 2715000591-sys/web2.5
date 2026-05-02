@@ -71,6 +71,9 @@ const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
 const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
 const REPLY_AI_TEMPLATE_REUSE_WINDOW_HOURS = 72;
 const REPLY_AI_ACCOUNT_REUSE_WINDOW_HOURS = 36;
+const REPLY_AI_MEMORY_POLICY_VERSION = "reply-ai-policy-2026-05-02-ai-memory-v1";
+const REPLY_AI_MEMORY_EXACT_WINDOW_DAYS = 14;
+const REPLY_AI_MEMORY_TEMPLATE_WINDOW_DAYS = 3;
 const GLOBAL_RULE_STATE_CACHE_VERSION = "contributor-layering-v2";
 const ZERO_WIDTH_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 const COMPACT_PUNCTUATION_PATTERN = /[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g;
@@ -1105,9 +1108,10 @@ async function handleDashboard(request, env, ctx, url) {
     await claimAnonymousDeviceActivityToUser(env, deviceId, viewer.id);
   }
 
-  const [globalStats, personalStats, recent, adEvents, bindings, replyAi, activeBinding] = await Promise.all([
+  const [globalStats, personalStats, skippedStats, recent, adEvents, bindings, replyAi, activeBinding] = await Promise.all([
     buildStats(env, null),
     buildStats(env, viewer.id),
+    buildSkippedStats(env, viewer.id),
     buildRecentEvents(env, viewer.id),
     buildRecentAdEvents(env, viewer.id),
     listBoundSyncKeys(env, viewer.id),
@@ -1125,6 +1129,7 @@ async function handleDashboard(request, env, ctx, url) {
       viewer: buildViewerPayload(viewer),
       globalStats,
       personalStats,
+      skippedStats,
       recent,
       adEvents,
       bindings,
@@ -1515,16 +1520,11 @@ async function handleState(request, env, url) {
     buildGlobalBlockedReplyAccounts(env, 200)
   ]);
 
-  const mergedHideKeys = new Set(globalRuleState.manualHideKeys);
-  for (const key of personalState.manualHideKeys) {
-    mergedHideKeys.add(key);
-  }
-
   return json(
     {
       ok: true,
       syncKey,
-      manualHideKeys: Array.from(mergedHideKeys),
+      manualHideKeys: personalState.manualHideKeys,
       manualAllowKeys: personalState.manualAllowKeys,
       templateRules: Array.isArray(globalRuleState.templateRules) ? globalRuleState.templateRules : [],
       repeatSuspiciousHandles: Array.isArray(personalState.repeatSuspiciousHandles) ? personalState.repeatSuspiciousHandles : [],
@@ -1667,6 +1667,44 @@ async function buildStats(env, userId) {
   };
 }
 
+async function buildSkippedStats(env, userId) {
+  await ensureAiFeedSchema(env);
+  const baseStats = await buildStats(env, userId);
+  let aiDirectHideCount = 0;
+  let aiMemoryHideCount = 0;
+
+  if (userId) {
+    const row = await env.DB.prepare(
+      `
+        SELECT
+          SUM(CASE WHEN rar.decision_layer = 'ai' THEN 1 ELSE 0 END) AS ai_direct_hide_count,
+          SUM(CASE WHEN rar.decision_layer != 'ai' THEN 1 ELSE 0 END) AS ai_memory_hide_count
+        FROM reply_ai_items rai
+        JOIN reply_ai_results rar
+          ON rar.item_id = rai.id
+        WHERE rai.user_id = ?
+          AND rar.status = 'ready'
+          AND rar.action = 'hide'
+          AND rar.confidence = 'high'
+      `
+    ).bind(userId).first();
+
+    aiDirectHideCount = Number(row && row.ai_direct_hide_count ? row.ai_direct_hide_count : 0);
+    aiMemoryHideCount = Number(row && row.ai_memory_hide_count ? row.ai_memory_hide_count : 0);
+  }
+
+  const manualHideCount = Number(baseStats.manualHideEvents || 0);
+  const adHideCount = Number(baseStats.adHomeHideEvents || 0) + Number(baseStats.adReplyHideEvents || 0);
+
+  return {
+    totalSkippedCount: aiDirectHideCount + aiMemoryHideCount + manualHideCount + adHideCount,
+    aiDirectHideCount,
+    aiMemoryHideCount,
+    manualHideCount,
+    adHideCount
+  };
+}
+
 function buildRestoredHiddenEventExistsSql(alias) {
   const source = alias || "me";
   const sourceUser = `TRIM(COALESCE(${source}.user_id, ''))`;
@@ -1758,8 +1796,8 @@ function computeDataLayerAuditChecks(summary) {
   checks.push(buildAuditCheck(
     "global-baseline-is-shared",
     "pass",
-    "公共基础库可共享",
-    "全局规则只通过开发者确认或多贡献者自动规则进入 /api/state，再与个人规则合并。"
+    "公共基础信号可共享",
+    "公共规则和高共识模板只作为云端 AI 判断的参考信号；插件不再把公共精确规则并入本地手动隐藏列表。"
   ));
 
   const invalidEventUsers = numberFromRow(source.integrity, "events_with_unknown_user");
@@ -2672,6 +2710,32 @@ async function ensureAiFeedSchemaUncached(env) {
       )
     `,
     "CREATE INDEX IF NOT EXISTS idx_reply_ai_results_status_updated_at ON reply_ai_results(status, updated_at DESC)",
+    `
+      CREATE TABLE IF NOT EXISTS reply_ai_memory (
+        id TEXT PRIMARY KEY,
+        memory_key TEXT NOT NULL,
+        memory_key_type TEXT NOT NULL DEFAULT 'exact_text',
+        action TEXT NOT NULL DEFAULT 'hide',
+        confidence TEXT NOT NULL DEFAULT 'high',
+        matched_safety_labels_json TEXT NOT NULL DEFAULT '[]',
+        matched_profile_signals_json TEXT NOT NULL DEFAULT '[]',
+        reason_short TEXT NOT NULL DEFAULT '',
+        prompt_version TEXT NOT NULL DEFAULT '',
+        source_item_id INTEGER,
+        source_result_updated_at TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        disabled_reason TEXT NOT NULL DEFAULT '',
+        expires_at TEXT,
+        hit_count INTEGER NOT NULL DEFAULT 0,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_reply_ai_memory_key_version_unique ON reply_ai_memory(memory_key, prompt_version)",
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_memory_status_expires ON reply_ai_memory(status, expires_at, updated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_reply_ai_memory_source_item ON reply_ai_memory(source_item_id, updated_at DESC)",
     `
       CREATE TABLE IF NOT EXISTS reply_ai_account_risk (
         reply_handle TEXT PRIMARY KEY,
@@ -6552,6 +6616,302 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   };
 }
 
+function getReplyAiMemoryExpiresAt(memoryKeyType) {
+  const days = memoryKeyType === "template"
+    ? REPLY_AI_MEMORY_TEMPLATE_WINDOW_DAYS
+    : REPLY_AI_MEMORY_EXACT_WINDOW_DAYS;
+  return new Date(Date.now() + (days * 24 * 60 * 60 * 1000)).toISOString();
+}
+
+function isDirectAiHighConfidenceHide(decision) {
+  return Boolean(
+    decision
+    && decision.action === "hide"
+    && decision.status === "ready"
+    && decision.confidence === "high"
+    && decision.decisionLayer === "ai"
+    && Array.isArray(decision.matchedSafetyLabels)
+    && decision.matchedSafetyLabels.length > 0
+  );
+}
+
+function buildReplyAiMemoryContextKey(itemRow, heuristicSummary) {
+  const profileSignals = Array.isArray(itemRow && itemRow.profileSignalTags)
+    ? itemRow.profileSignalTags
+    : [];
+  const contextFlags = [];
+  if (heuristicSummary.accountMetadataRisk) {
+    contextFlags.push("account-risk");
+  }
+  if (heuristicSummary.highRiskDisplayName) {
+    contextFlags.push("high-risk-name");
+  } else if (heuristicSummary.lureDisplayName) {
+    contextFlags.push("lure-name");
+  }
+  if (heuristicSummary.suspiciousHandle || heuristicSummary.hasLongDigitHandle) {
+    contextFlags.push("handle-risk");
+  }
+  if (heuristicSummary.hasGeoMeetupBait || heuristicSummary.hasGeoRelationshipBait || heuristicSummary.hasBaitQuestionShape) {
+    contextFlags.push("meetup-shape");
+  }
+  if (heuristicSummary.hasExplicitEroticBait || heuristicSummary.hasEroticMentionRedirect) {
+    contextFlags.push("erotic-bait");
+  }
+  if (heuristicSummary.hasShareLinkScam || heuristicSummary.hasSpamTemplateSignal) {
+    contextFlags.push("spam-template");
+  }
+  profileSignals.forEach((signal) => {
+    if (["contact_keyword", "contact_payload", "profile_redirect", "external_link", "suspicious_bio"].includes(signal)) {
+      contextFlags.push(`profile-${signal}`);
+    }
+  });
+  return Array.from(new Set(contextFlags)).sort().join("|");
+}
+
+async function buildReplyAiMemoryKeyEntries(itemRow, riskRow) {
+  if (!itemRow || itemRow.accountProtected) {
+    return [];
+  }
+
+  const normalizedReplyText = normalizeAiComparableText(itemRow.replyText).slice(0, 800);
+  if (!normalizedReplyText) {
+    return [];
+  }
+
+  const heuristicSummary = buildReplyAiHeuristicSummary(itemRow, riskRow || null);
+  const contextKey = buildReplyAiMemoryContextKey(itemRow, heuristicSummary);
+  const entries = [];
+
+  if (
+    normalizedReplyText.length >= 8
+    || heuristicSummary.accountMetadataRisk
+    || heuristicSummary.hasShareLinkScam
+    || heuristicSummary.hasSpamTemplateSignal
+    || heuristicSummary.hasGeoMeetupBait
+    || heuristicSummary.hasGeoRelationshipBait
+    || heuristicSummary.hasExplicitEroticBait
+    || contextKey
+  ) {
+    entries.push({
+      memoryKeyType: "exact_text",
+      source: JSON.stringify(["reply-ai-memory", "exact_text", normalizedReplyText])
+    });
+  }
+
+  if (normalizedReplyText.length <= 16 && contextKey) {
+    entries.push({
+      memoryKeyType: "thin_context",
+      source: JSON.stringify(["reply-ai-memory", "thin_context", normalizedReplyText, contextKey])
+    });
+  }
+
+  const templateKey = buildTemplateRuleAnalysis(itemRow.replyText).templateKey;
+  if (
+    templateKey
+    && (
+      heuristicSummary.accountMetadataRisk
+      || heuristicSummary.hasSpamTemplateSignal
+      || heuristicSummary.hasEroticMentionRedirect
+      || heuristicSummary.hasExplicitEroticBait
+      || heuristicSummary.hasGeoMeetupBait
+      || heuristicSummary.hasGeoRelationshipBait
+      || heuristicSummary.hasBaitQuestionShape
+      || heuristicSummary.hasShareLinkScam
+      || contextKey
+    )
+  ) {
+    entries.push({
+      memoryKeyType: "template",
+      source: JSON.stringify(["reply-ai-memory", "template", templateKey, contextKey || "general"])
+    });
+  }
+
+  const keyedEntries = [];
+  const seen = new Set();
+  for (const entry of entries) {
+    const memoryKey = await sha256Hex(entry.source);
+    if (!memoryKey || seen.has(memoryKey)) {
+      continue;
+    }
+    seen.add(memoryKey);
+    keyedEntries.push({
+      memoryKey,
+      memoryKeyType: entry.memoryKeyType
+    });
+  }
+  return keyedEntries;
+}
+
+function buildReplyAiMemoryDecision(row) {
+  return buildDefaultReplyAiDecision({
+    action: "hide",
+    decisionLayer: `ai_memory_${normalizeAiFeedText(row && row.memory_key_type ? row.memory_key_type : "exact_text", 24) || "exact_text"}`,
+    matchedSafetyLabels: normalizeReplyAiStringList(parseJsonArray(row && row.matched_safety_labels_json), REPLY_AI_SAFETY_LABELS, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(parseJsonArray(row && row.matched_profile_signals_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    confidence: row && row.confidence ? String(row.confidence || "high") : "high",
+    reasonShort: row && row.reason_short ? row.reason_short : "命中 AI 学习库",
+    status: "ready",
+    model: row && row.prompt_version ? row.prompt_version : REPLY_AI_MEMORY_POLICY_VERSION
+  });
+}
+
+async function findReplyAiMemoryDecision(env, itemRow, riskRow) {
+  const keyEntries = await buildReplyAiMemoryKeyEntries(itemRow, riskRow);
+  if (!keyEntries.length) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  for (const keyEntry of keyEntries) {
+    const row = await env.DB.prepare(
+      `
+        SELECT
+          id,
+          memory_key_type,
+          action,
+          confidence,
+          matched_safety_labels_json,
+          matched_profile_signals_json,
+          reason_short,
+          prompt_version,
+          hit_count,
+          expires_at
+        FROM reply_ai_memory
+        WHERE memory_key = ?
+          AND prompt_version = ?
+          AND status = 'active'
+          AND action = 'hide'
+          AND confidence = 'high'
+          AND (expires_at IS NULL OR expires_at > ?)
+        LIMIT 1
+      `
+    ).bind(keyEntry.memoryKey, REPLY_AI_MEMORY_POLICY_VERSION, now).first();
+
+    if (!row) {
+      continue;
+    }
+
+    await env.DB.prepare(
+      `
+        UPDATE reply_ai_memory
+        SET hit_count = hit_count + 1,
+          last_seen_at = ?,
+          updated_at = ?
+        WHERE id = ?
+      `
+    ).bind(now, now, row.id).run();
+
+    return buildReplyAiMemoryDecision(row);
+  }
+
+  return null;
+}
+
+async function upsertReplyAiMemoryFromDecision(env, itemRow, decision) {
+  if (!isDirectAiHighConfidenceHide(decision)) {
+    return;
+  }
+
+  const riskRow = itemRow && itemRow.replyHandle
+    ? await getReplyAiAccountRiskRow(env, itemRow.replyHandle)
+    : null;
+  const keyEntries = await buildReplyAiMemoryKeyEntries(itemRow, riskRow);
+  if (!keyEntries.length) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  for (const keyEntry of keyEntries) {
+    await env.DB.prepare(
+      `
+        INSERT INTO reply_ai_memory (
+          id,
+          memory_key,
+          memory_key_type,
+          action,
+          confidence,
+          matched_safety_labels_json,
+          matched_profile_signals_json,
+          reason_short,
+          prompt_version,
+          source_item_id,
+          source_result_updated_at,
+          status,
+          disabled_reason,
+          expires_at,
+          hit_count,
+          first_seen_at,
+          last_seen_at,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'hide', 'high', ?, ?, ?, ?, ?, ?, 'active', '', ?, 0, ?, ?, ?, ?)
+        ON CONFLICT(memory_key, prompt_version) DO UPDATE SET
+          memory_key_type = excluded.memory_key_type,
+          action = excluded.action,
+          confidence = excluded.confidence,
+          matched_safety_labels_json = excluded.matched_safety_labels_json,
+          matched_profile_signals_json = excluded.matched_profile_signals_json,
+          reason_short = excluded.reason_short,
+          source_item_id = excluded.source_item_id,
+          source_result_updated_at = excluded.source_result_updated_at,
+          status = 'active',
+          disabled_reason = '',
+          expires_at = excluded.expires_at,
+          last_seen_at = excluded.last_seen_at,
+          updated_at = excluded.updated_at
+      `
+    ).bind(
+      crypto.randomUUID(),
+      keyEntry.memoryKey,
+      keyEntry.memoryKeyType,
+      JSON.stringify(normalizeReplyAiStringList(decision.matchedSafetyLabels, REPLY_AI_SAFETY_LABELS, 8)),
+      JSON.stringify(normalizeReplyAiStringList(decision.matchedProfileSignals, REPLY_AI_PROFILE_SIGNAL_LABELS, 8)),
+      normalizeAiFeedText(decision.reasonShort || "AI 已判定为垃圾回复", 120),
+      REPLY_AI_MEMORY_POLICY_VERSION,
+      itemRow && itemRow.id ? Number(itemRow.id || 0) : null,
+      now,
+      getReplyAiMemoryExpiresAt(keyEntry.memoryKeyType),
+      now,
+      now,
+      now,
+      now
+    ).run();
+  }
+}
+
+async function deactivateReplyAiMemoryForItem(env, itemRow, reason) {
+  if (!itemRow || !itemRow.id) {
+    return;
+  }
+
+  const riskRow = itemRow.replyHandle ? await getReplyAiAccountRiskRow(env, itemRow.replyHandle) : null;
+  const keyEntries = await buildReplyAiMemoryKeyEntries(itemRow, riskRow);
+  const memoryKeys = keyEntries.map((entry) => entry.memoryKey).filter(Boolean);
+  const now = new Date().toISOString();
+  const disabledReason = normalizeAiFeedText(reason || "manual_restore", 80);
+  const clauses = ["source_item_id = ?"];
+  const binds = [disabledReason, now, now, Number(itemRow.id || 0)];
+
+  if (memoryKeys.length) {
+    clauses.push(`memory_key IN (${memoryKeys.map(() => "?").join(", ")})`);
+    binds.push(...memoryKeys);
+  }
+
+  binds.push(REPLY_AI_MEMORY_POLICY_VERSION);
+  await env.DB.prepare(
+    `
+      UPDATE reply_ai_memory
+      SET status = 'disabled',
+        disabled_reason = ?,
+        expires_at = ?,
+        updated_at = ?
+      WHERE (${clauses.join(" OR ")})
+        AND prompt_version = ?
+        AND status = 'active'
+    `
+  ).bind(...binds).run();
+}
+
 function buildReplyAiDecisionSchema() {
   return {
     type: "object",
@@ -6628,6 +6988,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     isBatch
       ? "You are the primary moderation decision-maker for multiple independent X replies."
       : "You are the primary moderation decision-maker for a single X reply.",
+    `Reply moderation policy version: ${REPLY_AI_MEMORY_POLICY_VERSION}.`,
     "The base policy should protect normal expression: sexual, erotic, pornographic, adult-topic, sex-education, creator-industry, or content-governance discussion is allowed when it is substantive, conversational, opinion-based, humorous, critical, or part of the thread context.",
     "Sexual or pornographic content is not a violation by itself. Allow it when it is normal discussion, preference, commentary, joke, review, criticism, education, or platform-governance talk.",
     "Do not hide merely because a reply contains sexual words, erotic preferences, porn discussion, adult jokes, sex-worker discussion, controversial adult-topic opinions, or explicit but non-spammy adult phrasing.",
@@ -6648,9 +7009,6 @@ function buildReplyAiProviderPrompt(settings, options) {
     "When action is hide, matchedLabels must contain at least one provided safety label that explains the hide decision.",
     isBatch
       ? "Return exactly one decision for every clientItemId in the batch, and preserve each clientItemId exactly."
-      : "",
-    settings && settings.moderationPrompt
-      ? `Additional operator guidance: ${settings.moderationPrompt}`
       : ""
   ].filter(Boolean).join(" ");
 }
@@ -6810,6 +7168,11 @@ async function finalizeReplyAiDecision(env, itemRow, decision) {
   }
 
   await upsertReplyAiResult(env, itemRow.id, decision);
+  if (decision && decision.decisionLayer === "manual_allow") {
+    await deactivateReplyAiMemoryForItem(env, itemRow, "manual_restore");
+  } else if (isDirectAiHighConfidenceHide(decision)) {
+    await upsertReplyAiMemoryFromDecision(env, itemRow, decision);
+  }
   if (decision.status === "ready" && decision.action === "hide" && decision.confidence === "high") {
     await refreshReplyAiAccountRisk(env, itemRow, decision);
   }
@@ -6838,12 +7201,6 @@ async function classifyReplyAiItemEntries(env, entries) {
 
     itemRow.id = entry.itemId;
 
-    if (await isReplyHandleGloballyBlocked(env, itemRow.replyHandle)) {
-      const blockedDecision = await finalizeReplyAiDecision(env, itemRow, buildReplyAiBlockedDecision());
-      results.set(entry.clientItemId, blockedDecision);
-      continue;
-    }
-
     let settings = settingsCache.get(itemRow.userId || "");
     if (!settings) {
       settings = await getUserAiSettingsWithSecret(env, itemRow.userId);
@@ -6861,6 +7218,18 @@ async function classifyReplyAiItemEntries(env, entries) {
     if (handleKey && typeof riskRow === "undefined") {
       riskRow = await getReplyAiAccountRiskRow(env, handleKey);
       riskCache.set(handleKey, riskRow || null);
+    }
+
+    const memoryDecision = await findReplyAiMemoryDecision(env, itemRow, riskRow || null);
+    if (memoryDecision) {
+      results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, memoryDecision));
+      continue;
+    }
+
+    if (await isReplyHandleGloballyBlocked(env, itemRow.replyHandle)) {
+      const blockedDecision = await finalizeReplyAiDecision(env, itemRow, buildReplyAiBlockedDecision());
+      results.set(entry.clientItemId, blockedDecision);
+      continue;
     }
 
     const reusedDecision = await findReusableReplyAiDecision(env, itemRow, riskRow || null);

@@ -842,6 +842,19 @@ button.ghost-button:disabled {
   background: var(--accent-soft);
 }
 
+.skipped-summary-card {
+  grid-column: span 2;
+  background:
+    radial-gradient(circle at right top, rgba(17, 17, 17, 0.1), transparent 32%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(236, 248, 246, 0.96));
+  border-color: rgba(11, 127, 123, 0.16);
+}
+
+.skipped-summary-card strong {
+  font-size: clamp(3rem, 5vw, 4.5rem);
+  color: var(--teal);
+}
+
 .global-metrics-panel {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1866,6 +1879,10 @@ button.ghost-button:disabled {
 
   .metrics-panel {
     grid-template-columns: 1fr;
+  }
+
+  .skipped-summary-card {
+    grid-column: span 1;
   }
 
   .download-grid,

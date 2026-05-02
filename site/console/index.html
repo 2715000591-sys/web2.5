@@ -141,70 +141,30 @@
             <h2>登录后只看你自己的累计、恢复和最近动作。</h2>
           </div>
           <section class="metrics-panel">
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ai">
-              <span>AI 智能屏蔽</span>
-              <strong id="sourceAiCount">0</strong>
-              <small>AI 已判定，点击进入明细</small>
+            <button class="metric-card metric-card-button source-metric-card skipped-summary-card" type="button" data-source-bucket="all_skipped">
+              <span>累计跳过无用内容</span>
+              <strong id="totalSkippedCount">0</strong>
+              <small>AI、学习库、手动冲走和官方广告的合计，点击进入全部明细</small>
             </button>
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ai_reuse">
-              <span>AI 结果复用</span>
-              <strong id="sourceAiReuseCount">0</strong>
-              <small>没有调用 AI，点击进入明细</small>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ai_direct">
+              <span>AI 直接屏蔽</span>
+              <strong id="sourceAiDirectCount">0</strong>
+              <small>第一次交给 AI 判定，点击进入明细</small>
             </button>
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="history">
-              <span>数据库历史命中</span>
-              <strong id="sourceHistoryCount">0</strong>
-              <small>来自历史冲走，点击进入明细</small>
-            </button>
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="public_rule">
-              <span>公共数据库规则</span>
-              <strong id="sourcePublicRuleCount">0</strong>
-              <small>全局规则命中，点击进入明细</small>
-            </button>
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="account_blocklist">
-              <span>账号黑名单</span>
-              <strong id="sourceAccountBlocklistCount">0</strong>
-              <small>来自账号名单，点击进入明细</small>
-            </button>
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="local_rule">
-              <span>本地规则下沉</span>
-              <strong id="sourceLocalRuleCount">0</strong>
-              <small>没有调用 AI，点击进入明细</small>
-            </button>
-            <button class="metric-card metric-card-button metric-detail-card" type="button" data-metric-detail="auto">
-              <span>累计自动整理</span>
-              <strong id="autoHideCount">0</strong>
-              <small>系统自动帮你处理，点击进入明细</small>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ai_memory">
+              <span>AI 学习库屏蔽</span>
+              <strong id="sourceAiMemoryCount">0</strong>
+              <small>AI 判过后被记住，没有再次调用 AI</small>
             </button>
             <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="manual">
               <span>你手动冲走</span>
               <strong id="manualHideCount">0</strong>
               <small>你亲手确认，点击进入明细</small>
             </button>
-            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="restored">
-              <span>恢复误判</span>
-              <strong id="manualAllowCount">0</strong>
-              <small>纠错记录，点击进入明细</small>
-            </button>
-            <article class="metric-card">
-              <span>累计涉及账号数</span>
-              <strong id="distinctHandleCount">0</strong>
-              <small>你的使用过程中至少命中过一次的账号</small>
-            </article>
-            <article class="metric-card">
-              <span>累计高频话术数</span>
-              <strong id="heroPhraseCount">0</strong>
-              <small>你的使用过程中已经进入统计的话术</small>
-            </article>
-            <button class="metric-card metric-card-button metric-detail-card" type="button" data-metric-detail="ad_home">
-              <span>已在主页跳过广告</span>
-              <strong id="adHomeHideCount">0</strong>
-              <small>与你绑定的数据里跳过的官方推广帖，点击进入明细</small>
-            </button>
-            <button class="metric-card metric-card-button metric-detail-card" type="button" data-metric-detail="ad_reply">
-              <span>已在回复区跳过广告</span>
-              <strong id="adReplyHideCount">0</strong>
-              <small>与你绑定的数据里跳过的回复流广告，点击进入明细</small>
+            <button class="metric-card metric-card-button source-metric-card" type="button" data-source-bucket="ads">
+              <span>跳过官方广告</span>
+              <strong id="adHideCount">0</strong>
+              <small>主页和回复区官方广告合计，点击进入明细</small>
             </button>
           </section>
         </section>
@@ -235,7 +195,7 @@
               <span id="aiFeedCountPill" class="surface-note">本地可配置</span>
             </div>
           </div>
-          <p class="review-hint">这里现在统一管理共享 AI 提供商配置。主页帖子 AI、回复区 AI 和后面的整帖审核，都会复用这里保存的 Key、接口地址、模型和补充指令。下面这个开关仍然只控制回复区 AI 审核。</p>
+          <p class="review-hint">这里现在统一管理 AI 提供商配置。回复区垃圾审核会使用这里保存的 Key、接口地址和模型，但判断口径由云端固定版本统一控制；补充指令主要留给主页和后续审核能力。</p>
           <div class="site-toggle-row ai-toggle-row">
             <input id="aiEnabledToggle" type="checkbox" checked />
             <div class="site-toggle-copy">
@@ -329,6 +289,6 @@
       </main>
     </div>
 
-    <script src="/app.js?v=2026-05-02-detail-focused"></script>
+    <script src="/app.js?v=2026-05-02-ai-memory"></script>
   </body>
 </html>
