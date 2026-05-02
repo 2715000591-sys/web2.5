@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-2124";
+  const BUILD_ID = "2026-05-02-2157";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -17,6 +17,8 @@
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 240;
   const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v1";
+  const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
+  const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
   const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
   const OFFICIAL_AD_LABEL_PATTERNS = [
     /^广告$/i,
@@ -199,6 +201,59 @@
     manualAllowTexts: [],
     manualResetVersion: ""
   };
+
+  function getStorageLocal(defaults, callback) {
+    let settled = false;
+    const fallback = Object.assign({}, defaults || {});
+    const finish = function (value, usedFallback) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      if (usedFallback) {
+        root.dataset.web25StorageFallback = "1";
+      }
+      callback(Object.assign({}, fallback, value || {}));
+    };
+    const timeoutId = setTimeout(function () {
+      finish(fallback, true);
+    }, EXTENSION_STORAGE_TIMEOUT_MS);
+
+    try {
+      api.storage.local.get(defaults, function (result) {
+        if (api.runtime && api.runtime.lastError) {
+          finish(fallback, true);
+          return;
+        }
+        finish(result || fallback, false);
+      });
+    } catch (error) {
+      finish(fallback, true);
+    }
+  }
+
+  function setStorageLocal(patch, callback) {
+    let settled = false;
+    const finish = function () {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      if (typeof callback === "function") {
+        callback();
+      }
+    };
+    const timeoutId = setTimeout(finish, EXTENSION_STORAGE_TIMEOUT_MS);
+
+    try {
+      api.storage.local.set(patch || {}, finish);
+    } catch (error) {
+      finish();
+    }
+  }
+
   const state = {
     enabled: true,
     markingEnabled: true,
@@ -974,7 +1029,7 @@
       return;
     }
 
-    api.storage.local.set(patch, function () {
+    setStorageLocal(patch, function () {
       callback(Object.assign({}, result, patch));
     });
   }
@@ -2169,6 +2224,26 @@
   }
 
   function openManualStateDb(callback) {
+    let settled = false;
+    const finish = function (db) {
+      if (settled) {
+        if (db) {
+          try {
+            db.close();
+          } catch (error) {
+            // Ignore late close errors.
+          }
+        }
+        return;
+      }
+      settled = true;
+      clearTimeout(timeoutId);
+      callback(db || null);
+    };
+    const timeoutId = setTimeout(function () {
+      finish(null);
+    }, INDEXED_DB_OPEN_TIMEOUT_MS);
+
     try {
       const request = window.indexedDB.open(IDB_NAME, 1);
       request.onupgradeneeded = function () {
@@ -2178,13 +2253,13 @@
         }
       };
       request.onsuccess = function () {
-        callback(request.result);
+        finish(request.result);
       };
       request.onerror = function () {
-        callback(null);
+        finish(null);
       };
     } catch (error) {
-      callback(null);
+      finish(null);
     }
   }
 
@@ -2588,7 +2663,7 @@
         return;
       }
 
-      api.storage.local.get(storageDefaults, function (result) {
+      getStorageLocal(storageDefaults, function (result) {
         if (state.destroyed) {
           return;
         }
@@ -2601,7 +2676,7 @@
           if (resolvedResult.markingDefaultVersion !== MARKING_DEFAULT_VERSION) {
             resolvedResult.markingEnabled = true;
             resolvedResult.markingDefaultVersion = MARKING_DEFAULT_VERSION;
-            api.storage.local.set({
+            setStorageLocal({
               markingEnabled: true,
               markingDefaultVersion: MARKING_DEFAULT_VERSION
             });

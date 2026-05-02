@@ -149,8 +149,10 @@
 - Safari 扩展 `BUILD_ID = 2026-05-02-1846`
 - Safari 扩展 `BUILD_ID = 2026-05-02-1912`
 - Safari 扩展 `BUILD_ID = 2026-05-02-2124`
-- 扩展版本 `0.1.47`
-- App / Extension 版本 `1.0.47 (48)`
+- Safari 扩展 `BUILD_ID = 2026-05-02-2148`
+- Safari 扩展 `BUILD_ID = 2026-05-02-2157`
+- 扩展版本 `0.1.49`
+- App / Extension 版本 `1.0.49 (50)`
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 
@@ -179,6 +181,10 @@
 2026-05-02 19:12 已替换本机 App 到 `BUILD_ID=2026-05-02-1912`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。
 
 2026-05-02 21:24 已替换本机 App 到 `BUILD_ID=2026-05-02-2124`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 对当前 X 首页通过，返回 `build=2026-05-02-2124`、`marking=1`、`stage=ads:done`。本轮尝试打开两个 X 详情页做按钮验收，但页面一直没有加载出回复列表（`articles=0`，停在 `stage=boot` 或 `scan:not-enough-articles`），所以未能看到可见 `冲走` / 右栏关闭按钮数量；后续遇到正常加载回复的详情页要补验。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2124`、`extensionVersion=0.1.47`，官网和控制台返回 200。
+
+2026-05-02 21:48 已替换本机 App 到 `BUILD_ID=2026-05-02-2148`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 对当前 X 详情页通过，返回 `build=2026-05-02-2148`、`marking=1`、`articles=0`、`stage=scan:not-enough-articles`。该页当时没有加载出回复列表，所以未能看到可见 `冲走` / 右栏关闭按钮数量；公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2148`、`extensionVersion=0.1.48`，官网和控制台返回 200。
+
+2026-05-02 21:57 已替换本机 App 到 `BUILD_ID=2026-05-02-2157`，签名验证通过，`pluginkit` 已启用扩展。这个版本补了 Safari 存储读取超时兜底，防止页面停在 `boot` 阶段。最终 `npm run safari:verify-live` 对当前 X 首页通过，返回 `build=2026-05-02-2157`、`marking=1`、`stage=ads:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2157`、`extensionVersion=0.1.49`，官网和控制台返回 200。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

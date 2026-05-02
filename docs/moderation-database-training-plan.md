@@ -240,6 +240,8 @@
 
 2026-05-02 21:24 已补本地插件与云端数据库候选键的同构缺口：本地 `getReplyManualKeys` 现在会发出 `pattern:geo-relationship-bait` 和 `pattern:poetic-slogan-lure-account`，与 Worker 的 `buildRowKeys` 对齐。这个改动不改变数据库结构、不批量写入 D1、不把单用户反馈升级公共规则，只让后续手动 `冲走` / `恢复` 样本更容易按同一模式刷新候选规则。公网已发布 Worker Version ID `9fd4a255-7913-4fcc-ba5a-9966193f8ad0`，`npm run cloud:audit-data-layer` 通过。
 
+2026-05-02 21:51 已补 `share-link-scam` 的真实网盘引流形状：`是不是这个 / 是这个吗 / 就是这个 + pan.quark.cn/s/...` 现在本地基础层和 Worker 都会优先拦截。这个修复不改数据库结构、不重建候选库、不批量写 D1；后续如果用户手动 `冲走` 同类漏网，样本仍会按 `pattern:share-link-scam` 进入候选刷新，但单用户反馈不会直接变公共规则，`manual_allow` 仍只做纠错和抑制。
+
 ## 下一任重点：AI、数据库、API 调度关系
 
 用户下一步主要要调试这三者的关系，不是重做 UI。
