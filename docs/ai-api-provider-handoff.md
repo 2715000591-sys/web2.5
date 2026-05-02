@@ -77,6 +77,8 @@
 
 2026-05-02 17:11 已追加验证用户指出的风险昵称场景：`孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 命中 `db_rule_pattern`，`model=moderation-rule-candidates-2026-05-02-v1`，不是 `deepseek-v4-flash`。这说明它走数据库候选规则接管，没有进入外部 AI 调用。测试 item 为 `1099`。
 
+2026-05-02 17:31 用户截图里的 7 条漏网样本已全部验证为数据库接管：`比她好看的没她强...@designksh1/@xiaonm88`、`刷了半天的X...主页能打✈️...@designksh1/@xiaonm88`、`线下我就日过这个骚货 @designksh1`、`免费破处` 风险昵称发 `十🙈` 均返回 `db_rule_pattern` 或 `db_rule_template`，`model=moderation-rule-candidates-2026-05-02-v1`。这批样本不再调用外部 AI。测试 item 为 `1100`-`1106`。
+
 ## 4. 用户去买 API 时怎么说
 
 只有用户还没有 API，或者明确要换一个新平台时，才这样说：

@@ -268,6 +268,8 @@
     /原视频.{0,8}找到(?:啦|了)?/,
     /出处.{0,8}(找到|一并找到了|也一并找到了)/,
     /完整(?:版)?的.{0,8}(在|下了|链接|这里|这)/,
+    /比她好看的没她强.{0,6}比她强的没她好看/,
+    /刷了半天(?:的)?x.{0,12}主页.{0,6}能打/,
     /i can totally imagine the alluring moment with some toys/i,
     /alluring moment with some toys/i
   ];

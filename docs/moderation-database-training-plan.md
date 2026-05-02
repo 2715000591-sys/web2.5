@@ -222,6 +222,7 @@
 - `pattern:geo-meetup-bait` 和 `template:hook+meetup` 因存在恢复/放过证据仍保持候选，不直接启用，避免误伤 `我在万达广场附近上班`、`附近有家面馆不错` 这类正常句子。
 - 云端小测试：`找个同城弟弟` 返回 `db_rule_pattern/hide/high`，测试 item `1097/1098` 没有产生新的外部 AI 调用。
 - 2026-05-02 17:11 已按用户追问追加验收：风险昵称 `孟轩🌸无常线下🌸`、随机数字 handle `MullerChri42258`、低信息回复 `2🙃😍🧡` 返回 `db_rule_pattern/hide/high`，`model=moderation-rule-candidates-2026-05-02-v1`。这说明同类“老师已经讲过的题”会被数据库学习库先截住，不再调用外部 AI。测试 item 为 `1099`，属于 `sync_dev_test_db_rule_1650_*` 开发验收数据。
+- 2026-05-02 17:31 已追加截图漏网模板验收：`比她好看的没她强，比她强的没她好看 @designksh1/@xiaonm88`、`刷了半天的X就她的主页能打✈️了 @designksh1/@xiaonm88`、`线下我就日过这个骚货 @designksh1`、`免费破处` 风险昵称发 `十🙈`，全部返回数据库学习库隐藏，`decisionLayer=db_rule_pattern/db_rule_template`。测试 item 为 `1100`-`1106`，属于 `sync_dev_test_screenshot_templates_*` 开发验收数据。
 
 ## 近期最实用的下一步
 

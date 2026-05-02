@@ -196,6 +196,8 @@ const SPAM_TEMPLATE_PATTERNS = [
   /原视频.{0,8}找到(?:啦|了)?/,
   /出处.{0,8}(找到|一并找到了|也一并找到了)/,
   /完整(?:版)?的.{0,8}(在|下了|链接|这里|这)/,
+  /比她好看的没她强.{0,6}比她强的没她好看/,
+  /刷了半天(?:的)?x.{0,12}主页.{0,6}能打/,
   /i can totally imagine the alluring moment with some toys/i,
   /alluring moment with some toys/i
 ];
@@ -9631,6 +9633,18 @@ function looksLikeLowInformationBadge(text) {
   return compact.length <= 6 && LOW_INFORMATION_BADGE_PATTERNS.some((pattern) => pattern.test(compact));
 }
 
+function looksLikeMinimalTextPayload(text) {
+  const raw = String(text || "");
+  const normalized = normalizeRuleText(raw);
+  const emojiCount = Array.from(raw.matchAll(EMOJI_PATTERN)).length;
+  const payloadText = normalized
+    .replace(EMOJI_PATTERN, "")
+    .replace(COMPACT_PUNCTUATION_PATTERN, "")
+    .replace(/[$￥¥€£]/g, "")
+    .replace(/\s+/g, "");
+  return emojiCount > 0 && Array.from(payloadText).length <= 1;
+}
+
 function looksLikeThinSymbolOrNumberPayload(text) {
   const raw = String(text || "").replace(ZERO_WIDTH_PATTERN, "");
   const chars = Array.from(raw.replace(EMOJI_PATTERN, "").replace(/\s+/g, ""));
@@ -10034,6 +10048,7 @@ function buildRowKeys(row) {
       (
         looksLikeLowInformationBadge(replyText || normalized)
         || looksLikeFragmentedSymbolicReply(replyText || normalized)
+        || looksLikeMinimalTextPayload(replyText || normalized)
         || looksLikeThinSymbolOrNumberPayload(replyText || normalized)
       )
       && displayNameLooksStrongLure(row.reply_display_name || row.replyDisplayName || "")
@@ -10044,6 +10059,7 @@ function buildRowKeys(row) {
       (
         looksLikeLowInformationBadge(replyText || normalized)
         || looksLikeFragmentedSymbolicReply(replyText || normalized)
+        || looksLikeMinimalTextPayload(replyText || normalized)
         || looksLikeThinSymbolOrNumberPayload(replyText || normalized)
       )
       && displayNameLooksLure(row.reply_display_name || row.replyDisplayName || "")

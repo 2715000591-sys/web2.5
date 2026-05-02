@@ -116,7 +116,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`acf3c06b-3ad1-4b92-9d7d-76ef54602252`
+  - Version ID：`0e62a0bf-38d6-47ff-8834-369a59cb8524`
+  - 2026-05-02 17:31 用户截图反馈仍有多条漏网：`比她好看的没她强，比她强的没她好看 @designksh1/@xiaonm88`、`刷了半天的X就她的主页能打✈️了 @designksh1/@xiaonm88`、`线下我就日过这个骚货 @designksh1`、以及 `免费破处` 风险昵称发 `十🙈`。根因：前两种重复导流话术没有被收进明确垃圾模板；云端候选规则也没把“风险昵称 + 一个字/表情薄回复”当作低信息诱导账号模式，所以部分样本没有稳定命中数据库层。已同步补本地规则和 Worker：新增两条模板，云端 `buildRowKeys` 把 minimal emoji payload 纳入 `low-information-lure-account` / `low-information-strong-lure-name`。公网 7 条截图同款样本全部返回 `db_rule_pattern` 或 `db_rule_template`、`action=hide`、`confidence=high`，`model=moderation-rule-candidates-2026-05-02-v1`，说明由数据库学习库接管，不调用外部 AI。测试 item 为 `1100`-`1106`，属于 `sync_dev_test_screenshot_templates_*` 开发验收数据。
   - 2026-05-02 17:11 已按用户追问验收并发布“数据库优先截住低信息风险账号回复”补强：`2🙃😍🧡` 这类数字/符号/表情薄回复会和风险昵称、随机数字 handle 组合进本地与 Worker 同构规则。公网真实测试样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `decisionLayer=db_rule_pattern`、`action=hide`、`confidence=high`、`model=moderation-rule-candidates-2026-05-02-v1`，说明命中数据库学习库，不调用外部 AI。测试 item 为 `1099`，使用 `sync_dev_test_db_rule_1650_*` / `device_test_db_rule_1650_*`，属于开发验收数据。
   - 2026-05-02 13:55 用户完成 Cloudflare 授权后，已发布“旧数据库整理进学习库”通道：开发者接口 `POST /api/developer/backfill-training` 和脚本 `npm run cloud:backfill-training` 已上线。公网首页、控制台、`/downloads/latest.json` 均返回 200。
   - 2026-05-02 13:55 已备份并回填线上 D1。备份文件包括 `backups/d1/web25-2026-05-02T05-38-54-857Z-before-training-backfill.sql`。回填结果：旧手动事件处理 156 条、旧 AI 判断处理 1070 条、AI 记忆写入尝试 130 次。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。
@@ -164,11 +165,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1650`
-  - extension manifest version：`0.1.39`
-  - App / Extension version：`1.0.39 (40)`
+  - `BUILD_ID = 2026-05-02-1726`
+  - extension manifest version：`0.1.40`
+  - App / Extension version：`1.0.40 (41)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 17:31 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1726`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1726`、`flushes=19/18`、`manualButtons=19/18`、`sideButtons=3`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1726`、`extensionVersion=0.1.40`。
   - 2026-05-02 17:11 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1650`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1650`、`flushes=16`、`manualButtons=16`、`sideButtons=3`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1650`、`extensionVersion=0.1.39`。
   - 2026-05-02 16:34 继续按用户纠正补强并已发布公网：`梦萱/孟轩`本身不是问题，问题是 `🌸无线线下🌸`、`🌸无常线下🌸`、`🌸无偿线下🌸` 这种昵称绕写搭配随机数字 handle 和数字表情低信息回复。现在三种绕写都会被本地识别为风险昵称，也会进入云端 Worker 同构规则；回归样本仍确认 `有没有天安门附近的`、`附近有家面馆不错` 放过。线上 Worker Version ID：`71fc1d62-7185-4e64-9019-e6f10ab3bf45`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1633`、`extensionVersion=0.1.37`。线上 AI 设置测试样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `action=hide`、`confidence=high`、`model=deepseek-v4-flash`、标签 `meaningless_bait`。
   - 2026-05-02 16:23 已补截图漏网规则：`梦萱🌸无线线下🌸 @MullerChri42258` 发 `2🙃😍🧡` 这类“线下绕写昵称 + 随机数字 handle + 数字表情低信息回复”现在会进入低信息诱导账号规则。本地和 Worker 同步改了 `无线/无限 + 线下` 显示名绕写、`🌸` 招揽昵称装饰识别。回归样本：`有没有天安门附近的`、`附近有家面馆不错` 仍放过。
