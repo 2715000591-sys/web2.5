@@ -128,9 +128,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-02-2157`
-  - 扩展版本 `0.1.49`
-  - App / Extension 版本 `1.0.49 (50)`
+  - `BUILD_ID = 2026-05-02-2317`
+  - 扩展版本 `0.1.50`
+  - App / Extension 版本 `1.0.50 (51)`
+  - 2026-05-02 23:25 已补用户截图里的 `Gmuabzl @gmuabzl73394 / 有缘自会相识。🎁🔥🌺` 和 `Utmhryx @utmhryx13099 / ⚜ 怡好刚好温良友 ⚜ 💘 🧊 🤌🏽🍀🔥`。新版把“短空话/诗句式空洞模板 + emoji 噪音 + 随机数字 handle + 与主帖无关”作为组合信号，而不是只看单条正文；`mainPostText` 会进入 AI 证据卡，prompt 也明确要求比较主帖和回复是否相关。头像证据新增 `emoji_noise_reply` 标签，可疑时继续触发 `avatar_vision_requested`，让支持图片的模型检查头像里是否有“全国安排”等线索。回归：截图同款隐藏，普通相关 `有缘自会相识。`、生日语境 `生日快乐🎂🎉🥳`、金融语境 emoji 回复放过。本轮没有改数据库结构或删除 D1 数据。
   - 2026-05-02 21:57 已补 Safari 偶发启动卡在 `boot` 的兜底：本地扩展读取 Safari 扩展存储和 IndexedDB 时会有超时回退，避免存储回调不返回时整页过滤不扫描。最终真实 Safari `https://x.com/home` 验证返回 `build=2026-05-02-2157`、`marking=1`、`stage=ads:done`。
   - 2026-05-02 21:48 已补用户截图里的 `是不是这个? + pan.quark.cn/s/...` 夸克网盘引流漏网。根因是旧 `share-link-scam` 已认识网盘域名，但没有把“是不是这个 / 是这个吗 / 就是这个”这种短引诱句当成资源盘导流词；链接编号又让整条回复不够短，所以没触发。新版本地和 Worker 都把这类话术归入 `share-link-scam`；截图同款隐藏，`是不是这个问题的原因`、`你说的是这个吗？我刚才没看懂` 放过。没有改 AI 调用顺序、数据库结构、`manual_allow` 口径或 UI。
   - 2026-05-02 21:24 已做小范围同构修正：本地插件现在会发出 `pattern:geo-relationship-bait` 和 `pattern:poetic-slogan-lure-account`，与云端数据库候选规则键保持一致。这个改动只补手动反馈 / 候选证据键，不改变筛选阈值、AI 调用顺序或 UI。验证：本机 App 含 `BUILD_ID=2026-05-02-2124`，签名和 `pluginkit` 通过，`npm run safari:verify-live` 对当前 X 首页返回 `build=2026-05-02-2124`。两个尝试打开的 X 详情页没有加载出回复列表（`articles=0`），所以本轮未能看到实际 `冲走` 按钮数量；后续真实详情页能正常加载时应补一次可见按钮验收。
@@ -150,7 +151,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `85aed8c0-9176-454d-8667-47f1cbe8f7c6`
+  - Version ID: `c01f5557-4993-4630-a663-4d2100cff1bd`
+  - 2026-05-02 23:25 已部署 `BUILD_ID=2026-05-02-2317` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2317`、`extensionVersion=0.1.50`，首页和控制台返回 200。线上只读探针样本 `Gmuabzl @gmuabzl73394 / 有缘自会相识。🎁🔥🌺` 已显示新证据：`emoji-heavy low-substance bait`、`poetic low-substance slogan`、`unrelated to the main post context`、`context_detached_reply`；数据库和学习库未命中时会进入外接 AI 路线。随后真实 AI 小样本返回 `ready / hide / high`，理由为诗句式低信息、随机号、脱离主帖、emoji 诱饵；不写数据库。新增候选键 `pattern:emoji-noise-lure-account`。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-02 22:43 已新增开发者只读“回复 AI 路线探针”：`POST /api/developer/reply-ai-routing-probe` 和脚本 `npm run cloud:probe-reply-ai`。它不改变筛选强度，只帮助检查一条样本会走 AI 学习库、数据库候选规则、旧复用层、账号黑名单还是外接 AI；默认不写数据库、不调用外接 AI。线上默认样本已验证命中 `db_rule_pattern`，外接 AI 不需要运行，数据库也没有写入。公网首页、控制台和下载清单已验证 200，下载清单仍为 `buildId=2026-05-02-2157`、`extensionVersion=0.1.49`。
   - 2026-05-02 22:00 已发布网盘短引诱句补丁和 Safari 启动兜底到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2157`、`extensionVersion=0.1.49`，首页、控制台、下载清单均返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则；本轮没有 schema 变更或批量 D1 写入。
   - 2026-05-02 21:29 已发布新版下载包和同构键修正到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2124`、`extensionVersion=0.1.47`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。

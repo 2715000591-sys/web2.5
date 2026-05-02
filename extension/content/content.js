@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-2157";
+  const BUILD_ID = "2026-05-02-2317";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -3213,6 +3213,10 @@
       return "pattern:poetic-slogan-lure-account";
     }
 
+    if (analysis && analysis.hasEmojiNoiseBait && suspiciousHandle) {
+      return "pattern:emoji-noise-lure-account";
+    }
+
     const matchedTerms = Array.from(new Set(SIMILARITY_TERMS.filter(function (term) {
       return normalized.includes(term);
     })));
@@ -4838,6 +4842,7 @@
       || analysis.hasLowInformationBadge
       || analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
+      || analysis.hasEmojiNoiseBait
       || analysis.hasSpamTemplateSignal
       || analysis.hasBaitQuestionShape
     ));
@@ -4856,6 +4861,9 @@
     }
     if (analysis && analysis.hasDecorativeSloganBait) {
       tags.push("decorative_low_substance_reply");
+    }
+    if (analysis && analysis.hasEmojiNoiseBait) {
+      tags.push("emoji_noise_reply");
     }
     if (thinOrBait) {
       tags.push("thin_or_bait_reply");
@@ -5110,6 +5118,7 @@
         || analysis.hasThinSymbolOrNumberPayload
         || analysis.hasLowInformationBadge
         || analysis.hasLureEmoji
+        || analysis.hasEmojiNoiseBait
         || analysis.hasShareLinkScam
         || analysis.hasAccountMention
         || analysis.hasExternalContactPayload
@@ -5132,6 +5141,7 @@
         analysis.hasMinimalTextPayload
         || analysis.hasFragmentedSymbolicReply
         || analysis.hasLowInformationBadge
+        || analysis.hasEmojiNoiseBait
       ));
     let score = 0;
 
@@ -5179,6 +5189,9 @@
     }
     if (!protectedAccount && analysis && analysis.hasPoeticSpamSloganBait) {
       score += 3;
+    }
+    if (!protectedAccount && analysis && analysis.hasEmojiNoiseBait) {
+      score += 2;
     }
     if (analysis && analysis.hasEroticMentionRedirect) {
       score += 3;
@@ -5229,6 +5242,7 @@
         || analysis.hasFragmentedSymbolicReply
         || analysis.hasThinSymbolOrNumberPayload
         || analysis.hasLowInformationBadge
+        || analysis.hasEmojiNoiseBait
         || analysis.hasGeoMeetupBait
         || analysis.hasGeoRelationshipBait
         || analysis.hasBaitQuestionShape
@@ -5236,6 +5250,7 @@
         || analysis.hasSpamTemplateSignal
         || analysis.hasDecorativeSloganBait
         || analysis.hasPoeticSpamSloganBait
+        || analysis.hasEmojiNoiseBait
         || analysis.hasAccountMention
       ))
       || matchedSlots.length >= 2

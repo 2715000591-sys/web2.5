@@ -30,6 +30,28 @@
     "notes": "正文低信息，账号画像和主页诱导共同支撑。"
   },
   {
+    "id": "hide-context-detached-emoji-slogan-001",
+    "replyText": "有缘自会相识。🎁🔥🌺",
+    "mainPostText": "今天聊的是手机系统更新和续航问题。",
+    "authorDisplayName": "Gmuabzl",
+    "authorHandle": "gmuabzl73394",
+    "profileBioText": "",
+    "expectedAction": "hide",
+    "expectedLabels": ["meaningless_bait", "lead_gen_spam"],
+    "notes": "随机数字 handle 发与主贴无关的短空话并堆 emoji，应结合上下文判断为诱饵。"
+  },
+  {
+    "id": "hide-context-detached-emoji-slogan-002",
+    "replyText": "⚜ 怡好刚好温良友 ⚜ 💘 🧊 🤌🏽🍀🔥",
+    "mainPostText": "今天聊的是手机系统更新和续航问题。",
+    "authorDisplayName": "Utmhryx",
+    "authorHandle": "utmhryx13099",
+    "profileBioText": "",
+    "expectedAction": "hide",
+    "expectedLabels": ["meaningless_bait", "lead_gen_spam"],
+    "notes": "批量号式昵称、随机数字 handle、emoji 噪音和语义怪异短句共同构成垃圾回复。"
+  },
+  {
     "id": "allow-adult-discussion-001",
     "replyText": "我觉得成人内容的分级和平台治理应该分开讨论，不能只靠关键词一刀切。",
     "authorDisplayName": "普通用户",

@@ -314,10 +314,13 @@
     /烟火.{0,4}相逢/,
     /人海.{0,4}(擦肩|相逢|逢)/,
     /缘分.{0,4}(引线|牵线|人海|相逢|遇见|逢)/,
+    /有缘.{0,4}(自会)?相识/,
+    /自会.{0,4}相识/,
     /遇见.{0,4}(温柔|人间)/,
     /旧城.{0,4}(偶遇|故人)/,
     /晚风.{0,4}相逢/,
-    /一念.{0,4}(恰好|相逢)/
+    /一念.{0,4}(恰好|相逢)/,
+    /(怡好|恰好|刚好).{0,4}温良友/
   ];
 
   const SLOT_DEFINITIONS = [
@@ -557,6 +560,73 @@
     return Array.from(String(text || "").matchAll(EMOJI_PATTERN)).length;
   }
 
+  function looksLikeEmojiNoiseBait(text) {
+    const raw = String(text || "");
+    const compact = buildCompact(raw);
+    if (!compact || compact.length < 3 || compact.length > 20) {
+      return false;
+    }
+
+    if (countMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countMatches(compact, FINANCE_MARKERS) > 0) {
+      return false;
+    }
+
+    const emojiCount = countEmojiMatches(raw);
+    return emojiCount >= 4 || (emojiCount >= 3 && Array.from(compact).length <= 10);
+  }
+
+  function normalizeContextForOverlap(text) {
+    return buildCompact(text).replace(/[的了呢吗嘛啊呀哦哈吧把和与及又也就都很挺真这那我你他她它们一个一下这个那个我们你们他们是不是怎么什么]/g, "");
+  }
+
+  function hasUsefulContextOverlap(replyText, postText) {
+    const reply = normalizeContextForOverlap(replyText);
+    const post = normalizeContextForOverlap(postText);
+    if (!reply || !post || reply.length < 4 || post.length < 8) {
+      return false;
+    }
+
+    const grams = new Set();
+    for (let index = 0; index <= reply.length - 2; index += 1) {
+      const gram = reply.slice(index, index + 2);
+      if (/^(?:有缘|自会|相识|刚好|恰好|温良|良友|这个|那个|我们|你们|他们|一下|真的|可以|没有|就是|什么|怎么|一个)$/.test(gram)) {
+        continue;
+      }
+      grams.add(gram);
+    }
+
+    for (const gram of grams) {
+      if (gram && post.includes(gram)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function looksLikeContextDetachedBait(replyText, postText, replyAnalysis) {
+    const reply = replyAnalysis || analyzeReplyText(replyText);
+    const compact = reply && reply.compact ? reply.compact : buildCompact(replyText);
+    const postCompact = buildCompact(postText);
+    if (!compact || compact.length < 4 || compact.length > 24 || !postCompact || postCompact.length < 8) {
+      return false;
+    }
+
+    const lowSubstance = Boolean(
+      reply
+      && (
+        reply.hasEmojiNoiseBait
+        || reply.hasDecorativeSloganBait
+        || reply.hasPoeticSpamSloganBait
+        || reply.hasSpamTemplateSignal
+        || reply.hasLowInformationBadge
+        || reply.hasFragmentedSymbolicReply
+        || reply.hasMinimalTextPayload
+        || reply.hasThinSymbolOrNumberPayload
+      )
+    );
+    return lowSubstance && !hasUsefulContextOverlap(replyText, postText);
+  }
+
   function looksLikeThinSymbolOrNumberPayload(text) {
     const raw = String(text || "").replace(ZERO_WIDTH_PATTERN, "");
     const chars = Array.from(raw.replace(EMOJI_PATTERN, "").replace(/\s+/g, ""));
@@ -701,6 +771,7 @@
     });
     const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(raw);
     const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(raw);
+    const hasEmojiNoiseBait = looksLikeEmojiNoiseBait(raw);
     const hasEroticMentionRedirect = hasAccountMention && (
       hasExplicitEroticBait
       || EROTIC_MENTION_REDIRECT_MARKERS.some(function (term) {
@@ -743,6 +814,7 @@
       hasSpamTemplateSignal: hasSpamTemplateSignal,
       hasDecorativeSloganBait: hasDecorativeSloganBait,
       hasPoeticSpamSloganBait: hasPoeticSpamSloganBait,
+      hasEmojiNoiseBait: hasEmojiNoiseBait,
       hasEroticMentionRedirect: hasEroticMentionRedirect
     };
   }
@@ -893,6 +965,7 @@
     const lureDisplayName = !highRiskDisplayName && (strongLureDisplayName || displayNameLooksLure(flags.displayName || ""));
     const suspiciousHandle = handleLooksSuspicious(flags.handle || "");
     const trustedOverride = shareLinkScam || highRiskDisplayName || (lureDisplayName && reply.hasMinimalTextPayload);
+    const contextDetachedBait = looksLikeContextDetachedBait(replyText, postText, reply);
     const reasons = [];
     let score = 0;
 
@@ -1113,6 +1186,21 @@
       reasons.push("spam-template-emoji-noise");
     }
 
+    if (reply.hasEmojiNoiseBait) {
+      score += 1;
+      reasons.push("emoji-noise-bait");
+    }
+
+    if (reply.hasEmojiNoiseBait && suspiciousHandle) {
+      score += 1;
+      reasons.push("emoji-noise-from-suspicious-handle");
+    }
+
+    if (contextDetachedBait && suspiciousHandle) {
+      score += 4;
+      reasons.push("context-detached-bait-from-suspicious-handle");
+    }
+
     if (reply.hasPoeticSpamSloganBait && suspiciousHandle) {
       score += 5;
       reasons.push("poetic-slogan-from-suspicious-handle");
@@ -1173,6 +1261,8 @@
     looksLikeShareLinkScam: looksLikeShareLinkScam,
     looksLikeDecorativeSloganBait: looksLikeDecorativeSloganBait,
     looksLikePoeticSpamSloganBait: looksLikePoeticSpamSloganBait,
+    looksLikeEmojiNoiseBait: looksLikeEmojiNoiseBait,
+    looksLikeContextDetachedBait: looksLikeContextDetachedBait,
     looksLikeInnocentPetContext: looksLikeInnocentPetContext
   };
 })();

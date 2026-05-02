@@ -138,6 +138,40 @@ const SIMILARITY_TERMS = [
   "推特第一骚",
   "固炮"
 ];
+const SUBSTANTIVE_MARKERS = [
+  "因为",
+  "所以",
+  "如果",
+  "但是",
+  "感觉",
+  "问题",
+  "趋势",
+  "策略",
+  "学习",
+  "分析",
+  "行情",
+  "可以",
+  "应该",
+  "数据",
+  "逻辑",
+  "判断",
+  "原因",
+  "讨论"
+];
+const FINANCE_MARKERS = [
+  "btc",
+  "eth",
+  "行情",
+  "趋势",
+  "合约",
+  "杠杆",
+  "点位",
+  "止损",
+  "交易",
+  "大盘",
+  "涨",
+  "跌"
+];
 const ACCOUNT_REDIRECT_TERMS = [
   "搜id",
   "搜我id",
@@ -377,10 +411,13 @@ const POETIC_SPAM_SLOGAN_PATTERNS = [
   /烟火.{0,4}相逢/,
   /人海.{0,4}(擦肩|相逢|逢)/,
   /缘分.{0,4}(引线|牵线|人海|相逢|遇见|逢)/,
+  /有缘.{0,4}(自会)?相识/,
+  /自会.{0,4}相识/,
   /遇见.{0,4}(温柔|人间)/,
   /旧城.{0,4}(偶遇|故人)/,
   /晚风.{0,4}相逢/,
-  /一念.{0,4}(恰好|相逢)/
+  /一念.{0,4}(恰好|相逢)/,
+  /(怡好|恰好|刚好).{0,4}温良友/
 ];
 const GEO_MEETUP_BAIT_PATTERNS = [
   /^(?:有|求|蹲).{0,10}(万达广场附近|附近|离得近|同城|线下).{0,4}(吗|嘛|呢|的嘛|的吗|的么|的人|的人吗)$/,
@@ -433,6 +470,7 @@ const REPLY_AI_AVATAR_EVIDENCE_TAGS = new Set([
   "suspicious_handle",
   "poetic_low_substance_reply",
   "decorative_low_substance_reply",
+  "emoji_noise_reply",
   "thin_or_bait_reply",
   "context_detached_reply",
   "avatar_vision_requested"
@@ -1086,7 +1124,7 @@ function buildAiProviderTestItem(sample) {
       8
     ),
     avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(source.avatarFetchStatus || "not_requested"),
-    avatarVisionRequested: source.avatarVisionRequested === true,
+    avatarVisionRequested: source.avatarVisionRequested === true || Number(source.avatarVisionRequested || 0) === 1,
     profilePath: normalizeAiProviderTestText(source.profilePath, "/wx1234567890", 160),
     profileBioText: normalizeAiProviderTestText(source.profileBioText, "联系方式看主页 vx", 1200),
     profileSignalTags: normalizeReplyAiStringList(
@@ -2626,6 +2664,8 @@ function buildHeuristicProbePayload(summary) {
     hasSpamTemplateSignal: Boolean(source.hasSpamTemplateSignal),
     hasDecorativeSloganBait: Boolean(source.hasDecorativeSloganBait),
     hasPoeticSpamSloganBait: Boolean(source.hasPoeticSpamSloganBait),
+    hasEmojiNoiseBait: Boolean(source.hasEmojiNoiseBait),
+    hasContextDetachedBait: Boolean(source.hasContextDetachedBait),
     avatarVisionRequested: Boolean(source.avatarVisionRequested),
     avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
     evidenceNotes: Array.isArray(source.evidenceNotes) ? source.evidenceNotes.slice(0, 12) : []
@@ -4992,7 +5032,8 @@ function isHighValueModerationPatternKey(key) {
     "pattern:mention-lure-redirect",
     "pattern:explicit-erotic-bait",
     "pattern:decorative-slogan-lure-account",
-    "pattern:poetic-slogan-lure-account"
+    "pattern:poetic-slogan-lure-account",
+    "pattern:emoji-noise-lure-account"
   ].includes(String(key || "").trim());
 }
 
@@ -5006,7 +5047,8 @@ function canAutoActivateModerationPatternKey(key) {
     "pattern:mention-lure-redirect",
     "pattern:explicit-erotic-bait",
     "pattern:decorative-slogan-lure-account",
-    "pattern:poetic-slogan-lure-account"
+    "pattern:poetic-slogan-lure-account",
+    "pattern:emoji-noise-lure-account"
   ].includes(String(key || "").trim());
 }
 
@@ -8117,6 +8159,8 @@ async function findReusableReplyAiDecision(env, itemRow, riskRow) {
       || heuristicSummary.hasGeoMeetupBait
       || heuristicSummary.hasBaitQuestionShape
       || heuristicSummary.hasShareLinkScam
+      || heuristicSummary.hasEmojiNoiseBait
+      || heuristicSummary.hasContextDetachedBait
     ) {
       return buildReplyAiReusedDecision(row, "reuse_template_hide", "命中同账号同模板复用");
     }
@@ -8135,6 +8179,8 @@ async function findReusableReplyAiDecision(env, itemRow, riskRow) {
       || heuristicSummary.hasGeoMeetupBait
       || heuristicSummary.hasBaitQuestionShape
       || heuristicSummary.hasShareLinkScam
+      || heuristicSummary.hasEmojiNoiseBait
+      || heuristicSummary.hasContextDetachedBait
     )
   ) {
     return buildReplyAiReusedDecision(latestHighConfidenceHideRow, "reuse_account_hide", "命中高风险账号短期复用");
@@ -8319,6 +8365,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const hasSpamTemplateSignal = looksLikeSpamTemplateSignal(replyText);
   const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(replyText);
   const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(replyText);
+  const hasEmojiNoiseBait = looksLikeEmojiNoiseBait(replyText);
   const avatarSignals = Array.isArray(itemRow && itemRow.avatarEvidenceTags)
     ? itemRow.avatarEvidenceTags
     : [];
@@ -8331,7 +8378,18 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     || hasMinimalTextPayload
     || hasFragmentedSymbolicReply
     || hasLowInformationBadge
-    || hasThinSymbolOrNumberPayload;
+    || hasThinSymbolOrNumberPayload
+    || hasEmojiNoiseBait;
+  const hasContextDetachedBait = looksLikeContextDetachedBait(replyText, itemRow && itemRow.mainPostText ? itemRow.mainPostText : "", {
+    hasEmojiNoiseBait,
+    hasDecorativeSloganBait,
+    hasPoeticSpamSloganBait,
+    hasSpamTemplateSignal,
+    hasLowInformationBadge,
+    hasFragmentedSymbolicReply,
+    hasMinimalTextPayload,
+    hasThinSymbolOrNumberPayload
+  });
   const evidenceNotes = [];
 
   if (highRiskDisplayName) {
@@ -8351,6 +8409,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasLowInformationBadge) {
     evidenceNotes.push("reply is extremely low-information");
   }
+  if (hasEmojiNoiseBait) {
+    evidenceNotes.push("reply is emoji-heavy low-substance bait");
+  }
   if (hasMinimalTextPayload) {
     evidenceNotes.push("reply text payload is nearly empty");
   }
@@ -8368,6 +8429,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   }
   if (hasPoeticSpamSloganBait && suspiciousHandle) {
     evidenceNotes.push("reply is a poetic low-substance slogan from a disposable-looking account");
+  }
+  if (hasContextDetachedBait) {
+    evidenceNotes.push("reply appears unrelated to the main post context");
   }
   if (avatarSignals.includes("context_detached_reply")) {
     evidenceNotes.push("reply appears detached from the thread context and may need avatar/profile evidence");
@@ -8406,6 +8470,8 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasSpamTemplateSignal,
     hasDecorativeSloganBait,
     hasPoeticSpamSloganBait,
+    hasEmojiNoiseBait,
+    hasContextDetachedBait,
     avatarEvidenceTags: normalizeReplyAiStringList(avatarSignals, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
     avatarVisionRequested: Boolean(itemRow && itemRow.avatarVisionRequested),
     evidenceNotes
@@ -8461,6 +8527,12 @@ function buildReplyAiMemoryContextKey(itemRow, heuristicSummary) {
   }
   if (heuristicSummary.hasPoeticSpamSloganBait) {
     contextFlags.push("poetic-slogan");
+  }
+  if (heuristicSummary.hasEmojiNoiseBait) {
+    contextFlags.push("emoji-noise");
+  }
+  if (heuristicSummary.hasContextDetachedBait) {
+    contextFlags.push("context-detached");
   }
   if (heuristicSummary.avatarVisionRequested) {
     contextFlags.push("avatar-vision-requested");
@@ -8807,8 +8879,9 @@ function buildReplyAiProviderPrompt(settings, options) {
     "You must evaluate supplied account metadata as first-class evidence, not just reply text.",
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, profile bio, profile links, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
     "The user payload is an evidence card for each reply. Treat reply text, display name, @handle, avatar evidence, profile bio, profile links, profile signal tags, and batch context as separate evidence fields.",
+    "Always compare mainPostText with replyText. A short decorative, slogan-like, or emoji-heavy reply that has no useful relation to the original post is stronger spam evidence when the account handle, avatar, profile, or batch pattern is also suspicious; do not hide substantive replies that are clearly relevant to the thread.",
     "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
-    "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 遇见温柔满人间, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
+    "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 有缘自会相识, 遇见温柔满人间, 怡好刚好温良友, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
     "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
     "If avatar.visionRequested is true and an avatar image is attached, inspect the avatar for text or visual lure cues such as 全国安排, local hookup, contact, adult-service, QR/contact, or profile bait. Use avatar evidence only as supporting evidence; never invent avatar content when an image is not attached or not visible.",
     "If avatar evidence tags say context_detached_reply, treat that as a sign that the reply may be unrelated filler; combine it with account metadata, profile, avatar, or batch patterns before hiding.",
@@ -10191,6 +10264,13 @@ function buildCompactRuleText(text) {
     .replace(EMOJI_PATTERN, "");
 }
 
+function countRuleTermMatches(text, terms) {
+  const source = String(text || "");
+  return (Array.isArray(terms) ? terms : []).reduce((count, term) => {
+    return count + (source.includes(String(term || "")) ? 1 : 0);
+  }, 0);
+}
+
 function handleLooksSuspicious(handle) {
   const normalized = buildCompactRuleText(handle).replace(/^@/, "");
   if (!normalized) {
@@ -10226,6 +10306,70 @@ function looksLikeMinimalTextPayload(text) {
   return emojiCount > 0 && Array.from(payloadText).length <= 1;
 }
 
+function looksLikeEmojiNoiseBait(text) {
+  const raw = String(text || "");
+  const compact = buildCompactRuleText(raw);
+  if (!compact || compact.length < 3 || compact.length > 20) {
+    return false;
+  }
+
+  if (countRuleTermMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countRuleTermMatches(compact, FINANCE_MARKERS) > 0) {
+    return false;
+  }
+
+  const emojiCount = Array.from(raw.matchAll(EMOJI_PATTERN)).length;
+  return emojiCount >= 4 || (emojiCount >= 3 && Array.from(compact).length <= 10);
+}
+
+function normalizeContextForOverlap(text) {
+  return buildCompactRuleText(text).replace(/[的了呢吗嘛啊呀哦哈吧把和与及又也就都很挺真这那我你他她它们一个一下这个那个我们你们他们是不是怎么什么]/g, "");
+}
+
+function hasUsefulContextOverlap(replyText, contextText) {
+  const reply = normalizeContextForOverlap(replyText);
+  const context = normalizeContextForOverlap(contextText);
+  if (!reply || !context || reply.length < 4 || context.length < 8) {
+    return false;
+  }
+
+  const grams = new Set();
+  for (let index = 0; index <= reply.length - 2; index += 1) {
+    const gram = reply.slice(index, index + 2);
+    if (/^(?:有缘|自会|相识|刚好|恰好|温良|良友|这个|那个|我们|你们|他们|一下|真的|可以|没有|就是|什么|怎么|一个)$/.test(gram)) {
+      continue;
+    }
+    grams.add(gram);
+  }
+
+  for (const gram of grams) {
+    if (gram && context.includes(gram)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function looksLikeContextDetachedBait(replyText, contextText, heuristicSummary) {
+  const compact = buildCompactRuleText(replyText);
+  const contextCompact = buildCompactRuleText(contextText);
+  if (!compact || compact.length < 4 || compact.length > 24 || !contextCompact || contextCompact.length < 8) {
+    return false;
+  }
+
+  const summary = heuristicSummary || {};
+  const lowSubstance = Boolean(
+    summary.hasEmojiNoiseBait
+    || summary.hasDecorativeSloganBait
+    || summary.hasPoeticSpamSloganBait
+    || summary.hasSpamTemplateSignal
+    || summary.hasLowInformationBadge
+    || summary.hasFragmentedSymbolicReply
+    || summary.hasMinimalTextPayload
+    || summary.hasThinSymbolOrNumberPayload
+  );
+  return lowSubstance && !hasUsefulContextOverlap(replyText, contextText);
+}
+
 function looksLikeThinSymbolOrNumberPayload(text) {
   const raw = String(text || "").replace(ZERO_WIDTH_PATTERN, "");
   const chars = Array.from(raw.replace(EMOJI_PATTERN, "").replace(/\s+/g, ""));
@@ -10257,6 +10401,10 @@ function looksLikeDecorativeSloganBait(text) {
     return false;
   }
 
+  if (countRuleTermMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countRuleTermMatches(compact, FINANCE_MARKERS) > 0) {
+    return false;
+  }
+
   const termCount = DECORATIVE_SLOGAN_TERMS.reduce((count, term) => {
     return count + (compact.includes(buildCompactRuleText(term)) ? 1 : 0);
   }, 0);
@@ -10269,6 +10417,10 @@ function looksLikePoeticSpamSloganBait(text) {
   const normalized = normalizeRuleText(raw);
   const compact = buildCompactRuleText(raw);
   if (!compact || compact.length < 4 || compact.length > 18) {
+    return false;
+  }
+
+  if (countRuleTermMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countRuleTermMatches(compact, FINANCE_MARKERS) > 0) {
     return false;
   }
 
@@ -10645,6 +10797,12 @@ function buildRowKeys(row) {
       looksLikePoeticSpamSloganBait(replyText || normalized)
       && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
     );
+  const emojiNoiseLureAccount = protectedGuardApplies
+    ? false
+    : (
+      looksLikeEmojiNoiseBait(replyText || normalized)
+      && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
+    );
   const lowInformationStrongLureName = protectedGuardApplies
     ? false
     : (
@@ -10711,9 +10869,13 @@ function buildRowKeys(row) {
                                         : (
                                           poeticSloganLureAccount
                                             ? "pattern:poetic-slogan-lure-account"
-                                            : (matchedTerms.length > 0
-                                              ? "pattern:" + matchedTerms.join("|")
-                                              : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                            : (
+                                              emojiNoiseLureAccount
+                                                ? "pattern:emoji-noise-lure-account"
+                                                : (matchedTerms.length > 0
+                                                  ? "pattern:" + matchedTerms.join("|")
+                                                  : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                            )
                                         )
                                     )
                                 )
