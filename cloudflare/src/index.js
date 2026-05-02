@@ -284,6 +284,8 @@ const DISPLAY_NAME_LURE_PATTERNS = [
   /处男.{0,4}(免费|无偿|约)/,
   /免费约/,
   /免费.{0,2}破处/,
+  /(无线|无限).{0,2}线下/,
+  /线下.{0,2}(无线|无限)/,
   /(?:男|女).{0,2}无偿/,
   /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
   /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
@@ -333,6 +335,31 @@ const LOW_INFORMATION_BADGE_PATTERNS = [
   /^(?:new|up|top|dd|hi|hey|ok|go|tg|vx|wx|qq|id|new\d{0,2})$/i,
   /^(?:置顶|顶|冲|滴滴|看看|点我|点这|主页|简介)$/
 ];
+const DECORATIVE_SLOGAN_TERMS = [
+  "柔情",
+  "入骨",
+  "质感",
+  "日常分享",
+  "陪伴",
+  "解忧",
+  "始终都在",
+  "淡淡氛围",
+  "氛围感",
+  "岁岁安稳",
+  "温柔",
+  "初心",
+  "人间烟火",
+  "风雅",
+  "仪式",
+  "分寸",
+  "入心",
+  "相依",
+  "相守",
+  "朝夕",
+  "安稳",
+  "立身"
+];
+const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・]/u;
 const GEO_MEETUP_BAIT_PATTERNS = [
   /^(?:有|求|蹲).{0,10}(万达广场附近|附近|离得近|同城|线下).{0,4}(吗|嘛|呢|的嘛|的吗|的么|的人|的人吗)$/,
   /^(?:万达广场附近|附近|离得近|同城|线下).{0,6}(有吗|有人吗|的吗|嘛|吗|么|呢)$/,
@@ -4581,7 +4608,8 @@ function isHighValueModerationPatternKey(key) {
     "pattern:share-link-scam",
     "pattern:spam-template-signal",
     "pattern:mention-lure-redirect",
-    "pattern:explicit-erotic-bait"
+    "pattern:explicit-erotic-bait",
+    "pattern:decorative-slogan-lure-account"
   ].includes(String(key || "").trim());
 }
 
@@ -4593,7 +4621,8 @@ function canAutoActivateModerationPatternKey(key) {
     "pattern:share-link-scam",
     "pattern:spam-template-signal",
     "pattern:mention-lure-redirect",
-    "pattern:explicit-erotic-bait"
+    "pattern:explicit-erotic-bait",
+    "pattern:decorative-slogan-lure-account"
   ].includes(String(key || "").trim());
 }
 
@@ -7773,6 +7802,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const hasExplicitEroticBait = looksLikeExplicitEroticBait(replyText);
   const hasEroticMentionRedirect = looksLikeEroticMentionRedirect(replyText);
   const hasSpamTemplateSignal = looksLikeSpamTemplateSignal(replyText);
+  const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(replyText);
   const accountMetadataRisk = highRiskDisplayName
     || (lureDisplayName && suspiciousHandle)
     || (lureDisplayName && hasLongDigitHandle)
@@ -7813,6 +7843,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasSpamTemplateSignal) {
     evidenceNotes.push("reply matches a known spam template");
   }
+  if (hasDecorativeSloganBait && suspiciousHandle) {
+    evidenceNotes.push("reply is a decorative low-substance slogan from a disposable-looking account");
+  }
   if (hasGeoMeetupBait || hasBaitQuestionShape) {
     evidenceNotes.push("reply shape resembles meetup/contact bait");
   }
@@ -7841,6 +7874,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasExplicitEroticBait,
     hasEroticMentionRedirect,
     hasSpamTemplateSignal,
+    hasDecorativeSloganBait,
     evidenceNotes
   };
 }
@@ -7888,6 +7922,9 @@ function buildReplyAiMemoryContextKey(itemRow, heuristicSummary) {
   }
   if (heuristicSummary.hasShareLinkScam || heuristicSummary.hasSpamTemplateSignal) {
     contextFlags.push("spam-template");
+  }
+  if (heuristicSummary.hasDecorativeSloganBait) {
+    contextFlags.push("decorative-slogan");
   }
   profileSignals.forEach((signal) => {
     if (["contact_keyword", "contact_payload", "profile_redirect", "external_link", "suspicious_bio"].includes(signal)) {
@@ -8224,6 +8261,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "Hide only when the reply is clearly spammy, contact redirect, scam/fraud, malware or unsafe-download bait, meaningless bait, profile-link risk, or adult/meetup lead-generation.",
     "Hide adult/sexual content only when it clearly combines with paid or free hookup solicitation, meetup bait, contact handles, off-platform contact redirect, scam/fraud, malware risk, unsafe external links, profile-link lure, or low-information bait from risky account metadata.",
     "Meaningless bait means a thin or content-free reply whose purpose is lure/lead generation, especially when paired with risky display name, suspicious handle, profile redirect, contact payload, or prior risk history. Do not label ordinary short replies as meaningless bait without supporting risk evidence.",
+    "A decorative, motto-like, low-substance slogan reply can be meaningless bait when it comes from a disposable-looking numeric account, but allow normal quotes, jokes, and substantive conversation.",
     "You must evaluate supplied account metadata as first-class evidence, not just reply text.",
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, profile bio, profile links, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
     "If avatar or image evidence is supplied, use it only as supporting evidence; never invent avatar evidence when it is not supplied.",
@@ -9605,6 +9643,20 @@ function looksLikeFragmentedSymbolicReply(text) {
   );
 }
 
+function looksLikeDecorativeSloganBait(text) {
+  const raw = String(text || "");
+  const compact = buildCompactRuleText(raw);
+  if (!compact || compact.length < 4 || compact.length > 28) {
+    return false;
+  }
+
+  const termCount = DECORATIVE_SLOGAN_TERMS.reduce((count, term) => {
+    return count + (compact.includes(buildCompactRuleText(term)) ? 1 : 0);
+  }, 0);
+  const hasDecorativeShell = DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
+  return termCount >= 2 || (hasDecorativeShell && termCount >= 1);
+}
+
 function looksLikeCivicLandmarkNearbyQuestion(text) {
   const compact = buildCompactRuleText(text);
   if (!compact || compact.length > 18) {
@@ -9872,7 +9924,7 @@ function displayNameLooksLure(name) {
   const lureTermCount = ["破处", "小狗", "主人", "搭子", "单男", "约", "撩", "调教", "固炮"].reduce((count, term) => {
     return count + (compact.includes(term) ? 1 : 0);
   }, 0);
-  const hasMarketingBadge = /[👉❤️💕💋🥵🤤🍑🍆]/u.test(raw) || compact.includes("ovo");
+  const hasMarketingBadge = /[👉❤️💕💋🥵🤤🍑🍆🌸]/u.test(raw) || compact.includes("ovo");
   return marketingTermCount >= 2
     || lureTermCount >= 2
     || (marketingTermCount + lureTermCount >= 1 && hasMarketingBadge);
@@ -9958,6 +10010,12 @@ function buildRowKeys(row) {
   const spamTemplateSignal = protectedGuardApplies ? false : looksLikeSpamTemplateSignal(replyText || normalized);
   const explicitEroticBait = protectedGuardApplies ? false : looksLikeExplicitEroticBait(replyText || normalized);
   const eroticMentionRedirect = protectedGuardApplies ? false : looksLikeEroticMentionRedirect(replyText || normalized);
+  const decorativeSloganLureAccount = protectedGuardApplies
+    ? false
+    : (
+      looksLikeDecorativeSloganBait(replyText || normalized)
+      && handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
+    );
   const lowInformationStrongLureName = protectedGuardApplies
     ? false
     : (
@@ -10008,9 +10066,13 @@ function buildRowKeys(row) {
                                 : (
                                   explicitEroticBait
                                     ? "pattern:explicit-erotic-bait"
-                                    : (matchedTerms.length > 0
-                                      ? "pattern:" + matchedTerms.join("|")
-                                      : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                    : (
+                                      decorativeSloganLureAccount
+                                        ? "pattern:decorative-slogan-lure-account"
+                                        : (matchedTerms.length > 0
+                                          ? "pattern:" + matchedTerms.join("|")
+                                          : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                    )
                                 )
                               )
                             )

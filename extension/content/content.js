@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1541";
+  const BUILD_ID = "2026-05-02-1623";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -3095,6 +3095,10 @@
       return "pattern:spam-template-signal";
     }
 
+    if (analysis && analysis.hasDecorativeSloganBait && suspiciousHandle) {
+      return "pattern:decorative-slogan-lure-account";
+    }
+
     const matchedTerms = Array.from(new Set(SIMILARITY_TERMS.filter(function (term) {
       return normalized.includes(term);
     })));
@@ -4860,6 +4864,7 @@
         || analysis.hasBaitQuestionShape
         || analysis.hasExplicitEroticBait
         || analysis.hasSpamTemplateSignal
+        || analysis.hasDecorativeSloganBait
         || analysis.hasEroticMentionRedirect
         || (Array.isArray(analysis.matchedSlots) && analysis.matchedSlots.length > 0)
         )
@@ -4911,6 +4916,9 @@
     }
     if (analysis && analysis.hasSpamTemplateSignal) {
       score += 3;
+    }
+    if (!protectedAccount && analysis && analysis.hasDecorativeSloganBait) {
+      score += 2;
     }
     if (analysis && analysis.hasEroticMentionRedirect) {
       score += 3;
@@ -4965,6 +4973,7 @@
         || analysis.hasBaitQuestionShape
         || analysis.hasExplicitEroticBait
         || analysis.hasSpamTemplateSignal
+        || analysis.hasDecorativeSloganBait
         || analysis.hasAccountMention
       ))
       || matchedSlots.length >= 2
@@ -5670,7 +5679,12 @@
 
     state.bootStarted = true;
     if (isDetailPage()) {
-      quarantineExistingReplies();
+      try {
+        quarantineExistingReplies();
+      } catch (error) {
+        root.dataset.web25Error = String(error && error.message ? error.message : error);
+        root.dataset.web25Stage = "boot:quarantine-skip";
+      }
     }
     readSetting(function () {
       if (state.destroyed) {

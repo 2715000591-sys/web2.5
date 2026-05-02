@@ -104,6 +104,8 @@
     /处男.{0,4}(免费|无偿|约)/,
     /免费约/,
     /免费.{0,2}破处/,
+    /(无线|无限).{0,2}线下/,
+    /线下.{0,2}(无线|无限)/,
     /(?:男|女).{0,2}无偿/,
     /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
     /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
@@ -269,6 +271,31 @@
     /i can totally imagine the alluring moment with some toys/i,
     /alluring moment with some toys/i
   ];
+  const DECORATIVE_SLOGAN_TERMS = [
+    "柔情",
+    "入骨",
+    "质感",
+    "日常分享",
+    "陪伴",
+    "解忧",
+    "始终都在",
+    "淡淡氛围",
+    "氛围感",
+    "岁岁安稳",
+    "温柔",
+    "初心",
+    "人间烟火",
+    "风雅",
+    "仪式",
+    "分寸",
+    "入心",
+    "相依",
+    "相守",
+    "朝夕",
+    "安稳",
+    "立身"
+  ];
+  const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・]/u;
 
   const SLOT_DEFINITIONS = [
     {
@@ -465,6 +492,22 @@
     });
   }
 
+  function looksLikeDecorativeSloganBait(text) {
+    const raw = String(text || "");
+    const compact = buildCompact(raw);
+    if (!compact || compact.length < 4 || compact.length > 28) {
+      return false;
+    }
+
+    if (countMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countMatches(compact, FINANCE_MARKERS) > 0) {
+      return false;
+    }
+
+    const termCount = countMatches(compact, DECORATIVE_SLOGAN_TERMS);
+    const hasDecorativeShell = DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
+    return termCount >= 2 || (hasDecorativeShell && termCount >= 1);
+  }
+
   function countEmojiMatches(text) {
     return Array.from(String(text || "").matchAll(EMOJI_PATTERN)).length;
   }
@@ -599,6 +642,7 @@
     const hasSpamTemplateSignal = SPAM_TEMPLATE_PATTERNS.some(function (pattern) {
       return pattern.test(normalized) || pattern.test(compact);
     });
+    const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(raw);
     const hasEroticMentionRedirect = hasAccountMention && (
       hasExplicitEroticBait
       || EROTIC_MENTION_REDIRECT_MARKERS.some(function (term) {
@@ -638,6 +682,7 @@
       hasBaitQuestionShape: hasBaitQuestionShape,
       hasExplicitEroticBait: hasExplicitEroticBait,
       hasSpamTemplateSignal: hasSpamTemplateSignal,
+      hasDecorativeSloganBait: hasDecorativeSloganBait,
       hasEroticMentionRedirect: hasEroticMentionRedirect
     };
   }
@@ -684,7 +729,7 @@
     const lureTermCount = NAME_LURE_TERMS.reduce(function (count, term) {
       return count + (compact.includes(term) ? 1 : 0);
     }, 0);
-    const hasMarketingBadge = /[👉❤️💕💋🥵🤤🍑🍆]/u.test(raw) || compact.includes("ovo");
+    const hasMarketingBadge = /[👉❤️💕💋🥵🤤🍑🍆🌸]/u.test(raw) || compact.includes("ovo");
     return marketingTermCount >= 2
       || lureTermCount >= 2
       || (marketingTermCount + lureTermCount >= 1 && hasMarketingBadge);
@@ -1061,6 +1106,7 @@
     buildDisplayNameRiskKey: buildDisplayNameRiskKey,
     buildHighRiskDisplayNameKey: buildHighRiskDisplayNameKey,
     looksLikeShareLinkScam: looksLikeShareLinkScam,
+    looksLikeDecorativeSloganBait: looksLikeDecorativeSloganBait,
     looksLikeInnocentPetContext: looksLikeInnocentPetContext
   };
 })();
