@@ -1613,20 +1613,21 @@ async function handlePostEvent(request, env) {
 }
 
 async function buildStats(env, userId) {
+  const activeHiddenSql = buildActiveHiddenEventSql("me");
   const query = userId
     ? `
       SELECT
-        SUM(CASE WHEN event_type IN ('ad_home_hide', 'ad_hide') THEN 1 ELSE 0 END) AS ad_home_hide_events,
-        SUM(CASE WHEN event_type = 'ad_reply_hide' THEN 1 ELSE 0 END) AS ad_reply_hide_events,
-        SUM(CASE WHEN event_type = 'auto_hide' THEN 1 ELSE 0 END) AS auto_hide_events,
-        SUM(CASE WHEN event_type = 'manual_hide' THEN 1 ELSE 0 END) AS manual_hide_events,
+        SUM(CASE WHEN event_type IN ('ad_home_hide', 'ad_hide') AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS ad_home_hide_events,
+        SUM(CASE WHEN event_type = 'ad_reply_hide' AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS ad_reply_hide_events,
+        SUM(CASE WHEN event_type = 'auto_hide' AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS auto_hide_events,
+        SUM(CASE WHEN event_type = 'manual_hide' AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS manual_hide_events,
         SUM(CASE WHEN event_type = 'manual_allow' THEN 1 ELSE 0 END) AS manual_allow_events,
         COUNT(DISTINCT CASE
-          WHEN event_type IN ('manual_hide', 'auto_hide') AND COALESCE(reply_handle, '') != '' THEN reply_handle
+          WHEN event_type IN ('manual_hide', 'auto_hide') AND ${activeHiddenSql} AND COALESCE(reply_handle, '') != '' THEN reply_handle
           ELSE NULL
         END) AS distinct_hidden_handles,
         COUNT(DISTINCT CASE
-          WHEN event_type IN ('manual_hide', 'auto_hide') AND COALESCE(normalized_text, '') != '' THEN normalized_text
+          WHEN event_type IN ('manual_hide', 'auto_hide') AND ${activeHiddenSql} AND COALESCE(normalized_text, '') != '' THEN normalized_text
           ELSE NULL
         END) AS distinct_hidden_phrases
       FROM moderation_events me
@@ -1635,17 +1636,17 @@ async function buildStats(env, userId) {
     `
     : `
       SELECT
-        SUM(CASE WHEN event_type IN ('ad_home_hide', 'ad_hide') THEN 1 ELSE 0 END) AS ad_home_hide_events,
-        SUM(CASE WHEN event_type = 'ad_reply_hide' THEN 1 ELSE 0 END) AS ad_reply_hide_events,
-        SUM(CASE WHEN event_type = 'auto_hide' THEN 1 ELSE 0 END) AS auto_hide_events,
-        SUM(CASE WHEN event_type = 'manual_hide' THEN 1 ELSE 0 END) AS manual_hide_events,
+        SUM(CASE WHEN event_type IN ('ad_home_hide', 'ad_hide') AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS ad_home_hide_events,
+        SUM(CASE WHEN event_type = 'ad_reply_hide' AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS ad_reply_hide_events,
+        SUM(CASE WHEN event_type = 'auto_hide' AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS auto_hide_events,
+        SUM(CASE WHEN event_type = 'manual_hide' AND ${activeHiddenSql} THEN 1 ELSE 0 END) AS manual_hide_events,
         SUM(CASE WHEN event_type = 'manual_allow' THEN 1 ELSE 0 END) AS manual_allow_events,
         COUNT(DISTINCT CASE
-          WHEN event_type IN ('manual_hide', 'auto_hide') AND COALESCE(reply_handle, '') != '' THEN reply_handle
+          WHEN event_type IN ('manual_hide', 'auto_hide') AND ${activeHiddenSql} AND COALESCE(reply_handle, '') != '' THEN reply_handle
           ELSE NULL
         END) AS distinct_hidden_handles,
         COUNT(DISTINCT CASE
-          WHEN event_type IN ('manual_hide', 'auto_hide') AND COALESCE(normalized_text, '') != '' THEN normalized_text
+          WHEN event_type IN ('manual_hide', 'auto_hide') AND ${activeHiddenSql} AND COALESCE(normalized_text, '') != '' THEN normalized_text
           ELSE NULL
         END) AS distinct_hidden_phrases
       FROM moderation_events me
@@ -1664,6 +1665,50 @@ async function buildStats(env, userId) {
     distinctHiddenHandles: Number(row && row.distinct_hidden_handles ? row.distinct_hidden_handles : 0),
     distinctHiddenPhrases: Number(row && row.distinct_hidden_phrases ? row.distinct_hidden_phrases : 0)
   };
+}
+
+function buildRestoredHiddenEventExistsSql(alias) {
+  const source = alias || "me";
+  const sourceUser = `TRIM(COALESCE(${source}.user_id, ''))`;
+  const sourceSyncKey = `TRIM(COALESCE(${source}.sync_key, ''))`;
+  const sourceStatusId = `TRIM(COALESCE(${source}.reply_status_id, ''))`;
+  const sourceHandle = `LOWER(TRIM(COALESCE(${source}.reply_handle, '')))`;
+  const sourceCompactText = `LOWER(TRIM(COALESCE(${source}.compact_text, '')))`;
+  const sourceNormalizedText = `LOWER(TRIM(COALESCE(${source}.normalized_text, '')))`;
+  const sourceReplyText = `LOWER(TRIM(COALESCE(${source}.reply_text, '')))`;
+
+  return `
+    EXISTS (
+      SELECT 1
+      FROM moderation_events ma
+      WHERE ma.event_type = 'manual_allow'
+        AND ma.id > ${source}.id
+        AND ${buildNonTestModerationEventSql("ma")}
+        AND (
+          (${sourceUser} != '' AND TRIM(COALESCE(ma.user_id, '')) = ${sourceUser})
+          OR (${sourceUser} = '' AND ${sourceSyncKey} != '' AND TRIM(COALESCE(ma.sync_key, '')) = ${sourceSyncKey})
+        )
+        AND (
+          (${sourceStatusId} != '' AND TRIM(COALESCE(ma.reply_status_id, '')) = ${sourceStatusId})
+          OR (
+            ${sourceStatusId} = ''
+            AND ${sourceHandle} = LOWER(TRIM(COALESCE(ma.reply_handle, '')))
+            AND ${sourceHandle} != ''
+            AND (
+              (${sourceCompactText} != '' AND LOWER(TRIM(COALESCE(ma.compact_text, ''))) = ${sourceCompactText})
+              OR (${sourceNormalizedText} != '' AND LOWER(TRIM(COALESCE(ma.normalized_text, ''))) = ${sourceNormalizedText})
+              OR (${sourceReplyText} != '' AND LOWER(TRIM(COALESCE(ma.reply_text, ''))) = ${sourceReplyText})
+            )
+          )
+        )
+      LIMIT 1
+    )
+  `;
+}
+
+function buildActiveHiddenEventSql(alias) {
+  const source = alias || "me";
+  return `NOT ${buildRestoredHiddenEventExistsSql(source)}`;
 }
 
 function numberFromRow(row, key) {
@@ -2130,6 +2175,7 @@ async function handleDeveloperDataLayerAudit(request, env) {
 }
 
 async function buildRecentEvents(env, userId) {
+  const activeHiddenSql = buildActiveHiddenEventSql("me");
   const { results = [] } = await env.DB.prepare(
     `
       SELECT
@@ -2149,7 +2195,10 @@ async function buildRecentEvents(env, userId) {
         created_at
       FROM moderation_events me
       WHERE me.user_id = ?
-        AND event_type IN ('auto_hide', 'manual_hide', 'manual_allow')
+        AND (
+          event_type = 'manual_allow'
+          OR (event_type IN ('auto_hide', 'manual_hide') AND ${activeHiddenSql})
+        )
         AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id DESC
       LIMIT 20
@@ -2175,6 +2224,7 @@ async function buildRecentEvents(env, userId) {
 }
 
 async function buildRecentAdEvents(env, userId) {
+  const activeHiddenSql = buildActiveHiddenEventSql("me");
   const { results = [] } = await env.DB.prepare(
     `
       SELECT
@@ -2190,6 +2240,7 @@ async function buildRecentAdEvents(env, userId) {
       FROM moderation_events me
       WHERE me.user_id = ?
         AND event_type IN ('ad_home_hide', 'ad_reply_hide')
+        AND ${activeHiddenSql}
         AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id DESC
       LIMIT 24
@@ -7069,26 +7120,28 @@ async function listDeveloperEventRowsByIds(env, userId, eventIds) {
     return [];
   }
 
+  const activeHiddenSql = buildActiveHiddenEventSql("me");
   const placeholders = safeIds.map(() => "?").join(", ");
   const statement = env.DB.prepare(
     `
       SELECT
-        id,
-        sync_key,
-        user_id,
-        thread_url,
-        thread_status_id,
-        reply_status_id,
-        reply_handle,
-        reply_display_name,
-        reply_text,
-        normalized_text,
-        compact_text,
-        created_at
-      FROM moderation_events
-      WHERE user_id = ?
-        AND event_type = 'manual_hide'
-        AND id IN (${placeholders})
+        me.id,
+        me.sync_key,
+        me.user_id,
+        me.thread_url,
+        me.thread_status_id,
+        me.reply_status_id,
+        me.reply_handle,
+        me.reply_display_name,
+        me.reply_text,
+        me.normalized_text,
+        me.compact_text,
+        me.created_at
+      FROM moderation_events me
+      WHERE me.user_id = ?
+        AND me.event_type = 'manual_hide'
+        AND ${activeHiddenSql}
+        AND me.id IN (${placeholders})
     `
   );
 
@@ -7450,6 +7503,7 @@ async function listDeveloperDecisionRows(env, options) {
 
 async function listDeveloperPendingFeedRows(env, userId, limit) {
   const safeLimit = Math.max(1, Math.min(400, Number(limit || 80) || 80));
+  const activeHiddenSql = buildActiveHiddenEventSql("me");
   const { results = [] } = await env.DB.prepare(
     `
       SELECT
@@ -7467,6 +7521,7 @@ async function listDeveloperPendingFeedRows(env, userId, limit) {
       FROM moderation_events me
       WHERE me.user_id = ?
         AND event_type = 'manual_hide'
+        AND ${activeHiddenSql}
         AND ${buildNonTestModerationEventSql("me")}
       ORDER BY id DESC
       LIMIT ?
