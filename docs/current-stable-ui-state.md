@@ -155,8 +155,9 @@
 - Safari 扩展 `BUILD_ID = 2026-05-02-2340`
 - Safari 扩展 `BUILD_ID = 2026-05-02-2357`
 - Safari 扩展 `BUILD_ID = 2026-05-03-0011`
-- 扩展版本 `0.1.53`
-- App / Extension 版本 `1.0.53 (54)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-0022`
+- 扩展版本 `0.1.54`
+- App / Extension 版本 `1.0.54 (55)`
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 
@@ -197,6 +198,8 @@
 2026-05-02 23:57 已替换本机 App 到 `BUILD_ID=2026-05-02-2357`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.52`。本轮没有改右栏 UI，只修数据库筛选键和发布新版包；`npm run safari:verify-live` 对两个真实 X 详情页通过，其中一个详情页返回 `build=2026-05-02-2357`、可见 `冲走` 按钮 3 个、右栏关闭按钮 3 个、`articles=15`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2357`、`extensionVersion=0.1.52`。
 
 2026-05-03 00:11 已替换本机 App 到 `BUILD_ID=2026-05-03-0011`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.53`。本轮没有改右栏 UI，只补真实页面里的装饰符号/纯短句诗句垃圾。`npm run safari:verify-live` 读到新版 build；随后真实 X 详情页 `https://x.com/bandagemiao/status/2050238861318754634` 返回 `build=2026-05-03-0011`、`stage=scan:done`、`articles=27`、隐藏格子 21 个。7 条用户指出的同款在页面中对应 cell 均为 `data-web25-hidden=1` 且 `display:none`。
+
+2026-05-03 00:22 已替换本机 App 到 `BUILD_ID=2026-05-03-0022`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.54`。本轮没有改右栏 UI，只补剩余 `Minsqw / 人间钟情柔情` 诗句式引流模板。`npm run safari:verify-live` 读到新版 build；真实 X 详情页 `https://x.com/bandagemiao/status/2050238861318754634` 返回 `build=2026-05-03-0022`、`stage=scan:done`、`articles=27`、隐藏格子 22 个，`Minsqw` 对应 cell 为 `data-web25-hidden=1` 且 `display:none`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-0022`、`extensionVersion=0.1.54`。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

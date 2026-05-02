@@ -224,6 +224,7 @@
 - 云端小测试：`找个同城弟弟` 返回 `db_rule_pattern/hide/high`，测试 item `1097/1098` 没有产生新的外部 AI 调用。
 - 2026-05-02 17:11 已按用户追问追加验收：风险昵称 `孟轩🌸无常线下🌸`、随机数字 handle `MullerChri42258`、低信息回复 `2🙃😍🧡` 返回 `db_rule_pattern/hide/high`，`model=moderation-rule-candidates-2026-05-02-v1`。这说明同类“老师已经讲过的题”会被数据库学习库先截住，不再调用外部 AI。测试 item 为 `1099`，属于 `sync_dev_test_db_rule_1650_*` 开发验收数据。
 - 2026-05-02 17:31 已追加截图漏网模板验收：`比她好看的没她强，比她强的没她好看 @designksh1/@xiaonm88`、`刷了半天的X就她的主页能打✈️了 @designksh1/@xiaonm88`、`线下我就日过这个骚货 @designksh1`、`免费破处` 风险昵称发 `十🙈`，全部返回数据库学习库隐藏，`decisionLayer=db_rule_pattern/db_rule_template`。测试 item 为 `1100`-`1106`，属于 `sync_dev_test_screenshot_templates_*` 开发验收数据。
+- 2026-05-03 00:22 已追加 `pattern:poetic-slogan-lure-account` 的模板覆盖：`人间钟情柔情` / `人间柔情` 类诗句式低信息短文案，搭配随机数字 handle、emoji 噪音、上下文脱节等信号时进入同一候选规则。线上只读探针 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊` 返回 `db_rule_pattern / ready / hide / high`，不调用外接 AI，不写数据库。本轮没有新增 D1 表、没有清理或删除生产数据，也没有把单个用户重复冲走升级成公共规则；它复用此前开发者确认的活跃规则。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
 
 ## 近期最实用的下一步
 

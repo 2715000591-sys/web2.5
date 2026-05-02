@@ -128,9 +128,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-03-0011`
-  - 扩展版本 `0.1.53`
-  - App / Extension 版本 `1.0.53 (54)`
+  - `BUILD_ID = 2026-05-03-0022`
+  - 扩展版本 `0.1.54`
+  - App / Extension 版本 `1.0.54 (55)`
+  - 2026-05-03 00:22 已补用户复查后剩下的一条 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊`。这不是删除某个账号或某条历史，而是把 `人间.{0,4}(钟情|柔情)` 加入现有诗句式低信息引流模板；仍需要随机数字 handle、emoji 噪音、上下文脱节等组合信号支撑。真实 X 页头像图片本身在 DOM 里没有可读 `全国安排` 文字，Safari 本地不能直接读图识字；头像仍会作为云端 AI 辅助证据，但即时隐藏要靠可见正文、账号形态和上下文信号。真实 Safari 详情页 `https://x.com/bandagemiao/status/2050238861318754634` 已验证：`build=2026-05-03-0022`、`stage=scan:done`、`articles=27`，该 cell 为 `data-web25-hidden=1` 且 `display:none`。
   - 2026-05-03 00:11 已修复用户复查仍能看到同款垃圾的真正原因：真实 X 页面里这些回复不是 emoji 版本，而是 `༙༚ 晨昏静候柔意 ༚༙`、`༘꙳ 温柔漫染眉眼 ꙳༘`、`༳ 晨昏暗生情愫 ༳`、`ꧨ 时光赠予柔情 ꧨ`、`꧆ 晚风裹着温柔 ꧇`、`༗ 俗世偏爱温存 ༗`，以及纯 `缘起眉眼温柔`。旧规则要求诗句模板至少带 emoji，所以只标记了按钮，没有自动收掉这些真实版本。新版把这些装饰符号和纯短句模板也纳入 `poetic-slogan-from-suspicious-handle`；本地回归 7 条真实文本全部隐藏，普通账号发 `缘起眉眼温柔`、`有缘自会相识。`、`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
   - 2026-05-02 23:57 已修正数据库候选键优先级：诗句式空洞模板 + 随机数字 handle 会优先归入 `pattern:poetic-slogan-lure-account`，再考虑较宽的 `pattern:decorative-slogan-lure-account`。这保证用户截图里的 7 条同款进入数据库时用更精确的模式键；本地回归 7 条全部隐藏，`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
   - 2026-05-02 23:43 已补用户新截图里的“全国安排头像 + 随机英文数字账号 + 晨昏/温柔/晚风/俗世/缘起诗句空话 + emoji 噪音”批量回复。新版新增 `晨昏静候柔意`、`温柔漫染眉眼`、`晨昏暗生情愫`、`时光赠予柔情`、`晚风裹着温柔`、`俗世偏爱温存`、`缘起眉眼温柔` 等模板；即使 X 暂时没把原帖正文暴露给插件，这 7 条同款也会直接隐藏。普通 `生日快乐🎂🎉🥳` 和有信息量的 `晚风裹着温柔...散步...空气很好` 放过。头像取证扩大到 emoji 噪音可疑项，不再只依赖上下文脱节时才请求头像辅助。
@@ -154,7 +155,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `6e61edb4-f1f4-4578-bd6c-b3f932df3e34`
+  - Version ID: `5fe62709-ebb6-4c75-97e6-f86546d4bac7`
+  - 2026-05-03 00:22 已部署 `BUILD_ID=2026-05-03-0022` 到公网。线上探针 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，外接 AI 不运行、数据库不写入；公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0022`、`extensionVersion=0.1.54`。本轮没有改数据库结构、没有删除 D1 数据，复用 2026-05-02 23:57 已登记的活跃数据库规则。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-03 00:11 已部署 `BUILD_ID=2026-05-03-0011` 到公网。线上探针用 7 条真实页面文字全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0011`、`extensionVersion=0.1.53`。本轮没有改数据库结构、没有删除 D1 数据；复用 2026-05-02 23:57 已登记的活跃数据库规则。
   - 2026-05-02 23:57 已部署 `BUILD_ID=2026-05-02-2357` 到公网。发布前备份 D1 到 `backups/d1/web25-2026-05-02T15-57-00-before-poetic-slogan-rule.sql`，随后把 `pattern:poetic-slogan-lure-account` 登记为开发者确认的活跃数据库规则。线上 7 条截图同款探针全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2357`、`extensionVersion=0.1.52`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过。
   - 2026-05-02 23:43 已部署 `BUILD_ID=2026-05-02-2340` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2340`、`extensionVersion=0.1.51`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。本轮没有 schema 变更或 D1 清理。
