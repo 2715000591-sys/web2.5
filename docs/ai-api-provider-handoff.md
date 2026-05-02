@@ -142,6 +142,8 @@
 
 2026-05-02 21:51 用户截图里的 `是不是这个? + pan.quark.cn/s/...` 漏网不是外接 AI 看不懂中文，而是基础层 `share-link-scam` 缺少“短引诱句 + 网盘链接”这一类提示词。已同步补本地插件和 Worker：`是不是这个 / 是这个吗 / 就是这个 / 这个链接 + 网盘链接` 会优先被基础层挡住，普通没有网盘链接的“是不是这个问题”仍放过。后续遇到同类问题，先看基础层和 `pattern:share-link-scam` 是否命中，再决定是否需要外接 AI。
 
+2026-05-02 22:43 已新增“回复 AI 路线探针”，方便下一轮直接看一条样本会不会花外接 AI 额度。命令：`npm run cloud:probe-reply-ai -- --text "样本文字" --display-name "昵称" --handle "账号"`。默认只读检查，不写真实审核记录、不调用外接 AI；输出里的 `Final layer` 如果是 `db_rule_*` 或 `ai_memory_*`，说明数据库/记忆库已经接住；如果是 `external_ai_would_run`，才代表下一步会交给外接 AI。线上默认样本已验证为 `Final layer: db_rule_pattern`、`External AI: not needed`、`Database writes: no`。需要真实调用时才加 `-- --call-provider`，这会消耗少量 API 额度。
+
 ## 7. 验证命令
 
 改代码后至少跑：

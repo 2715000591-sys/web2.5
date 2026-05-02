@@ -150,7 +150,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `b7817235-fa2d-4c3f-b60f-4399d5342cc2`
+  - Version ID: `85aed8c0-9176-454d-8667-47f1cbe8f7c6`
+  - 2026-05-02 22:43 已新增开发者只读“回复 AI 路线探针”：`POST /api/developer/reply-ai-routing-probe` 和脚本 `npm run cloud:probe-reply-ai`。它不改变筛选强度，只帮助检查一条样本会走 AI 学习库、数据库候选规则、旧复用层、账号黑名单还是外接 AI；默认不写数据库、不调用外接 AI。线上默认样本已验证命中 `db_rule_pattern`，外接 AI 不需要运行，数据库也没有写入。公网首页、控制台和下载清单已验证 200，下载清单仍为 `buildId=2026-05-02-2157`、`extensionVersion=0.1.49`。
   - 2026-05-02 22:00 已发布网盘短引诱句补丁和 Safari 启动兜底到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2157`、`extensionVersion=0.1.49`，首页、控制台、下载清单均返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则；本轮没有 schema 变更或批量 D1 写入。
   - 2026-05-02 21:29 已发布新版下载包和同构键修正到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2124`、`extensionVersion=0.1.47`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-02 19:34 已修复“手动冲走/恢复写了样本但没有实时刷新数据库候选”的后台缺口。根因是 `recordModerationTrainingLabelFromEvent` 写入 `moderation_sample_labels` 后引用了不存在的 AI `decision` 变量，错误被保护逻辑吞掉，导致手动反馈侧没有立刻刷新 `moderation_rule_candidates`。新版改为手动 `manual_hide` / `manual_allow` 写完 label 后都刷新对应候选；单用户冲走仍只算候选证据，不会直接变公共规则，恢复仍是纠错和抑制。已部署公网 Worker Version ID `8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`。随后运行 `npm run cloud:rebuild-rule-candidates`，自动备份 D1 到 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，候选整理结果：`active=223`、`candidate=66`、写入候选 289 条。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。公网 `/downloads/latest.json` 仍为 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。本机 `/Applications/web2.5.app` 仍为 `BUILD_ID=2026-05-02-1912`，签名校验通过；真实 Safari 详情页验证 `build=2026-05-02-1912`、`flushes=16`、`manualButtons=16`、`sideButtons=3`、`articles=29`、`stage=scan:done`。

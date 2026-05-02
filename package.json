@@ -12,6 +12,7 @@
     "cloud:audit-data-layer": "node scripts/audit-data-layer.mjs",
     "cloud:backfill-training": "node scripts/backfill-training-samples.mjs",
     "cloud:rebuild-rule-candidates": "node scripts/rebuild-rule-candidates.mjs",
+    "cloud:probe-reply-ai": "node scripts/probe-reply-ai-routing.mjs",
     "cloud:d1:apply:local": "npx wrangler@latest d1 execute web25 --local --file=cloudflare/schema.sql",
     "safari:build": "bash scripts/build-safari-app.sh",
     "safari:verify-live": "bash scripts/verify-safari-extension-live.sh",

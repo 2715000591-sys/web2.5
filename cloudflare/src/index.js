@@ -643,6 +643,10 @@ async function handleApi(request, env, ctx, url) {
     return handleDeveloperRebuildRuleCandidates(request, env);
   }
 
+  if (request.method === "POST" && url.pathname === "/api/developer/reply-ai-routing-probe") {
+    return handleDeveloperReplyAiRoutingProbe(request, env);
+  }
+
   if (request.method === "GET" && url.pathname === "/api/state") {
     return handleState(request, env, url);
   }
@@ -2550,6 +2554,320 @@ async function handleDeveloperRebuildRuleCandidates(request, env) {
       ok: true,
       dryRun,
       candidates: result
+    },
+    200,
+    request,
+    true,
+    buildSessionRefreshHeaders(request, viewer, env)
+  );
+}
+
+function normalizeReplyAiRoutingProbePayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const sample = source.sample && typeof source.sample === "object" ? source.sample : source;
+  return {
+    sample,
+    callProvider: source.callProvider === true
+  };
+}
+
+function buildReplyAiRoutingProbeItem(viewer, sample) {
+  const source = sample && typeof sample === "object" ? sample : {};
+  const probeSource = Object.assign({
+    threadUrl: "https://x.com/example/status/1",
+    threadStatusId: "developer-probe-thread",
+    replyStatusId: "developer-probe-reply",
+    replyHandle: "MullerChri42258",
+    replyDisplayName: "孟轩🌸无常线下🌸",
+    replyText: "找个同城弟弟",
+    mainPostText: "真实页面调试样本",
+    profilePath: "",
+    profileBioText: "",
+    profileSignalTags: [],
+    profileLinks: [],
+    profileFetchStatus: "not_requested"
+  }, source);
+  const item = buildAiProviderTestItem(probeSource);
+  const now = new Date().toISOString();
+  return Object.assign({}, item, {
+    id: 0,
+    userId: viewer && viewer.id ? viewer.id : "",
+    syncKey: normalizeAiProviderTestText(source.syncKey, "sync_developer_probe", 120),
+    deviceId: normalizeAiProviderTestText(source.deviceId, "device_developer_probe", 120),
+    createdAt: now
+  });
+}
+
+function buildSafeAiSettingsProbePayload(settings) {
+  return {
+    replyAiEnabled: Boolean(settings && settings.replyAiEnabled),
+    providerBaseUrl: normalizeAiProviderBaseUrl(settings && settings.providerBaseUrl),
+    model: normalizeAiModel(settings && settings.model),
+    apiKeyConfigured: Boolean(settings && settings.apiKeyConfigured),
+    apiKeyLast4: normalizeAiKeyLast4(settings && settings.apiKeyLast4)
+  };
+}
+
+function buildHeuristicProbePayload(summary) {
+  const source = summary && typeof summary === "object" ? summary : {};
+  return {
+    highRiskDisplayName: Boolean(source.highRiskDisplayName),
+    lureDisplayName: Boolean(source.lureDisplayName),
+    suspiciousHandle: Boolean(source.suspiciousHandle),
+    hasLongDigitHandle: Boolean(source.hasLongDigitHandle),
+    accountMetadataRisk: Boolean(source.accountMetadataRisk),
+    shortOrThinReply: Boolean(source.shortOrThinReply),
+    hasShareLinkScam: Boolean(source.hasShareLinkScam),
+    hasGeoMeetupBait: Boolean(source.hasGeoMeetupBait),
+    hasGeoRelationshipBait: Boolean(source.hasGeoRelationshipBait),
+    hasBaitQuestionShape: Boolean(source.hasBaitQuestionShape),
+    hasExplicitEroticBait: Boolean(source.hasExplicitEroticBait),
+    hasEroticMentionRedirect: Boolean(source.hasEroticMentionRedirect),
+    hasSpamTemplateSignal: Boolean(source.hasSpamTemplateSignal),
+    hasDecorativeSloganBait: Boolean(source.hasDecorativeSloganBait),
+    hasPoeticSpamSloganBait: Boolean(source.hasPoeticSpamSloganBait),
+    avatarVisionRequested: Boolean(source.avatarVisionRequested),
+    avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    evidenceNotes: Array.isArray(source.evidenceNotes) ? source.evidenceNotes.slice(0, 12) : []
+  };
+}
+
+async function inspectReplyAiMemoryDecision(env, itemRow, riskRow) {
+  const keyEntries = await buildReplyAiMemoryKeyEntries(itemRow, riskRow || null);
+  const result = {
+    checked: keyEntries.map((entry) => ({
+      memoryKeyType: entry.memoryKeyType
+    })),
+    matched: null,
+    decision: null
+  };
+  if (!keyEntries.length) {
+    return result;
+  }
+
+  const now = new Date().toISOString();
+  for (const keyEntry of keyEntries) {
+    const row = await env.DB.prepare(
+      `
+        SELECT
+          id,
+          memory_key_type,
+          action,
+          confidence,
+          matched_safety_labels_json,
+          matched_profile_signals_json,
+          reason_short,
+          prompt_version,
+          hit_count,
+          expires_at
+        FROM reply_ai_memory
+        WHERE memory_key = ?
+          AND prompt_version = ?
+          AND status = 'active'
+          AND action = 'hide'
+          AND confidence = 'high'
+          AND (expires_at IS NULL OR expires_at > ?)
+        LIMIT 1
+      `
+    ).bind(keyEntry.memoryKey, REPLY_AI_MEMORY_POLICY_VERSION, now).first();
+
+    if (!row) {
+      continue;
+    }
+
+    result.matched = {
+      memoryKeyType: normalizeAiFeedText(row.memory_key_type || keyEntry.memoryKeyType, 24),
+      hitCount: Number(row.hit_count || 0),
+      expiresAt: row.expires_at || ""
+    };
+    result.decision = buildReplyAiMemoryDecision(row);
+    return result;
+  }
+
+  return result;
+}
+
+async function inspectModerationRuleCandidateDecision(env, itemRow) {
+  const result = {
+    accountProtected: Boolean(itemRow && itemRow.accountProtected),
+    manualAllow: false,
+    entries: [],
+    matches: [],
+    decision: null
+  };
+  if (!itemRow || itemRow.accountProtected) {
+    return result;
+  }
+
+  result.manualAllow = await hasManualAllowForReplyAiItem(env, itemRow);
+  const entries = buildModerationRuleCandidateEntriesFromSourceRow(
+    buildModerationRuleCandidateSourceRowFromReplyAiItem(itemRow)
+  );
+  result.entries = entries.map((entry) => ({
+    ruleType: entry.ruleType,
+    patternKey: entry.patternKey
+  }));
+  if (!entries.length || result.manualAllow) {
+    return result;
+  }
+
+  const priority = ["exact_text", "compact_text", "template", "pattern"];
+  const sortedEntries = entries.slice().sort((left, right) => {
+    return priority.indexOf(left.ruleType) - priority.indexOf(right.ruleType);
+  });
+
+  for (const entry of sortedEntries) {
+    const row = await env.DB.prepare(
+      `
+        SELECT
+          rule_type,
+          pattern_key,
+          safety_label,
+          positive_label_count,
+          negative_label_count,
+          distinct_user_count,
+          confidence_score,
+          updated_at
+        FROM moderation_rule_candidates
+        WHERE rule_type = ?
+          AND pattern_key = ?
+          AND action = 'hide'
+          AND status = 'active'
+          AND positive_label_count > 0
+          AND negative_label_count = 0
+        ORDER BY confidence_score DESC, updated_at DESC
+        LIMIT 1
+      `
+    ).bind(entry.ruleType, entry.patternKey).first();
+
+    if (!row) {
+      continue;
+    }
+
+    result.matches.push({
+      ruleType: normalizeAiFeedText(row.rule_type, 40),
+      patternKey: normalizeAiFeedText(row.pattern_key, 300),
+      safetyLabel: normalizeAiFeedText(row.safety_label, 80),
+      positiveLabelCount: Number(row.positive_label_count || 0),
+      negativeLabelCount: Number(row.negative_label_count || 0),
+      distinctUserCount: Number(row.distinct_user_count || 0),
+      confidenceScore: Number(row.confidence_score || 0),
+      updatedAt: row.updated_at || ""
+    });
+    if (!result.decision) {
+      result.decision = buildModerationRuleCandidateDecision(row);
+    }
+  }
+
+  return result;
+}
+
+function buildRoutingProbeSummaryDecision(decision) {
+  return decision ? buildReplyAiDecisionPayload(0, decision) : null;
+}
+
+async function buildReplyAiRoutingProbe(env, viewer, payload) {
+  await ensureAiFeedSchema(env);
+  const normalizedPayload = normalizeReplyAiRoutingProbePayload(payload);
+  const itemRow = buildReplyAiRoutingProbeItem(viewer, normalizedPayload.sample);
+  const settings = await getUserAiSettingsWithSecret(env, viewer.id);
+  const safeSettings = buildSafeAiSettingsProbePayload(settings);
+  const staticDecision = buildReplyAiStaticDecision(itemRow, settings);
+  const handleKey = normalizeAiHandle(itemRow.replyHandle);
+  const riskRow = handleKey ? await getReplyAiAccountRiskRow(env, handleKey) : null;
+  const heuristicSummary = buildReplyAiHeuristicSummary(itemRow, riskRow || null);
+
+  const memoryProbe = staticDecision
+    ? { checked: [], matched: null, decision: null }
+    : await inspectReplyAiMemoryDecision(env, itemRow, riskRow || null);
+  const ruleProbe = staticDecision || memoryProbe.decision
+    ? { accountProtected: Boolean(itemRow.accountProtected), manualAllow: false, entries: [], matches: [], decision: null }
+    : await inspectModerationRuleCandidateDecision(env, itemRow);
+  const globalBlockDecision = !staticDecision && !memoryProbe.decision && !ruleProbe.decision && riskRow && Number(riskRow.active_global_block || 0) === 1
+    ? buildReplyAiBlockedDecision()
+    : null;
+  const reusableDecision = !staticDecision && !memoryProbe.decision && !ruleProbe.decision && !globalBlockDecision
+    ? await findReusableReplyAiDecision(env, itemRow, riskRow || null)
+    : null;
+
+  let providerDecision = null;
+  let providerError = "";
+  const wouldCallProvider = Boolean(!staticDecision && !memoryProbe.decision && !ruleProbe.decision && !globalBlockDecision && !reusableDecision);
+  if (wouldCallProvider && normalizedPayload.callProvider) {
+    try {
+      providerDecision = await requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow || null);
+    } catch (error) {
+      providerError = normalizeAiProviderTestError(error);
+    }
+  }
+
+  const finalDecision = staticDecision
+    || memoryProbe.decision
+    || ruleProbe.decision
+    || globalBlockDecision
+    || reusableDecision
+    || providerDecision
+    || buildDefaultReplyAiDecision({
+      decisionLayer: wouldCallProvider ? "external_ai_would_run" : "skipped",
+      reasonShort: wouldCallProvider ? "数据库和学习库都未命中，下一步会调用外接 AI" : "未进入外接 AI",
+      status: wouldCallProvider ? "pending" : "skipped",
+      model: safeSettings.model
+    });
+
+  return {
+    writesDatabase: false,
+    providerCalled: Boolean(providerDecision || providerError),
+    providerError,
+    wouldCallProvider,
+    settings: safeSettings,
+    sample: {
+      replyText: itemRow.replyText,
+      replyDisplayName: itemRow.replyDisplayName,
+      replyHandle: itemRow.replyHandle,
+      mainPostText: itemRow.mainPostText,
+      accountProtected: Boolean(itemRow.accountProtected),
+      avatarVisionRequested: Boolean(itemRow.avatarVisionRequested)
+    },
+    route: {
+      finalDecision: buildRoutingProbeSummaryDecision(finalDecision),
+      staticDecision: buildRoutingProbeSummaryDecision(staticDecision),
+      memoryDecision: buildRoutingProbeSummaryDecision(memoryProbe.decision),
+      ruleDecision: buildRoutingProbeSummaryDecision(ruleProbe.decision),
+      globalBlockDecision: buildRoutingProbeSummaryDecision(globalBlockDecision),
+      reusableDecision: buildRoutingProbeSummaryDecision(reusableDecision),
+      providerDecision: buildRoutingProbeSummaryDecision(providerDecision)
+    },
+    memory: {
+      checked: memoryProbe.checked,
+      matched: memoryProbe.matched
+    },
+    ruleCandidates: {
+      manualAllow: Boolean(ruleProbe.manualAllow),
+      entries: ruleProbe.entries,
+      matches: ruleProbe.matches
+    },
+    accountRisk: {
+      replyHandle: handleKey,
+      totalHighConfidenceHideCount: Number(riskRow && riskRow.total_high_confidence_hide_count ? riskRow.total_high_confidence_hide_count : 0),
+      recentHighConfidenceHideCount: Number(riskRow && riskRow.recent_high_confidence_hide_count ? riskRow.recent_high_confidence_hide_count : 0),
+      activeGlobalBlock: Boolean(riskRow && Number(riskRow.active_global_block || 0) === 1)
+    },
+    heuristics: buildHeuristicProbePayload(heuristicSummary)
+  };
+}
+
+async function handleDeveloperReplyAiRoutingProbe(request, env) {
+  const viewer = await requireDeveloper(request, env);
+  if (!viewer) {
+    return json({ ok: false, error: "developer-required" }, 403, request, true);
+  }
+
+  const payload = await readJson(request);
+  const probe = await buildReplyAiRoutingProbe(env, viewer, payload);
+  return json(
+    {
+      ok: true,
+      probe
     },
     200,
     request,
@@ -9776,7 +10094,8 @@ function isCredentialedPath(pathname) {
     || pathname === "/api/developer/revoke-feed"
     || pathname === "/api/developer/data-layer-audit"
     || pathname === "/api/developer/backfill-training"
-    || pathname === "/api/developer/rebuild-rule-candidates";
+    || pathname === "/api/developer/rebuild-rule-candidates"
+    || pathname === "/api/developer/reply-ai-routing-probe";
 }
 
 function buildCorsHeaders(request, allowCredentials) {
