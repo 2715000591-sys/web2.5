@@ -238,6 +238,8 @@
 
 2026-05-02 19:29 已修正实时手动反馈刷新：`manual_hide` / `manual_allow` 以前会写入样本和标注，但候选刷新处引用了不存在的 AI `decision` 变量，导致这一步被保护性捕获后静默失败。现在手动冲走或恢复写完 label 后都会刷新对应数据库候选规则；单用户冲走仍然只是候选证据，不会直接变公共规则。AI 首次直接判断链路原本已能写入 `moderation_sample_labels`，高置信隐藏也会继续写入 `reply_ai_memory`。2026-05-02 19:34 已重新整理线上候选规则，整理前 D1 备份为 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，结果为 `moderation_rule_candidates active=223`、`candidate=66`。
 
+2026-05-02 21:24 已补本地插件与云端数据库候选键的同构缺口：本地 `getReplyManualKeys` 现在会发出 `pattern:geo-relationship-bait` 和 `pattern:poetic-slogan-lure-account`，与 Worker 的 `buildRowKeys` 对齐。这个改动不改变数据库结构、不批量写入 D1、不把单用户反馈升级公共规则，只让后续手动 `冲走` / `恢复` 样本更容易按同一模式刷新候选规则。公网已发布 Worker Version ID `9fd4a255-7913-4fcc-ba5a-9966193f8ad0`，`npm run cloud:audit-data-layer` 通过。
+
 ## 下一任重点：AI、数据库、API 调度关系
 
 用户下一步主要要调试这三者的关系，不是重做 UI。

@@ -116,7 +116,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`
+  - Version ID：`9fd4a255-7913-4fcc-ba5a-9966193f8ad0`
+  - 2026-05-02 21:29 已发布 `BUILD_ID=2026-05-02-2124` / `extensionVersion=0.1.47`。本次是小范围同构修正：本地插件现在也会发出云端已经认识的 `pattern:geo-relationship-bait` 和 `pattern:poetic-slogan-lure-account`，让用户手动 `冲走` / `恢复` 留下的样本键与数据库候选规则更一致；没有改阈值、UI、AI 调用顺序或数据库结构。已验证 `node --check cloudflare/src/index.js`、`node --check extension/content/rules.js`、`node --check extension/content/content.js`、`git diff --check`、`npm run cloud:check`、`npm run cloud:deploy`、`npm run cloud:audit-data-layer`。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-02-2124`、`extensionVersion=0.1.47`。本机 App 已替换并确认含新版 `BUILD_ID`，签名和 `pluginkit` 通过；`npm run safari:verify-live` 在当前打开的 `https://x.com/home` 返回 `build=2026-05-02-2124`、`marking=1`、`stage=ads:done`。尝试用两个 X 详情页做更严格按钮验收时，X 页面一直停在 `articles=0` / `stage=boot` 或 `scan:not-enough-articles`，所以本轮只能证明详情页注入成功，未能看到实际回复按钮数量；后续遇到能正常加载回复的真实详情页应再补验 `冲走` 和右栏关闭按钮。
   - 2026-05-02 19:34 已修复手动反馈刷新数据库候选的后台缺口：`recordModerationTrainingLabelFromEvent` 以前写入样本和标注后，刷新候选处引用了不存在的 AI `decision` 变量，错误被保护逻辑吞掉，导致新 `manual_hide` / `manual_allow` 没有实时刷新 `moderation_rule_candidates`。现在手动冲走或恢复都会刷新候选；单用户冲走仍只是候选证据，不直接变公共规则。已部署公网 Worker Version ID `8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`。随后运行 `npm run cloud:rebuild-rule-candidates`，先备份 D1 到 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，整理结果：`active=223`、`candidate=66`、写入候选 289 条。`npm run cloud:audit-data-layer` 通过；公网 `/downloads/latest.json` 仍为 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`；官网和控制台 200；本机 App 签名与真实 Safari 详情页验证通过。
   - 2026-05-02 19:12 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。本次修复用户截图 `🐇有狗.（月固定 @vaughan_jo90233 / 找个温柔的哥哥🌹💐❤️ 0`：`月固定/周固定/长期固定` 现在是强风险昵称；`找/求/蹲 + 温柔/固定/长期/月固定/帅/乖/可爱/宠人/有钱 + 哥哥/姐姐/弟弟/妹妹` 进入强关系诱导模板。回归：截图同款隐藏，`找个温柔的哥哥帮我修电脑`、`这个哥哥很温柔`、`固定收益产品风险很高`、`附近有家面馆不错` 放过。真实 Safari 详情页验证 `build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。
   - 2026-05-02 18:46 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1846`、`extensionVersion=0.1.45`，官网和控制台返回 200。按用户要求，回复 AI 输入现在按“证据卡”组织：昵称、@用户名、正文、主贴文字、主页简介、主页外链、主页风险标签都作为独立证据；当回复像随机诗句/空洞词、和主贴上下文脱节、且账号 handle 可疑时，插件会附加头像图片地址、头像 alt 文本和 `avatar_vision_requested`。后台遇到头像证据项会单条送 AI，不混入批量；如果外接模型支持图片输入，头像会作为图片辅助证据送入。发布前已备份 D1：`backups/d1/web25-2026-05-02T10-53-58-3NZ-before-avatar-evidence-schema.sql`，线上 `reply_ai_items` 已确认存在 5 个头像证据字段。
@@ -172,11 +173,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1912`
-  - extension manifest version：`0.1.46`
-  - App / Extension version：`1.0.46 (47)`
+  - `BUILD_ID = 2026-05-02-2124`
+  - extension manifest version：`0.1.47`
+  - App / Extension version：`1.0.47 (48)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 21:24 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-2124`，签名验证通过，`pluginkit` 已启用扩展。`npm run safari:verify-live` 对当前打开的 `https://x.com/home` 通过，返回 `build=2026-05-02-2124`、`marking=1`、`stage=ads:done`。两个尝试打开的 X 详情页均未加载出回复列表（`articles=0`），因此未完成可见 `冲走` / 右栏关闭按钮数量验收；这属于 X 页面内容未加载，不是本机 App 缺新版。
   - 2026-05-02 19:12 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1912`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`。
   - 2026-05-02 18:46 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1846`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari 首页标签页返回 `build=2026-05-02-1846`、`marking=1`、`stage=ads:done`。尝试打开旧详情页 `https://x.com/kittenhyl/status/2050347599266504791` 时 X 一直停在 `stage=boot/articles=0`，不是插件未注入；已关闭该卡住标签。
   - 2026-05-02 18:22 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1822`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1822`、`flushes=4`、`manualButtons=4`、`sideButtons=3`、`articles=46`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`。

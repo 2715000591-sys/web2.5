@@ -128,9 +128,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-02-1912`
-  - 扩展版本 `0.1.46`
-  - App / Extension 版本 `1.0.46 (47)`
+  - `BUILD_ID = 2026-05-02-2124`
+  - 扩展版本 `0.1.47`
+  - App / Extension 版本 `1.0.47 (48)`
+  - 2026-05-02 21:24 已做小范围同构修正：本地插件现在会发出 `pattern:geo-relationship-bait` 和 `pattern:poetic-slogan-lure-account`，与云端数据库候选规则键保持一致。这个改动只补手动反馈 / 候选证据键，不改变筛选阈值、AI 调用顺序或 UI。验证：本机 App 含 `BUILD_ID=2026-05-02-2124`，签名和 `pluginkit` 通过，`npm run safari:verify-live` 对当前 X 首页返回 `build=2026-05-02-2124`。两个尝试打开的 X 详情页没有加载出回复列表（`articles=0`），所以本轮未能看到实际 `冲走` 按钮数量；后续真实详情页能正常加载时应补一次可见按钮验收。
   - 2026-05-02 19:12 已补用户新截图里的 `🐇有狗.（月固定 @vaughan_jo90233 / 找个温柔的哥哥🌹💐❤️ 0`。根因：旧规则只把 `找个温柔的哥哥` 识别成一个弱 `hook`，没有把 `月固定` 昵称和“找/求/蹲 + 温柔/固定/长期/月固定/帅/乖/可爱/宠人/有钱 + 哥哥/姐姐/弟弟/妹妹”关系诱导结构合并。新版把 `月固定/周固定/长期固定` 作为强风险昵称，并把这类关系诱导正文纳入 `geo-relationship-bait` 同级强模板。本地回归：截图同款 12 分隐藏；`找个温柔的哥哥帮我修电脑`、`这个哥哥很温柔`、`固定收益产品风险很高`、`附近有家面馆不错` 放过。
   - 2026-05-02 18:46 已按用户要求把回复 AI 输入改成“逐条证据卡”方向：可疑回复会带昵称、@用户名、正文、主贴文字、主页简介、主页外链、主页风险标签；当回复像随机诗句/空洞词且与主贴上下文脱节、账号 handle 又可疑时，本地会额外抓取头像图片地址、头像 alt 文本，并标记 `avatar_vision_requested`。后台遇到这类头像证据项时会拆成单条 AI 判断，不和其他回复混在批量里；如果外接模型支持图片输入，会把头像图片作为辅助证据一起送入。只给可疑项启用头像证据，不对每条普通回复全量看图。
   - 2026-05-02 18:22 已补用户新截图里的“全国安排头像 + 随机英文数字 handle + 诗句式空洞回复”模板：`烟火暖了相逢`、`人海有幸擦肩`、`缘分引线人海逢`、`遇见温柔满人间`、`旧城偶遇故人`、`晚风撞我相逢`、`一念恰好相逢` 这类正文搭配 emoji、随机英文数字 handle 时会隐藏。本地回归：7 条截图同款样本全部隐藏；普通账号发 `烟火暖了相逢`、`人海有幸擦肩，今天真的很感慨`、`附近有家面馆不错`、`今晚准时看直播吗` 仍放过。本机 Safari 已替换到 `BUILD_ID=2026-05-02-1822`，真实 X 详情页验证返回 `flushes=4`、`manualButtons=4`、`sideButtons=3`、`articles=46`、`stage=scan:done`。
@@ -147,7 +148,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`
+  - Version ID: `9fd4a255-7913-4fcc-ba5a-9966193f8ad0`
+  - 2026-05-02 21:29 已发布新版下载包和同构键修正到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2124`、`extensionVersion=0.1.47`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-02 19:34 已修复“手动冲走/恢复写了样本但没有实时刷新数据库候选”的后台缺口。根因是 `recordModerationTrainingLabelFromEvent` 写入 `moderation_sample_labels` 后引用了不存在的 AI `decision` 变量，错误被保护逻辑吞掉，导致手动反馈侧没有立刻刷新 `moderation_rule_candidates`。新版改为手动 `manual_hide` / `manual_allow` 写完 label 后都刷新对应候选；单用户冲走仍只算候选证据，不会直接变公共规则，恢复仍是纠错和抑制。已部署公网 Worker Version ID `8480bcdf-8a69-45e8-8aa9-a981f41d7f2c`。随后运行 `npm run cloud:rebuild-rule-candidates`，自动备份 D1 到 `backups/d1/web25-2026-05-02T11-34-30-329Z-before-rule-candidates.sql`，候选整理结果：`active=223`、`candidate=66`、写入候选 289 条。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。公网 `/downloads/latest.json` 仍为 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。本机 `/Applications/web2.5.app` 仍为 `BUILD_ID=2026-05-02-1912`，签名校验通过；真实 Safari 详情页验证 `build=2026-05-02-1912`、`flushes=16`、`manualButtons=16`、`sideButtons=3`、`articles=29`、`stage=scan:done`。
   - 2026-05-02 19:12 已部署 `BUILD_ID=2026-05-02-1912` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。真实 Safari 详情页验证通过：`build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。`npm run cloud:audit-data-layer` 通过。
   - 2026-05-02 18:46 已部署 `BUILD_ID=2026-05-02-1846` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1846`、`extensionVersion=0.1.45`，官网和控制台返回 200。发布前已备份线上 D1：`backups/d1/web25-2026-05-02T10-53-58-3NZ-before-avatar-evidence-schema.sql`；线上 `reply_ai_items` 已新增头像证据字段 `avatar_image_url`、`avatar_alt_text`、`avatar_evidence_tags_json`、`avatar_fetch_status`、`avatar_vision_requested` 并确认存在。`npm run cloud:audit-data-layer` 通过。

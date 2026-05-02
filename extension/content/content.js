@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1912";
+  const BUILD_ID = "2026-05-02-2124";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -3084,6 +3084,10 @@
       return "pattern:geo-meetup-bait";
     }
 
+    if (analysis && analysis.hasGeoRelationshipBait) {
+      return "pattern:geo-relationship-bait";
+    }
+
     if (analysis && analysis.hasBaitQuestionShape) {
       return "pattern:bait-question-shape";
     }
@@ -3128,6 +3132,10 @@
 
     if (analysis && analysis.hasDecorativeSloganBait && suspiciousHandle) {
       return "pattern:decorative-slogan-lure-account";
+    }
+
+    if (analysis && analysis.hasPoeticSpamSloganBait && suspiciousHandle) {
+      return "pattern:poetic-slogan-lure-account";
     }
 
     const matchedTerms = Array.from(new Set(SIMILARITY_TERMS.filter(function (term) {
