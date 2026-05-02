@@ -53,14 +53,14 @@
   },
   {
     "id": "hide-nationwide-avatar-poetic-batch-001",
-    "replyText": "◦ 晨昏静候柔意 ♪ 🧢 🎁 ✂️ 🔪",
+    "replyText": "༙༚ 晨昏静候柔意 ༚༙",
     "mainPostText": "",
     "authorDisplayName": "Ivdro",
     "authorHandle": "Ivdro167393",
     "profileBioText": "",
     "expectedAction": "hide",
     "expectedLabels": ["meaningless_bait", "lead_gen_spam"],
-    "notes": "全国安排头像批量号常见模板；即使原帖正文暂时没读到，也应凭诗句模板、随机数字 handle 和 emoji 噪音隐藏。"
+    "notes": "全国安排头像批量号常见模板；真实页面可能只剩装饰符号而不是 emoji，即使原帖正文暂时没读到，也应凭诗句模板和随机数字 handle 隐藏。"
   },
   {
     "id": "allow-adult-discussion-001",

@@ -415,7 +415,7 @@ const DECORATIVE_SLOGAN_TERMS = [
   "俗世偏爱",
   "缘起"
 ];
-const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫]/u;
+const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫༙༚༘༳༗꙳꧆꧇ꧨ]/u;
 const POETIC_SPAM_SLOGAN_PATTERNS = [
   /晨昏.{0,4}(静候|柔意|情愫|生情|暗生)/,
   /烟火.{0,4}相逢/,
@@ -10436,11 +10436,6 @@ function looksLikePoeticSpamSloganBait(text) {
   }
 
   if (countRuleTermMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countRuleTermMatches(compact, FINANCE_MARKERS) > 0) {
-    return false;
-  }
-
-  const emojiCount = Array.from(raw.matchAll(EMOJI_PATTERN)).length;
-  if (emojiCount < 1) {
     return false;
   }
 

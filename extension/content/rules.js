@@ -318,7 +318,7 @@
     "俗世偏爱",
     "缘起"
   ];
-  const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫]/u;
+  const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫༙༚༘༳༗꙳꧆꧇ꧨ]/u;
   const POETIC_SPAM_SLOGAN_PATTERNS = [
     /晨昏.{0,4}(静候|柔意|情愫|生情|暗生)/,
     /烟火.{0,4}相逢/,
@@ -558,11 +558,6 @@
     }
 
     if (countMatches(compact, SUBSTANTIVE_MARKERS) >= 2 || countMatches(compact, FINANCE_MARKERS) > 0) {
-      return false;
-    }
-
-    const emojiCount = countEmojiMatches(raw);
-    if (emojiCount < 1) {
       return false;
     }
 

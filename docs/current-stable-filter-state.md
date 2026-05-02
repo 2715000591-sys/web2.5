@@ -128,9 +128,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-02-2357`
-  - 扩展版本 `0.1.52`
-  - App / Extension 版本 `1.0.52 (53)`
+  - `BUILD_ID = 2026-05-03-0011`
+  - 扩展版本 `0.1.53`
+  - App / Extension 版本 `1.0.53 (54)`
+  - 2026-05-03 00:11 已修复用户复查仍能看到同款垃圾的真正原因：真实 X 页面里这些回复不是 emoji 版本，而是 `༙༚ 晨昏静候柔意 ༚༙`、`༘꙳ 温柔漫染眉眼 ꙳༘`、`༳ 晨昏暗生情愫 ༳`、`ꧨ 时光赠予柔情 ꧨ`、`꧆ 晚风裹着温柔 ꧇`、`༗ 俗世偏爱温存 ༗`，以及纯 `缘起眉眼温柔`。旧规则要求诗句模板至少带 emoji，所以只标记了按钮，没有自动收掉这些真实版本。新版把这些装饰符号和纯短句模板也纳入 `poetic-slogan-from-suspicious-handle`；本地回归 7 条真实文本全部隐藏，普通账号发 `缘起眉眼温柔`、`有缘自会相识。`、`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
   - 2026-05-02 23:57 已修正数据库候选键优先级：诗句式空洞模板 + 随机数字 handle 会优先归入 `pattern:poetic-slogan-lure-account`，再考虑较宽的 `pattern:decorative-slogan-lure-account`。这保证用户截图里的 7 条同款进入数据库时用更精确的模式键；本地回归 7 条全部隐藏，`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
   - 2026-05-02 23:43 已补用户新截图里的“全国安排头像 + 随机英文数字账号 + 晨昏/温柔/晚风/俗世/缘起诗句空话 + emoji 噪音”批量回复。新版新增 `晨昏静候柔意`、`温柔漫染眉眼`、`晨昏暗生情愫`、`时光赠予柔情`、`晚风裹着温柔`、`俗世偏爱温存`、`缘起眉眼温柔` 等模板；即使 X 暂时没把原帖正文暴露给插件，这 7 条同款也会直接隐藏。普通 `生日快乐🎂🎉🥳` 和有信息量的 `晚风裹着温柔...散步...空气很好` 放过。头像取证扩大到 emoji 噪音可疑项，不再只依赖上下文脱节时才请求头像辅助。
   - 2026-05-02 23:25 已补用户截图里的 `Gmuabzl @gmuabzl73394 / 有缘自会相识。🎁🔥🌺` 和 `Utmhryx @utmhryx13099 / ⚜ 怡好刚好温良友 ⚜ 💘 🧊 🤌🏽🍀🔥`。新版把“短空话/诗句式空洞模板 + emoji 噪音 + 随机数字 handle + 与主帖无关”作为组合信号，而不是只看单条正文；`mainPostText` 会进入 AI 证据卡，prompt 也明确要求比较主帖和回复是否相关。头像证据新增 `emoji_noise_reply` 标签，可疑时继续触发 `avatar_vision_requested`，让支持图片的模型检查头像里是否有“全国安排”等线索。回归：截图同款隐藏，普通相关 `有缘自会相识。`、生日语境 `生日快乐🎂🎉🥳`、金融语境 emoji 回复放过。本轮没有改数据库结构或删除 D1 数据。
@@ -153,7 +154,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `7b21c727-5efb-484b-bd91-50784b20065b`
+  - Version ID: `6e61edb4-f1f4-4578-bd6c-b3f932df3e34`
+  - 2026-05-03 00:11 已部署 `BUILD_ID=2026-05-03-0011` 到公网。线上探针用 7 条真实页面文字全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0011`、`extensionVersion=0.1.53`。本轮没有改数据库结构、没有删除 D1 数据；复用 2026-05-02 23:57 已登记的活跃数据库规则。
   - 2026-05-02 23:57 已部署 `BUILD_ID=2026-05-02-2357` 到公网。发布前备份 D1 到 `backups/d1/web25-2026-05-02T15-57-00-before-poetic-slogan-rule.sql`，随后把 `pattern:poetic-slogan-lure-account` 登记为开发者确认的活跃数据库规则。线上 7 条截图同款探针全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2357`、`extensionVersion=0.1.52`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过。
   - 2026-05-02 23:43 已部署 `BUILD_ID=2026-05-02-2340` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2340`、`extensionVersion=0.1.51`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。本轮没有 schema 变更或 D1 清理。
   - 2026-05-02 23:25 已部署 `BUILD_ID=2026-05-02-2317` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2317`、`extensionVersion=0.1.50`，首页和控制台返回 200。线上只读探针样本 `Gmuabzl @gmuabzl73394 / 有缘自会相识。🎁🔥🌺` 已显示新证据：`emoji-heavy low-substance bait`、`poetic low-substance slogan`、`unrelated to the main post context`、`context_detached_reply`；数据库和学习库未命中时会进入外接 AI 路线。随后真实 AI 小样本返回 `ready / hide / high`，理由为诗句式低信息、随机号、脱离主帖、emoji 诱饵；不写数据库。新增候选键 `pattern:emoji-noise-lure-account`。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。

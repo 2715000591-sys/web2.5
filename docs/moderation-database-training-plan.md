@@ -247,6 +247,8 @@
 
 2026-05-02 23:57 已按用户截图明确确认，将 `pattern:poetic-slogan-lure-account` 升为开发者确认的活跃数据库规则。操作前已备份线上 D1：`backups/d1/web25-2026-05-02T15-57-00-before-poetic-slogan-rule.sql`。本次同时修正本地和 Worker 的模式键顺序：诗句式空洞模板优先于较宽的装饰空话模板。线上 7 条截图同款探针全部命中 `db_rule_pattern/hide/high`，不调用外接 AI；`pattern:decorative-slogan-lure-account` 仍保持 candidate，不扩大到普通装饰空话。
 
+2026-05-03 00:11 已补真实 X 渲染版本：用户复查时看到的同款实际是无 emoji 的装饰符号/纯短句版本。Worker 和本地现在都允许 `pattern:poetic-slogan-lure-account` 由固定诗句模板 + 随机数字 handle 直接触发，不再要求 emoji；线上 7 条真实文字探针全部命中数据库规则，不调用外接 AI。
+
 ## 下一任重点：AI、数据库、API 调度关系
 
 用户下一步主要要调试这三者的关系，不是重做 UI。
