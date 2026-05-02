@@ -105,6 +105,7 @@ const LOCAL_BLOCKED_TOPICS_KEY = "web25_local_blocked_topics_v1";
 const DEFAULT_PUBLIC_BACKEND_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
 const DASHBOARD_REQUEST_TIMEOUT_MS = 12000;
 const CLOUD_DASHBOARD_CACHE_KEY_PREFIX = "web25_cloud_dashboard_cache_v1";
+const EMPTY_REPLY_BODY_LABEL = "这条回复当时没有可读取正文，系统保存了账号信息和判断原因。";
 const LEGACY_BACKEND_BASE_URLS = new Set([
   "https://web25-public-pages.pages.dev",
   "https://web25-public.web25-boris.workers.dev",
@@ -1114,7 +1115,7 @@ function renderSourceDetailRow(item) {
   const isAdEvent = item && item.detailType === "ad_event";
   const bodyText = isAdEvent
     ? `${getAdAdvertiserLabel(item)} · ${getAdScopeMeta(getReviewEventType(item)).placementLabel}`
-    : (item && item.replyText ? item.replyText : "这条记录里没有保存正文。");
+    : (item && item.replyText ? item.replyText : EMPTY_REPLY_BODY_LABEL);
   const reasonText = isAdEvent ? getAdScopeMeta(getReviewEventType(item)).placementLabel : getBucketReason(item);
   row.innerHTML = `
     <div class="review-row-top">
@@ -2088,7 +2089,7 @@ function renderReviewList(items) {
           <time>${formatRelativeTime(item.createdAt)}</time>
         </div>
       </div>
-      <p class="review-body">${escapeHtml(item.replyText || "这条记录里没有保存正文。")}</p>
+      <p class="review-body">${escapeHtml(item.replyText || EMPTY_REPLY_BODY_LABEL)}</p>
       ${canRestore ? `
         <div class="review-actions">
           <button class="ghost-button small-button review-restore-button" type="button">恢复这条</button>
@@ -2236,7 +2237,7 @@ function renderDeveloperPendingFeeds(items, pagination) {
             <time>${escapeHtml(formatRelativeTime(item.createdAt))}</time>
           </div>
           <div class="developer-key-list">${buildDeveloperKeyPills(item.exactKeys)}</div>
-          <p class="developer-body">${escapeHtml(item.replyText || "这条样本没有保存正文。")}</p>
+          <p class="developer-body">${escapeHtml(item.replyText || EMPTY_REPLY_BODY_LABEL)}</p>
           <div class="developer-row-actions">
             <span class="surface-note muted-note">先把误判样本排掉，再决定要不要进全局</span>
             <div class="developer-row-button-group">
@@ -2294,7 +2295,7 @@ function renderDeveloperRules(items, pagination) {
         <time>${escapeHtml(formatRelativeTime(item.lastConfirmedAt || item.createdAt))}</time>
       </div>
       <div class="developer-key-list">${buildDeveloperKeyPills(item.exactKeys)}</div>
-      <p class="developer-body">${escapeHtml(item.replyText || "这条规则没有保存正文。")}</p>
+      <p class="developer-body">${escapeHtml(item.replyText || EMPTY_REPLY_BODY_LABEL)}</p>
       <div class="developer-row-actions">
         <span class="surface-note muted-note">这会立刻撤回全局规则，不是只影响你自己</span>
         <button class="ghost-button small-button developer-revoke-button" type="button">撤回全局规则</button>
@@ -2333,7 +2334,7 @@ function renderDeveloperRevoked(items) {
         <time>${escapeHtml(formatRelativeTime(item.revokedAt || item.lastConfirmedAt || item.createdAt))}</time>
       </div>
       <div class="developer-key-list">${buildDeveloperKeyPills(item.exactKeys)}</div>
-      <p class="developer-body">${escapeHtml(item.replyText || "这条规则没有保存正文。")}</p>
+      <p class="developer-body">${escapeHtml(item.replyText || EMPTY_REPLY_BODY_LABEL)}</p>
     `;
     developerRevokedList.appendChild(row);
   });

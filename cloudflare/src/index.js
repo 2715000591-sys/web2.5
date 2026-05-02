@@ -1601,6 +1601,15 @@ async function handlePostEvent(request, env) {
     compactText: String(payload.compactText || "").trim(),
     accountProtected: Number(payload.accountProtected || 0) ? 1 : 0
   });
+
+  if (!saved.deduped && saved.eventRow) {
+    try {
+      await recordModerationTrainingLabelFromEvent(env, saved.eventRow);
+    } catch (error) {
+      // Training capture must never block the user's hide/restore action.
+    }
+  }
+
   let replyAiRestored = false;
   if (normalizedEventType === "manual_allow") {
     const replyAiItemId = Number(payload.replyAiItemId || 0);
@@ -3892,7 +3901,7 @@ async function upsertEvent(env, payload) {
   }
 
   try {
-    await env.DB.prepare(
+    const insertResult = await env.DB.prepare(
       `
         INSERT INTO moderation_events (
           sync_key,
@@ -3931,6 +3940,7 @@ async function upsertEvent(env, payload) {
       eventRow.createdAt,
       eventRow.eventFingerprint
     ).run();
+    eventRow.id = Number(insertResult && insertResult.meta && insertResult.meta.last_row_id ? insertResult.meta.last_row_id : 0);
   } catch (error) {
     if (eventRow.eventFingerprint && isEventFingerprintConflictError(error)) {
       const existingByFingerprint = await env.DB.prepare(
@@ -3943,7 +3953,326 @@ async function upsertEvent(env, payload) {
     throw error;
   }
 
-  return { deduped: false };
+  if (!eventRow.id && eventRow.eventFingerprint) {
+    const inserted = await env.DB.prepare(
+      "SELECT id FROM moderation_events WHERE event_fingerprint = ? LIMIT 1"
+    ).bind(eventRow.eventFingerprint).first();
+    eventRow.id = Number(inserted && inserted.id ? inserted.id : 0);
+  }
+
+  return { deduped: false, eventId: Number(eventRow.id || 0), eventRow };
+}
+
+function normalizeModerationTrainingEventType(value) {
+  const normalized = String(value || "").trim();
+  return normalized === "manual_hide" || normalized === "manual_allow" ? normalized : "";
+}
+
+function buildModerationTrainingSourceRow(source) {
+  const row = source && typeof source === "object" ? source : {};
+  const primaryText = normalizeAiFeedText(row.replyText || row.reply_text || row.primaryText || row.primary_text || "", 1200);
+  const normalizedText = normalizeAiFeedText(
+    row.normalizedText || row.normalized_text || normalizeRuleText(primaryText),
+    1200
+  );
+  const compactText = normalizeAiFeedText(
+    row.compactText || row.compact_text || buildCompactRuleText(primaryText || normalizedText),
+    1200
+  );
+
+  return {
+    id: Number(row.id || 0),
+    syncKey: String(row.syncKey || row.sync_key || "").trim(),
+    userId: String(row.userId || row.user_id || "").trim(),
+    deviceId: String(row.deviceId || row.device_id || "").trim(),
+    threadUrl: normalizeAiFeedText(row.threadUrl || row.thread_url || "", 1200),
+    threadStatusId: String(row.threadStatusId || row.thread_status_id || "").trim(),
+    replyStatusId: String(row.replyStatusId || row.reply_status_id || "").trim(),
+    replyHandle: normalizeAiHandle(row.replyHandle || row.reply_handle || ""),
+    replyDisplayName: normalizeAiFeedText(row.replyDisplayName || row.reply_display_name || "", 200),
+    replyText: primaryText,
+    contextText: normalizeAiFeedText(row.mainPostText || row.main_post_text || row.contextText || row.context_text || "", 1200),
+    normalizedText,
+    compactText,
+    accountProtected: Number(row.accountProtected || row.account_protected || 0) === 1,
+    createdAt: String(row.createdAt || row.created_at || new Date().toISOString()).trim()
+  };
+}
+
+function buildModerationTrainingFeatureKeys(sourceRow) {
+  const keys = buildRowKeys(sourceRow);
+  const templateKey = buildTemplateRuleKeyFromRow(sourceRow);
+  return Array.from(new Set([
+    keys.statusKey,
+    keys.accountKey,
+    keys.displayNameKey,
+    keys.textKey,
+    keys.compactKey,
+    keys.patternKey,
+    templateKey
+  ].filter(Boolean))).slice(0, 24);
+}
+
+async function buildModerationTrainingSampleFingerprint(sourceRow) {
+  const row = buildModerationTrainingSourceRow(sourceRow);
+  if (row.replyStatusId) {
+    return sha256Hex(JSON.stringify(["moderation-sample-v1", "reply-status", row.replyStatusId]));
+  }
+
+  const contentKey = row.normalizedText || row.compactText || normalizeRuleText(row.replyText);
+  const handleKey = normalizeAiHandle(row.replyHandle);
+  const displayNameKey = normalizeRuleText(row.replyDisplayName);
+  if (!contentKey && !handleKey && !displayNameKey) {
+    return "";
+  }
+
+  return sha256Hex(JSON.stringify([
+    "moderation-sample-v1",
+    "reply-content",
+    handleKey,
+    contentKey,
+    displayNameKey,
+    row.accountProtected ? "protected" : "public"
+  ]));
+}
+
+async function upsertModerationTrainingSample(env, source, options) {
+  await ensureAiFeedSchema(env);
+  const row = buildModerationTrainingSourceRow(source);
+  const sampleFingerprint = await buildModerationTrainingSampleFingerprint(row);
+  if (!sampleFingerprint) {
+    return null;
+  }
+
+  const now = new Date().toISOString();
+  const sampleId = await sha256Hex(`moderation-sample-id:${sampleFingerprint}`);
+  const featureKeys = buildModerationTrainingFeatureKeys(row);
+  const sampleOptions = options && typeof options === "object" ? options : {};
+
+  await env.DB.prepare(
+    `
+      INSERT INTO moderation_samples (
+        id,
+        sample_fingerprint,
+        source_kind,
+        source_ref_id,
+        user_id,
+        sync_key,
+        device_id,
+        contribution_scope,
+        surface,
+        content_url,
+        thread_status_id,
+        reply_status_id,
+        author_handle,
+        author_display_name,
+        primary_text,
+        context_text,
+        normalized_text,
+        compact_text,
+        account_protected,
+        feature_keys_json,
+        safety_labels_json,
+        quality_status,
+        sample_weight,
+        first_seen_at,
+        last_seen_at,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'private', 'reply', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'pending', 1, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        source_ref_id = CASE
+          WHEN TRIM(COALESCE(moderation_samples.source_ref_id, '')) = '' THEN excluded.source_ref_id
+          ELSE moderation_samples.source_ref_id
+        END,
+        user_id = CASE
+          WHEN TRIM(COALESCE(moderation_samples.user_id, '')) = '' THEN excluded.user_id
+          ELSE moderation_samples.user_id
+        END,
+        sync_key = CASE
+          WHEN TRIM(COALESCE(moderation_samples.sync_key, '')) = '' THEN excluded.sync_key
+          ELSE moderation_samples.sync_key
+        END,
+        device_id = CASE
+          WHEN TRIM(COALESCE(moderation_samples.device_id, '')) = '' THEN excluded.device_id
+          ELSE moderation_samples.device_id
+        END,
+        author_handle = CASE
+          WHEN TRIM(COALESCE(excluded.author_handle, '')) != '' THEN excluded.author_handle
+          ELSE moderation_samples.author_handle
+        END,
+        author_display_name = CASE
+          WHEN TRIM(COALESCE(excluded.author_display_name, '')) != '' THEN excluded.author_display_name
+          ELSE moderation_samples.author_display_name
+        END,
+        primary_text = CASE
+          WHEN TRIM(COALESCE(excluded.primary_text, '')) != '' THEN excluded.primary_text
+          ELSE moderation_samples.primary_text
+        END,
+        context_text = CASE
+          WHEN TRIM(COALESCE(excluded.context_text, '')) != '' THEN excluded.context_text
+          ELSE moderation_samples.context_text
+        END,
+        normalized_text = CASE
+          WHEN TRIM(COALESCE(excluded.normalized_text, '')) != '' THEN excluded.normalized_text
+          ELSE moderation_samples.normalized_text
+        END,
+        compact_text = CASE
+          WHEN TRIM(COALESCE(excluded.compact_text, '')) != '' THEN excluded.compact_text
+          ELSE moderation_samples.compact_text
+        END,
+        feature_keys_json = excluded.feature_keys_json,
+        sample_weight = moderation_samples.sample_weight + 1,
+        last_seen_at = excluded.last_seen_at,
+        updated_at = excluded.updated_at
+    `
+  ).bind(
+    sampleId,
+    sampleFingerprint,
+    normalizeAiFeedText(sampleOptions.sourceKind || "moderation_event", 80),
+    normalizeAiFeedText(sampleOptions.sourceRefId || row.id || "", 120),
+    row.userId || null,
+    row.syncKey,
+    row.deviceId,
+    row.threadUrl,
+    row.threadStatusId,
+    row.replyStatusId,
+    row.replyHandle,
+    row.replyDisplayName,
+    row.replyText,
+    row.contextText,
+    row.normalizedText,
+    row.compactText,
+    row.accountProtected ? 1 : 0,
+    JSON.stringify(featureKeys),
+    row.createdAt || now,
+    row.createdAt || now,
+    now,
+    now
+  ).run();
+
+  return {
+    sampleId,
+    sampleFingerprint,
+    sourceRow: row,
+    featureKeys
+  };
+}
+
+async function insertModerationTrainingLabel(env, sample, label) {
+  if (!sample || !sample.sampleId) {
+    return;
+  }
+
+  const source = label && typeof label === "object" ? label : {};
+  const decision = ["hide", "allow", "review", "unknown"].includes(String(source.decision || ""))
+    ? String(source.decision || "")
+    : "unknown";
+  const labelSource = normalizeAiFeedText(source.labelSource || "user_feedback", 80);
+  const sourceRefId = normalizeAiFeedText(source.sourceRefId || "", 120);
+  const labelId = await sha256Hex(JSON.stringify([
+    "moderation-sample-label-v1",
+    sample.sampleId,
+    labelSource,
+    sourceRefId,
+    source.reviewerUserId || "",
+    source.reviewerSyncKey || "",
+    decision
+  ]));
+
+  await env.DB.prepare(
+    `
+      INSERT OR IGNORE INTO moderation_sample_labels (
+        id,
+        sample_id,
+        label_source,
+        reviewer_user_id,
+        reviewer_sync_key,
+        decision,
+        safety_labels_json,
+        reason_short,
+        confidence,
+        trust_weight,
+        model,
+        raw_response_json,
+        created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `
+  ).bind(
+    labelId,
+    sample.sampleId,
+    labelSource,
+    normalizeAiFeedText(source.reviewerUserId || "", 120) || null,
+    normalizeAiFeedText(source.reviewerSyncKey || "", 120),
+    decision,
+    JSON.stringify(Array.isArray(source.safetyLabels) ? source.safetyLabels.slice(0, 12) : []),
+    normalizeAiFeedText(source.reasonShort || "", 180),
+    normalizeAiFeedText(source.confidence || "low", 24),
+    Math.max(1, Math.min(10, Number(source.trustWeight || 1) || 1)),
+    normalizeAiFeedText(source.model || "", 120),
+    source.rawResponseJson ? JSON.stringify(source.rawResponseJson) : null,
+    normalizeAiFeedText(source.createdAt || new Date().toISOString(), 80)
+  ).run();
+}
+
+async function recordModerationTrainingLabelFromEvent(env, eventRow) {
+  const eventType = normalizeModerationTrainingEventType(eventRow && eventRow.eventType);
+  if (!eventType) {
+    return null;
+  }
+
+  const sample = await upsertModerationTrainingSample(env, eventRow, {
+    sourceKind: "moderation_event",
+    sourceRefId: eventRow && eventRow.id ? String(eventRow.id) : ""
+  });
+  if (!sample) {
+    return null;
+  }
+
+  await insertModerationTrainingLabel(env, sample, {
+    labelSource: "user_feedback",
+    sourceRefId: eventRow && eventRow.id ? String(eventRow.id) : "",
+    reviewerUserId: eventRow && eventRow.userId ? eventRow.userId : "",
+    reviewerSyncKey: eventRow && eventRow.syncKey ? eventRow.syncKey : "",
+    decision: eventType === "manual_hide" ? "hide" : "allow",
+    reasonShort: eventType === "manual_hide" ? "用户手动冲走" : "用户恢复或放过",
+    confidence: "medium",
+    trustWeight: 1,
+    createdAt: eventRow && eventRow.createdAt ? eventRow.createdAt : new Date().toISOString()
+  });
+
+  return sample;
+}
+
+async function recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision) {
+  if (!itemRow || !itemRow.id || !decision || decision.status !== "ready" || decision.decisionLayer !== "ai") {
+    return null;
+  }
+
+  const sample = await upsertModerationTrainingSample(env, itemRow, {
+    sourceKind: "reply_ai_item",
+    sourceRefId: String(itemRow.id)
+  });
+  if (!sample) {
+    return null;
+  }
+
+  await insertModerationTrainingLabel(env, sample, {
+    labelSource: "ai",
+    sourceRefId: String(itemRow.id),
+    reviewerUserId: itemRow.userId || "",
+    reviewerSyncKey: itemRow.syncKey || "",
+    decision: decision.action === "hide" ? "hide" : "allow",
+    safetyLabels: Array.isArray(decision.matchedSafetyLabels) ? decision.matchedSafetyLabels : [],
+    reasonShort: decision.reasonShort || "AI 首次判断",
+    confidence: decision.confidence || "low",
+    trustWeight: decision.confidence === "high" ? 2 : 1,
+    model: decision.model || "",
+    rawResponseJson: decision.rawResponseJson || null,
+    createdAt: new Date().toISOString()
+  });
+
+  return sample;
 }
 
 async function touchSyncKey(env, syncKey, deviceId) {
@@ -7168,6 +7497,11 @@ async function finalizeReplyAiDecision(env, itemRow, decision) {
   }
 
   await upsertReplyAiResult(env, itemRow.id, decision);
+  try {
+    await recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision);
+  } catch (error) {
+    // Training capture must never block realtime moderation.
+  }
   if (decision && decision.decisionLayer === "manual_allow") {
     await deactivateReplyAiMemoryForItem(env, itemRow, "manual_restore");
   } else if (isDirectAiHighConfidenceHide(decision)) {

@@ -165,6 +165,17 @@
 - 旧的本地规则、账号黑名单、历史命中不再作为控制台主分类；如果仍产生有效隐藏，展示口径归入 `AI 学习库屏蔽`。
 - 2026-05-02 已备份并应用线上 D1 schema；备份文件在本机 `backups/d1/web25-2026-05-02-ai-memory-before-schema.sql`。当前线上 Worker Version ID 为 `f931af5f-32ee-459d-ba1b-62b6dee83bb3`。
 
+## 2026-05-02 当前核对
+
+本轮通过公网开发者审计接口核对到：
+
+- 线上 AI 设置仍为开启，模型为 `deepseek-v4-flash`，Key 只显示后四位 `a6db`。
+- 事件总数为 `702`：`auto_hide=397`、`manual_hide=143`、`manual_allow=13`、`ad_home_hide=133`、`ad_reply_hide=16`。
+- 当前账号可见累计口径里，AI 直接隐藏约 `131`，AI 学习库复用隐藏约 `4`；这些是已经发生过的 AI 判断和复用，不代表每条正常回复都应该进 AI。
+- 线上 `moderation_samples` / `moderation_sample_labels` / `moderation_rule_candidates` 仍为空；也就是说，当前公网还没有把用户手动 `冲走` / `恢复` 自动沉淀成训练样本。
+- 本地代码已补上轻量闭环：新发生的 `manual_hide` / `manual_allow` 会写入样本和用户反馈标注；AI 首次判断也会写入 AI 标注。它们仍然只是证据层，不会自动变成公共规则。
+- 本轮 Cloudflare 直接数据库读取和公网发布被账号登录失效挡住，错误为 `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。用户重新完成 Cloudflare 登录后，需要发布本地代码，线上训练样本表才会开始增长。
+
 ## 近期最实用的下一步
 
 先做一个小闭环：

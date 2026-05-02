@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1033";
+  const BUILD_ID = "2026-05-02-1222";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -4928,13 +4928,6 @@
       score -= 1;
     }
 
-    if (protectedAccount) {
-      return {
-        shouldQueue: true,
-        score: score
-      };
-    }
-
     const hasStrongTrigger = highRiskDisplayName
       || Boolean(analysis && analysis.hasShareLinkScam)
       || Boolean(analysis && analysis.hasExternalContactPayload)
@@ -4960,7 +4953,7 @@
     );
 
     return {
-      shouldQueue: true,
+      shouldQueue: Boolean(hasStrongTrigger || hasWeakTriggerCombo),
       score: score
     };
   }
