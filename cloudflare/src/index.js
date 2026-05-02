@@ -393,6 +393,19 @@ function buildNonTestModerationEventSql(alias) {
   )`;
 }
 
+function buildNonTestReplyAiItemSql(alias) {
+  const prefix = alias ? `${alias}.` : "";
+  return `(
+    TRIM(COALESCE(${prefix}sync_key, '')) NOT LIKE 'sync_test_%'
+    AND TRIM(COALESCE(${prefix}sync_key, '')) NOT LIKE 'sync_dev_test_%'
+    AND TRIM(COALESCE(${prefix}device_id, '')) NOT LIKE 'device_test_%'
+    AND TRIM(COALESCE(${prefix}device_id, '')) NOT LIKE 'device_eval_%'
+    AND TRIM(COALESCE(${prefix}device_id, '')) NOT LIKE 'device_dev_%'
+    AND LOWER(TRIM(COALESCE(${prefix}reply_handle, ''))) NOT IN ('tester', 'tester2', 'devtrash')
+    AND TRIM(COALESCE(${prefix}reply_text, '')) NOT IN ('公网同步测试', '公网同步测试二', '测试开发者全局投喂样本')
+  )`;
+}
+
 function buildVisibleDeveloperEventSql(eventAlias) {
   return `(${eventAlias}.id IS NULL OR ${buildNonTestModerationEventSql(eventAlias)})`;
 }
@@ -559,6 +572,10 @@ async function handleApi(request, env, ctx, url) {
 
   if (request.method === "GET" && url.pathname === "/api/developer/data-layer-audit") {
     return handleDeveloperDataLayerAudit(request, env);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/developer/backfill-training") {
+    return handleDeveloperBackfillTraining(request, env);
   }
 
   if (request.method === "GET" && url.pathname === "/api/state") {
@@ -1596,7 +1613,7 @@ async function handlePostEvent(request, env) {
     replyStatusId: String(payload.replyStatusId || "").trim(),
     replyHandle: String(payload.replyHandle || "").trim(),
     replyDisplayName: String(payload.replyDisplayName || "").trim(),
-    replyText: String(payload.replyText || "").trim(),
+    replyText: normalizeStoredReplyText(payload.replyText, payload.replyDisplayName, payload.replyHandle),
     normalizedText: String(payload.normalizedText || "").trim(),
     compactText: String(payload.compactText || "").trim(),
     accountProtected: Number(payload.accountProtected || 0) ? 1 : 0
@@ -2221,6 +2238,228 @@ async function handleDeveloperDataLayerAudit(request, env) {
   );
 }
 
+function normalizeTrainingBackfillPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const requestedSource = String(source.source || "all").trim().toLowerCase();
+  return {
+    source: ["all", "events", "ai"].includes(requestedSource) ? requestedSource : "all",
+    eventAfterId: Math.max(0, Number(source.eventAfterId || 0) || 0),
+    replyAiAfterId: Math.max(0, Number(source.replyAiAfterId || 0) || 0),
+    limit: Math.max(1, Math.min(300, Number(source.limit || 120) || 120)),
+    dryRun: source.dryRun === true
+  };
+}
+
+async function listModerationTrainingEventBackfillRows(env, afterId, limit) {
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        id,
+        sync_key,
+        user_id,
+        device_id,
+        event_type,
+        source,
+        thread_url,
+        thread_status_id,
+        reply_status_id,
+        reply_handle,
+        reply_display_name,
+        reply_text,
+        normalized_text,
+        compact_text,
+        account_protected,
+        created_at
+      FROM moderation_events me
+      WHERE id > ?
+        AND event_type IN ('manual_hide', 'manual_allow')
+        AND ${buildNonTestModerationEventSql("me")}
+      ORDER BY id ASC
+      LIMIT ?
+    `
+  ).bind(afterId, limit).all();
+  return results;
+}
+
+async function listReplyAiTrainingBackfillRows(env, afterId, limit) {
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        rai.id,
+        rai.sync_key,
+        rai.user_id,
+        rai.device_id,
+        rai.thread_url,
+        rai.thread_status_id,
+        rai.reply_status_id,
+        rai.reply_handle,
+        rai.reply_display_name,
+        rai.reply_text,
+        rai.main_post_text,
+        rai.account_protected,
+        rai.profile_path,
+        rai.profile_bio_text,
+        rai.profile_signal_tags_json,
+        rai.profile_links_json,
+        rai.profile_fetch_status,
+        rai.profile_fetched_at,
+        rai.created_at,
+        rar.action,
+        rar.decision_layer,
+        rar.matched_safety_labels_json,
+        rar.matched_profile_signals_json,
+        rar.confidence,
+        rar.reason_short,
+        rar.status,
+        rar.model,
+        rar.raw_response_json,
+        rar.updated_at
+      FROM reply_ai_items rai
+      JOIN reply_ai_results rar
+        ON rar.item_id = rai.id
+      WHERE rai.id > ?
+        AND rar.status = 'ready'
+        AND rar.decision_layer = 'ai'
+        AND ${buildNonTestReplyAiItemSql("rai")}
+      ORDER BY rai.id ASC
+      LIMIT ?
+    `
+  ).bind(afterId, limit).all();
+  return results;
+}
+
+function buildReplyAiBackfillItemRow(row) {
+  return {
+    id: Number(row.id || 0),
+    syncKey: row.sync_key || "",
+    userId: row.user_id || "",
+    deviceId: row.device_id || "",
+    threadUrl: row.thread_url || "",
+    threadStatusId: row.thread_status_id || "",
+    replyStatusId: row.reply_status_id || "",
+    replyHandle: row.reply_handle || "",
+    replyDisplayName: row.reply_display_name || "",
+    replyText: normalizeStoredReplyText(row.reply_text || "", row.reply_display_name || "", row.reply_handle || ""),
+    mainPostText: row.main_post_text || "",
+    accountProtected: Number(row.account_protected || 0) === 1,
+    profilePath: row.profile_path || "",
+    profileBioText: row.profile_bio_text || "",
+    profileSignalTags: normalizeReplyAiStringList(parseJsonArray(row.profile_signal_tags_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    profileLinks: normalizeReplyAiProfileLinks(parseJsonArray(row.profile_links_json)),
+    profileFetchStatus: normalizeReplyAiProfileFetchStatus(row.profile_fetch_status),
+    profileFetchedAt: row.profile_fetched_at || "",
+    createdAt: row.created_at || ""
+  };
+}
+
+function buildReplyAiBackfillDecision(row) {
+  return buildDefaultReplyAiDecision({
+    action: row && row.action === "hide" ? "hide" : "allow",
+    decisionLayer: "ai",
+    matchedSafetyLabels: normalizeReplyAiStringList(parseJsonArray(row && row.matched_safety_labels_json), REPLY_AI_SAFETY_LABELS, 8),
+    matchedProfileSignals: normalizeReplyAiStringList(parseJsonArray(row && row.matched_profile_signals_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
+    confidence: row && row.confidence ? String(row.confidence || "low") : "low",
+    reasonShort: row && row.reason_short ? row.reason_short : "AI 首次判断",
+    status: "ready",
+    model: row && row.model ? row.model : "",
+    rawResponseJson: parseJsonObject(row && row.raw_response_json)
+  });
+}
+
+async function processTrainingBackfillEventRows(env, rows, dryRun) {
+  let processed = 0;
+  let lastId = 0;
+  for (const row of rows) {
+    lastId = Math.max(lastId, Number(row.id || 0));
+    if (dryRun) {
+      continue;
+    }
+    await recordModerationTrainingLabelFromEvent(env, {
+      id: Number(row.id || 0),
+      syncKey: row.sync_key || "",
+      userId: row.user_id || "",
+      deviceId: row.device_id || "",
+      eventType: row.event_type || "",
+      threadUrl: row.thread_url || "",
+      threadStatusId: row.thread_status_id || "",
+      replyStatusId: row.reply_status_id || "",
+      replyHandle: row.reply_handle || "",
+      replyDisplayName: row.reply_display_name || "",
+      replyText: normalizeStoredReplyText(row.reply_text || "", row.reply_display_name || "", row.reply_handle || ""),
+      normalizedText: row.normalized_text || "",
+      compactText: row.compact_text || "",
+      accountProtected: Number(row.account_protected || 0) === 1,
+      createdAt: row.created_at || new Date().toISOString()
+    });
+    processed += 1;
+  }
+  return { processed: dryRun ? 0 : processed, scanned: rows.length, lastId };
+}
+
+async function processTrainingBackfillReplyAiRows(env, rows, dryRun) {
+  let processed = 0;
+  let memoryUpserts = 0;
+  let lastId = 0;
+  for (const row of rows) {
+    lastId = Math.max(lastId, Number(row.id || 0));
+    if (dryRun) {
+      continue;
+    }
+    const itemRow = buildReplyAiBackfillItemRow(row);
+    const decision = buildReplyAiBackfillDecision(row);
+    await recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision);
+    if (isDirectAiHighConfidenceHide(decision)) {
+      await upsertReplyAiMemoryFromDecision(env, itemRow, decision);
+      memoryUpserts += 1;
+    }
+    processed += 1;
+  }
+  return { processed: dryRun ? 0 : processed, scanned: rows.length, memoryUpserts, lastId };
+}
+
+async function handleDeveloperBackfillTraining(request, env) {
+  const viewer = await requireDeveloper(request, env);
+  if (!viewer) {
+    return json({ ok: false, error: "developer-required" }, 403, request, true);
+  }
+
+  await ensureAiFeedSchema(env);
+  const payload = normalizeTrainingBackfillPayload(await readJson(request));
+  const includeEvents = payload.source === "all" || payload.source === "events";
+  const includeAi = payload.source === "all" || payload.source === "ai";
+
+  const eventRows = includeEvents
+    ? await listModerationTrainingEventBackfillRows(env, payload.eventAfterId, payload.limit)
+    : [];
+  const replyAiRows = includeAi
+    ? await listReplyAiTrainingBackfillRows(env, payload.replyAiAfterId, payload.limit)
+    : [];
+
+  const [eventResult, replyAiResult] = await Promise.all([
+    processTrainingBackfillEventRows(env, eventRows, payload.dryRun),
+    processTrainingBackfillReplyAiRows(env, replyAiRows, payload.dryRun)
+  ]);
+
+  return json(
+    {
+      ok: true,
+      dryRun: payload.dryRun,
+      source: payload.source,
+      events: eventResult,
+      replyAi: replyAiResult,
+      next: {
+        eventAfterId: eventResult.lastId || payload.eventAfterId,
+        replyAiAfterId: replyAiResult.lastId || payload.replyAiAfterId,
+        done: (!includeEvents || eventRows.length === 0) && (!includeAi || replyAiRows.length === 0)
+      }
+    },
+    200,
+    request,
+    true,
+    buildSessionRefreshHeaders(request, viewer, env)
+  );
+}
+
 async function buildRecentEvents(env, userId) {
   const activeHiddenSql = buildActiveHiddenEventSql("me");
   const { results = [] } = await env.DB.prepare(
@@ -2565,6 +2804,15 @@ function parseJsonArray(value) {
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
     return [];
+  }
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(String(value || "{}"));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch (error) {
+    return {};
   }
 }
 
@@ -3968,9 +4216,33 @@ function normalizeModerationTrainingEventType(value) {
   return normalized === "manual_hide" || normalized === "manual_allow" ? normalized : "";
 }
 
+function normalizeStoredReplyText(replyText, replyDisplayName, replyHandle) {
+  const normalized = normalizeAiFeedText(replyText || "", 1200);
+  if (normalized) {
+    return normalized;
+  }
+
+  const displayName = normalizeAiFeedText(replyDisplayName || "", 160);
+  const handle = normalizeAiHandle(replyHandle || "");
+  const parts = [];
+  if (displayName) {
+    parts.push(displayName);
+  }
+  if (handle) {
+    parts.push(handle);
+  }
+  return parts.length ? `账号线索：${parts.join(" ")}` : "";
+}
+
 function buildModerationTrainingSourceRow(source) {
   const row = source && typeof source === "object" ? source : {};
-  const primaryText = normalizeAiFeedText(row.replyText || row.reply_text || row.primaryText || row.primary_text || "", 1200);
+  const replyDisplayName = normalizeAiFeedText(row.replyDisplayName || row.reply_display_name || "", 200);
+  const replyHandle = normalizeAiHandle(row.replyHandle || row.reply_handle || "");
+  const primaryText = normalizeStoredReplyText(
+    row.replyText || row.reply_text || row.primaryText || row.primary_text || "",
+    replyDisplayName,
+    replyHandle
+  );
   const normalizedText = normalizeAiFeedText(
     row.normalizedText || row.normalized_text || normalizeRuleText(primaryText),
     1200
@@ -3988,8 +4260,8 @@ function buildModerationTrainingSourceRow(source) {
     threadUrl: normalizeAiFeedText(row.threadUrl || row.thread_url || "", 1200),
     threadStatusId: String(row.threadStatusId || row.thread_status_id || "").trim(),
     replyStatusId: String(row.replyStatusId || row.reply_status_id || "").trim(),
-    replyHandle: normalizeAiHandle(row.replyHandle || row.reply_handle || ""),
-    replyDisplayName: normalizeAiFeedText(row.replyDisplayName || row.reply_display_name || "", 200),
+    replyHandle,
+    replyDisplayName,
     replyText: primaryText,
     contextText: normalizeAiFeedText(row.mainPostText || row.main_post_text || row.contextText || row.context_text || "", 1200),
     normalizedText,
@@ -5895,15 +6167,17 @@ function normalizeReplyAiProfileFetchStatus(value) {
 
 function normalizeReplyAiPayload(payload) {
   const source = payload || {};
+  const replyHandle = normalizeAiHandle(source.replyHandle);
+  const replyDisplayName = normalizeAiFeedText(source.replyDisplayName, 200);
   return {
     syncKey: String(source.syncKey || "").trim(),
     deviceId: String(source.deviceId || "").trim(),
     threadUrl: normalizeAiFeedText(source.threadUrl, 1200),
     threadStatusId: String(source.threadStatusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
     replyStatusId: String(source.replyStatusId || "").trim().replace(/[^\d]/g, "").slice(0, 32),
-    replyHandle: normalizeAiHandle(source.replyHandle),
-    replyDisplayName: normalizeAiFeedText(source.replyDisplayName, 200),
-    replyText: normalizeAiFeedText(source.replyText, 1200),
+    replyHandle,
+    replyDisplayName,
+    replyText: normalizeStoredReplyText(source.replyText, replyDisplayName, replyHandle),
     mainPostText: normalizeAiFeedText(source.mainPostText, 1200),
     accountProtected: Number(source.accountProtected || 0) === 1,
     profilePath: normalizeAiFeedText(source.profilePath, 240),
@@ -8438,7 +8712,8 @@ function isCredentialedPath(pathname) {
     || pathname === "/api/developer/confirm-feed"
     || pathname === "/api/developer/dismiss-feed"
     || pathname === "/api/developer/revoke-feed"
-    || pathname === "/api/developer/data-layer-audit";
+    || pathname === "/api/developer/data-layer-audit"
+    || pathname === "/api/developer/backfill-training";
 }
 
 function buildCorsHeaders(request, allowCredentials) {

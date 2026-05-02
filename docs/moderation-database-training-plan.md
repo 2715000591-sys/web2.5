@@ -176,9 +176,32 @@
 - 本地代码已补上轻量闭环：新发生的 `manual_hide` / `manual_allow` 会写入样本和用户反馈标注；AI 首次判断也会写入 AI 标注。它们仍然只是证据层，不会自动变成公共规则。
 - 本轮 Cloudflare 直接数据库读取和公网发布被账号登录失效挡住，错误为 `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。用户重新完成 Cloudflare 登录后，需要发布本地代码，线上训练样本表才会开始增长。
 
+## 2026-05-02 回填工具状态
+
+用户要求把现有数据库里的可用内容整理进学习样本库，并把旧 AI 判断当成“老师教过的内容”补进云端记忆。
+
+本地代码已经写好，但还没有上线执行：
+
+- 新增开发者接口：`POST /api/developer/backfill-training`
+- 新增脚本：`npm run cloud:backfill-training`
+- 正式写线上数据库前，脚本会先导出 D1 备份到 `backups/d1/`
+- 它会扫描旧 `manual_hide/冲走` 和 `manual_allow/恢复` 事件，写入样本和标注
+- 它会扫描旧 AI 首次判断，写入 AI 标注
+- 它会跳过明显的开发测试 sync key、测试设备、测试账号和测试正文
+- 旧 AI 直接高置信隐藏结果会补进 `reply_ai_memory`，以后同类内容可由云端记忆库直接复用
+- `manual_hide/冲走` 仍然只是垃圾候选和用户反馈，不会单靠一个用户变成公共规则
+- `manual_allow/恢复` 仍然只作为抑制和纠错证据
+- 新增正文兜底：以后如果 X 没给回复正文，系统会保存 `账号线索：显示名 @handle`，避免样本完全空白；旧空正文历史无法凭空还原
+
+2026-05-02 13:15 已再次尝试发布，打包成功，但 Cloudflare 命令行登录失效，报 `Failed to fetch auth token: 401 Unauthorized`。因此线上 Worker 暂未包含这个回填接口，数据库也还没有被回填。用户重新完成 Cloudflare 登录后，执行顺序是：
+
+1. `npm run cloud:deploy`
+2. `npm run cloud:backfill-training`
+3. `npm run cloud:audit-data-layer`
+
 ## 近期最实用的下一步
 
-先做一个小闭环：
+Cloudflare 登录恢复后，先做一个小闭环：
 
 1. 从 `manual_hide` 和 `manual_allow` 事件抽取样本
 2. 给每条样本写入对应 label，其中 `manual_allow` 只写成“不应隐藏 / 不应升级”的抑制信号

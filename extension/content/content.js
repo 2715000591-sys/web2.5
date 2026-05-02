@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1222";
+  const BUILD_ID = "2026-05-02-1307";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;
@@ -2883,7 +2883,14 @@
       return Array.from(new Set(pieces)).join(" ").replace(/\s+/g, " ").trim();
     }
 
-    return article.innerText.replace(/\s+/g, " ").trim();
+    const fallbackText = String(article.innerText || "").replace(/\s+/g, " ").trim();
+    if (fallbackText) {
+      return fallbackText;
+    }
+
+    const authorMeta = getReplyAuthorMeta(article);
+    const evidence = [authorMeta.displayName, authorMeta.handle].filter(Boolean).join(" ");
+    return evidence ? ("账号线索：" + evidence) : "";
   }
 
   function extractStatusId(url) {

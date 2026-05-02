@@ -117,6 +117,9 @@
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID：`f931af5f-32ee-459d-ba1b-62b6dee83bb3`
+  - 2026-05-02 13:15 本地代码已按用户要求补好“旧数据库整理进学习库”的通道：新增开发者接口 `POST /api/developer/backfill-training` 和脚本 `npm run cloud:backfill-training`。它会把现有 `manual_hide/冲走`、`manual_allow/恢复`、旧 AI 首次判断整理进 `moderation_samples` / `moderation_sample_labels`；AI 直接高置信隐藏的旧结果也会补进 `reply_ai_memory`，让云端记忆库后续复用。它不会删除原始历史，也不会把单个用户的手动冲走直接升级成公共规则。脚本正式写库前会先导出 D1 备份。
+  - 2026-05-02 13:15 本地代码也已补强“正文保存”：插件和 Worker 都会尽量保存回复正文；如果 X 当时不给正文，就保存 `账号线索：显示名 @handle`，避免学习样本完全空掉。旧的空正文历史不能凭空还原，只能以后尽量不再新增空样本。
+  - 2026-05-02 13:15 已再次尝试发布公网：本地打包成功，但 Cloudflare 命令行登录失效，报 `Failed to fetch auth token: 401 Unauthorized`，公网 Worker 未更新，所以线上数据库还没开始回填。用户重新完成 Cloudflare 登录后，下一步顺序是：先 `npm run cloud:deploy`，再 `npm run cloud:backfill-training`，最后 `npm run cloud:audit-data-layer` 核对分层。
   - 2026-05-02 12:35 本轮已完成本地代码修正，但公网发布被 Cloudflare 登录失效挡住：`npm run cloud:deploy` 在上传前失败，报 `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。用户重新完成 Cloudflare 登录授权后，下一步直接运行 `npm run cloud:deploy`，然后验证公网首页、控制台、`/downloads/latest.json`。
   - 2026-05-02 12:22 已修复扩展 AI 首判入口：之前实际代码会把每条可读回复都排进 AI；现在 `buildReplyAiModerationCandidate` 只在强风险触发或弱风险组合时排队。普通正常回复不应消耗 AI。
   - 2026-05-02 12:35 本地 Worker 代码已新增轻量学习闭环：新发生的 `manual_hide` / `manual_allow` 会写入 `moderation_samples` / `moderation_sample_labels`，AI 首次判断也会写入 AI 标注；这些仍然只是证据层，不会自动升级公共规则。公网未部署，线上训练样本表仍为空。
@@ -158,11 +161,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1222`
+  - `BUILD_ID = 2026-05-02-1307`
   - extension manifest version：`0.1.34`
   - App / Extension version：`1.0.34 (35)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 13:07 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 加载 `BUILD_ID=2026-05-02-1307`。
   - 2026-05-02 12:28 已替换本机 App；`codesign --verify --deep --strict --verbose=2 /Applications/web2.5.app` 通过；`npm run safari:verify-live` 通过。真实 Safari 页面结果：`https://x.com/home` 加载 `BUILD_ID=2026-05-02-1222`，右栏关闭按钮曾返回 3 个可见按钮；后续页面重载时 X 侧栏可能暂未渲染，脚本仍确认 build 注入成功。
 
 如果实际文件或线上状态与这里不一致，以实际检查结果为准，并更新本文件。
