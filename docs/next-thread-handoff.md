@@ -116,7 +116,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`ecf846ca-7c2e-41ff-ba62-52a9c8e711c3`
+  - Version ID：`21564319-d282-4bda-ab22-4777a9f0c72e`
+  - 2026-05-02 19:12 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。本次修复用户截图 `🐇有狗.（月固定 @vaughan_jo90233 / 找个温柔的哥哥🌹💐❤️ 0`：`月固定/周固定/长期固定` 现在是强风险昵称；`找/求/蹲 + 温柔/固定/长期/月固定/帅/乖/可爱/宠人/有钱 + 哥哥/姐姐/弟弟/妹妹` 进入强关系诱导模板。回归：截图同款隐藏，`找个温柔的哥哥帮我修电脑`、`这个哥哥很温柔`、`固定收益产品风险很高`、`附近有家面馆不错` 放过。真实 Safari 详情页验证 `build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。
   - 2026-05-02 18:46 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1846`、`extensionVersion=0.1.45`，官网和控制台返回 200。按用户要求，回复 AI 输入现在按“证据卡”组织：昵称、@用户名、正文、主贴文字、主页简介、主页外链、主页风险标签都作为独立证据；当回复像随机诗句/空洞词、和主贴上下文脱节、且账号 handle 可疑时，插件会附加头像图片地址、头像 alt 文本和 `avatar_vision_requested`。后台遇到头像证据项会单条送 AI，不混入批量；如果外接模型支持图片输入，头像会作为图片辅助证据送入。发布前已备份 D1：`backups/d1/web25-2026-05-02T10-53-58-3NZ-before-avatar-evidence-schema.sql`，线上 `reply_ai_items` 已确认存在 5 个头像证据字段。
   - 2026-05-02 18:22 已部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`，官网和控制台返回 200。本次修复用户截图里的“全国安排头像 + 随机英文数字 handle + 诗句式空洞回复”漏网：本地和 Worker 都新增 `烟火暖了相逢`、`人海有幸擦肩`、`缘分引线人海逢`、`遇见温柔满人间`、`旧城偶遇故人`、`晚风撞我相逢`、`一念恰好相逢` 这类低信息诱饵模板。回复区 AI prompt 也已写入这些例子，因为外接 API 只看单条短正文时容易不知道这是一组批量号。7 条截图同款本地回归全部隐藏；普通账号发类似正常感慨仍放过。
   - 2026-05-02 18:06 用户完成 Cloudflare 重新登录后，已成功部署公网。`/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`，官网和控制台返回 200。外接 API 的回复区提示词修复已经在线上 Worker 生效。
@@ -170,11 +171,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-02-1846`
-  - extension manifest version：`0.1.45`
-  - App / Extension version：`1.0.45 (46)`
+  - `BUILD_ID = 2026-05-02-1912`
+  - extension manifest version：`0.1.46`
+  - App / Extension version：`1.0.46 (47)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-02 19:12 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1912`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`。
   - 2026-05-02 18:46 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1846`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari 首页标签页返回 `build=2026-05-02-1846`、`marking=1`、`stage=ads:done`。尝试打开旧详情页 `https://x.com/kittenhyl/status/2050347599266504791` 时 X 一直停在 `stage=boot/articles=0`，不是插件未注入；已关闭该卡住标签。
   - 2026-05-02 18:22 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1822`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1822`、`flushes=4`、`manualButtons=4`、`sideButtons=3`、`articles=46`、`stage=scan:done`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`。
   - 2026-05-02 17:56 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-1756`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 标签页返回 `build=2026-05-02-1756`，但 X 当时没加载出回复列表，结果为 `articles=0`、`stage=scan:not-enough-articles`，所以只证明注入成功。2026-05-02 18:06 公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`。

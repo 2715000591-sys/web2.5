@@ -128,9 +128,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-02-1846`
-  - 扩展版本 `0.1.45`
-  - App / Extension 版本 `1.0.45 (46)`
+  - `BUILD_ID = 2026-05-02-1912`
+  - 扩展版本 `0.1.46`
+  - App / Extension 版本 `1.0.46 (47)`
+  - 2026-05-02 19:12 已补用户新截图里的 `🐇有狗.（月固定 @vaughan_jo90233 / 找个温柔的哥哥🌹💐❤️ 0`。根因：旧规则只把 `找个温柔的哥哥` 识别成一个弱 `hook`，没有把 `月固定` 昵称和“找/求/蹲 + 温柔/固定/长期/月固定/帅/乖/可爱/宠人/有钱 + 哥哥/姐姐/弟弟/妹妹”关系诱导结构合并。新版把 `月固定/周固定/长期固定` 作为强风险昵称，并把这类关系诱导正文纳入 `geo-relationship-bait` 同级强模板。本地回归：截图同款 12 分隐藏；`找个温柔的哥哥帮我修电脑`、`这个哥哥很温柔`、`固定收益产品风险很高`、`附近有家面馆不错` 放过。
   - 2026-05-02 18:46 已按用户要求把回复 AI 输入改成“逐条证据卡”方向：可疑回复会带昵称、@用户名、正文、主贴文字、主页简介、主页外链、主页风险标签；当回复像随机诗句/空洞词且与主贴上下文脱节、账号 handle 又可疑时，本地会额外抓取头像图片地址、头像 alt 文本，并标记 `avatar_vision_requested`。后台遇到这类头像证据项时会拆成单条 AI 判断，不和其他回复混在批量里；如果外接模型支持图片输入，会把头像图片作为辅助证据一起送入。只给可疑项启用头像证据，不对每条普通回复全量看图。
   - 2026-05-02 18:22 已补用户新截图里的“全国安排头像 + 随机英文数字 handle + 诗句式空洞回复”模板：`烟火暖了相逢`、`人海有幸擦肩`、`缘分引线人海逢`、`遇见温柔满人间`、`旧城偶遇故人`、`晚风撞我相逢`、`一念恰好相逢` 这类正文搭配 emoji、随机英文数字 handle 时会隐藏。本地回归：7 条截图同款样本全部隐藏；普通账号发 `烟火暖了相逢`、`人海有幸擦肩，今天真的很感慨`、`附近有家面馆不错`、`今晚准时看直播吗` 仍放过。本机 Safari 已替换到 `BUILD_ID=2026-05-02-1822`，真实 X 详情页验证返回 `flushes=4`、`manualButtons=4`、`sideButtons=3`、`articles=46`、`stage=scan:done`。
   - 2026-05-02 17:56 已补用户新截图里的“昵称藏风险、正文只发数字/emoji”模板：`每晚准时大秀`、`找固定泡友`、`今晚准时涩播`、`蹲一个弟弟` 搭配极薄回复和随机数字 handle 现在会被基础层隐藏。本地回归：5 条截图同款样本全部隐藏，`附近有家面馆不错`、`有没有天安门附近的`、`今晚准时看直播吗` 仍放过。本机 Safari 已替换到 `BUILD_ID=2026-05-02-1756` 并验证真实 X 页能读到新版；当次 X 没加载出回复列表，脚本结果为 `articles=0`，所以仅证明注入成功。
@@ -146,7 +147,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `ecf846ca-7c2e-41ff-ba62-52a9c8e711c3`
+  - Version ID: `21564319-d282-4bda-ab22-4777a9f0c72e`
+  - 2026-05-02 19:12 已部署 `BUILD_ID=2026-05-02-1912` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1912`、`extensionVersion=0.1.46`，官网和控制台返回 200。真实 Safari 详情页验证通过：`build=2026-05-02-1912`、`flushes=15`、`manualButtons=15`、`sideButtons=3`、`articles=30`、`stage=scan:done`。`npm run cloud:audit-data-layer` 通过。
   - 2026-05-02 18:46 已部署 `BUILD_ID=2026-05-02-1846` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1846`、`extensionVersion=0.1.45`，官网和控制台返回 200。发布前已备份线上 D1：`backups/d1/web25-2026-05-02T10-53-58-3NZ-before-avatar-evidence-schema.sql`；线上 `reply_ai_items` 已新增头像证据字段 `avatar_image_url`、`avatar_alt_text`、`avatar_evidence_tags_json`、`avatar_fetch_status`、`avatar_vision_requested` 并确认存在。`npm run cloud:audit-data-layer` 通过。
   - 2026-05-02 18:22 已部署 `BUILD_ID=2026-05-02-1822` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`，官网和控制台返回 200。Worker 同步新增 `pattern:poetic-slogan-lure-account` 数据库模式，并把“诗句式空洞中文模板 + 随机英文数字 handle”示例写进回复区 AI prompt，避免外接 API 只看到单条短正文时放过。
   - 2026-05-02 18:06 用户完成 Cloudflare 重新登录后，已成功部署 `BUILD_ID=2026-05-02-1756` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`，官网和控制台返回 200。
