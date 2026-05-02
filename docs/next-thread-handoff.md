@@ -115,8 +115,9 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`323a83bd-8601-4694-ba13-0188e68041e9`
+  - Version ID：`f66362e3-0f48-46e0-9639-95bf51590205`
   - 2026-05-02 `npm run cloud:deploy` 已成功部署控制台前端方格直达详情页改动。
+  - 2026-05-02 用户已亲自完成 Cloudflare 网页登录授权；本机发布权限恢复。随后已再次运行 `npm run cloud:check` 和 `npm run cloud:deploy`，公网更新成功，当前 Version ID 为 `f66362e3-0f48-46e0-9639-95bf51590205`。已用系统代理验证首页、控制台、`/console/?detail=ai_hide`、`/downloads/latest.json` 均返回 200，线上 `/app.js` 已包含详情页精简模式和设备显示修正。
   - 线上代码已确认包含 `/api/developer/data-layer-audit`、`contributor-layering-v2`、`buildRuleContributorKey` 和 `GLOBAL_RULE_MIN_CONTRIBUTORS`。
   - 线上代码已包含通用大模型兼容适配：用户给 API Key、兼容接口地址、模型名后，Worker 会自动尝试多种常见返回格式；如果平台完全不兼容，再补单独适配。
   - 线上控制台 AI 设置区已新增“测试一次 AI 接入”按钮。按钮会先保存设置，再只发一条小样本测试 Key / 接口地址 / 模型名是否可用；它不会自动运行，用户手动点击才会消耗少量 API 额度。
@@ -130,9 +131,9 @@
     - 2026-05-01 收紧 AI 基础审核边界：正常成人话题、色情讨论、性教育/平台治理讨论不能只因为含有色情词就隐藏；基础层要保护正常表达，只隐藏诈骗、约见引流、联系方式、木马/安装包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。头像/图片只有在未来真的采集并提供给 AI 时才能作为辅助证据，不能让模型凭空脑补。4 条真实 DeepSeek 临时样本测试通过：2 条正常成人讨论放过，2 条导流/安装包风险隐藏。
     - 2026-05-01 再次加强默认提示词和线上补充提示词：色情内容本身允许；只屏蔽色情引流、约见导流、联系方式导流、主页/置顶/简介诱导、空洞低信息诱饵、诈骗、木马、安装包、资源包和不安全外链。普通短句不能只因短就隐藏，`meaningless_bait` 必须有风险账号或导流证据支撑。
   - 线上控制台“最近 AI 隐藏记录”已新增“恢复误判”：会写入 `manual_allow`，并把对应 `reply_ai_results` 标成 `manual_allow/allow`，让该条从 AI 隐藏列表消失；同账号同文案短期会复用放过结果。不要把这个恢复当成广泛反向训练，只表示这条 AI 误判。
-    - 2026-05-02 控制台前端已改为“累计方格直达详情页”，并部署到公网 Version ID `323a83bd-8601-4694-ba13-0188e68041e9`。来源方格仍集成在 `你的累计成果` 那组 `metric-card` 里，不要单独画新的“屏蔽来源入口”。点击可查看方格后直接跳到 `/console/?detail=...`，不再要求用户展开底部折叠区。详情页显示分类、条数、具体记录和恢复入口；`官方广告记录` / `回复审查` 折叠区里的明细已经前端合并到这些方格背后的详情页。来源包括：`AI 智能屏蔽`、`AI 结果复用`、`数据库历史命中`、`公共数据库规则`、`账号黑名单`、`本地规则下沉`、`累计自动整理`、`你手动冲走`、`恢复误判`、`已在主页跳过广告`、`已在回复区跳过广告`。`global_blocklist` 在界面上叫 `账号黑名单`，不要再叫“AI 全局屏蔽”；`reuse_exact_hide` / `reuse_template_hide` / `reuse_account_hide` 归入 `AI 结果复用`，不算新的 AI 调用。当前 dashboard 近期事件还不能稳定区分公共规则和本地规则，前端已保留独立卡片，缺字段时显示待接入/0。
-    - 2026-05-02 后续按用户要求，详情页模式不再显示控制台大标题、登录卡片、设备列表和累计方格；进入 `/console/?detail=...` 时第一屏只显示当前方格背后的明细内容和返回按钮。代码已通过检查，仍待 Cloudflare CLI 登录恢复后部署。
-    - 2026-05-02 已查验开发者账号 `已接入设备` 显示过多的原因：线上 dashboard 返回 6 个底层 `device_id`，其中包含 `device_eval_*` / `device_dev_gemini_*` 开发测试标识，也有同一台 Mac 在插件重建、重新绑定或本地存储变化后留下的历史连接标识。前端代码已改为只突出“当前这台设备”，其余折叠为历史连接说明；不删除 D1 历史数据，不改 schema。`node --check site/app.js`、`node --check cloudflare/src/index.js`、`npm run cloud:check` 均通过；`npm run cloud:deploy` 被本机 Wrangler 登录态失效阻塞，错误为 Cloudflare API `Invalid access token` / `Authentication error`，需要重新登录 Cloudflare CLI 后再部署。
+    - 2026-05-02 控制台前端已改为“累计方格直达详情页”，当前已部署到公网 Version ID `f66362e3-0f48-46e0-9639-95bf51590205`。来源方格仍集成在 `你的累计成果` 那组 `metric-card` 里，不要单独画新的“屏蔽来源入口”。点击可查看方格后直接跳到 `/console/?detail=...`，不再要求用户展开底部折叠区。详情页显示分类、条数、具体记录和恢复入口；`官方广告记录` / `回复审查` 折叠区里的明细已经前端合并到这些方格背后的详情页。来源包括：`AI 智能屏蔽`、`AI 结果复用`、`数据库历史命中`、`公共数据库规则`、`账号黑名单`、`本地规则下沉`、`累计自动整理`、`你手动冲走`、`恢复误判`、`已在主页跳过广告`、`已在回复区跳过广告`。`global_blocklist` 在界面上叫 `账号黑名单`，不要再叫“AI 全局屏蔽”；`reuse_exact_hide` / `reuse_template_hide` / `reuse_account_hide` 归入 `AI 结果复用`，不算新的 AI 调用。当前 dashboard 近期事件还不能稳定区分公共规则和本地规则，前端已保留独立卡片，缺字段时显示待接入/0。
+    - 2026-05-02 后续按用户要求，详情页模式不再显示控制台大标题、登录卡片、设备列表和累计方格；进入 `/console/?detail=...` 时第一屏只显示当前方格背后的明细内容和返回按钮。已部署到公网 Version ID `f66362e3-0f48-46e0-9639-95bf51590205`，并验证 `/console/?detail=ai_hide` 可打开。
+    - 2026-05-02 已查验开发者账号 `已接入设备` 显示过多的原因：线上 dashboard 返回 6 个底层 `device_id`，其中包含 `device_eval_*` / `device_dev_gemini_*` 开发测试标识，也有同一台 Mac 在插件重建、重新绑定或本地存储变化后留下的历史连接标识。前端代码已改为只突出“当前这台设备”，其余折叠为历史连接说明；不删除 D1 历史数据，不改 schema。`node --check site/app.js`、`node --check cloudflare/src/index.js`、`npm run cloud:check` 均通过；2026-05-02 用户完成 Cloudflare 登录授权后已部署到公网 Version ID `f66362e3-0f48-46e0-9639-95bf51590205`。
     - 轻量样本分类方向：不要做用户直接写压缩包；应自动从现有 `moderation_events`、`reply_ai_items`、`reply_ai_results` 抽到 `moderation_samples` / `moderation_sample_labels`。`manual_hide` 是垃圾候选，AI 高置信 hide 是辅助证据，`manual_allow` / “恢复误判”是抑制和纠错证据，只有多贡献者或开发者确认后才升级公共规则。
   - API 接入下一步详见 `docs/ai-api-provider-handoff.md`。
   - 2026-05-01 已验证公网首页、控制台、`/downloads/latest.json`、Safari 下载包、Chrome/Edge 下载包都可从 Cloudflare 线上地址直接访问，不依赖本地部署。
