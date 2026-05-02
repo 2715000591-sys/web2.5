@@ -116,13 +116,12 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`f931af5f-32ee-459d-ba1b-62b6dee83bb3`
-  - 2026-05-02 13:15 本地代码已按用户要求补好“旧数据库整理进学习库”的通道：新增开发者接口 `POST /api/developer/backfill-training` 和脚本 `npm run cloud:backfill-training`。它会把现有 `manual_hide/冲走`、`manual_allow/恢复`、旧 AI 首次判断整理进 `moderation_samples` / `moderation_sample_labels`；AI 直接高置信隐藏的旧结果也会补进 `reply_ai_memory`，让云端记忆库后续复用。它不会删除原始历史，也不会把单个用户的手动冲走直接升级成公共规则。脚本正式写库前会先导出 D1 备份。
-  - 2026-05-02 13:15 本地代码也已补强“正文保存”：插件和 Worker 都会尽量保存回复正文；如果 X 当时不给正文，就保存 `账号线索：显示名 @handle`，避免学习样本完全空掉。旧的空正文历史不能凭空还原，只能以后尽量不再新增空样本。
-  - 2026-05-02 13:15 已再次尝试发布公网：本地打包成功，但 Cloudflare 命令行登录失效，报 `Failed to fetch auth token: 401 Unauthorized`，公网 Worker 未更新，所以线上数据库还没开始回填。用户重新完成 Cloudflare 登录后，下一步顺序是：先 `npm run cloud:deploy`，再 `npm run cloud:backfill-training`，最后 `npm run cloud:audit-data-layer` 核对分层。
-  - 2026-05-02 12:35 本轮已完成本地代码修正，但公网发布被 Cloudflare 登录失效挡住：`npm run cloud:deploy` 在上传前失败，报 `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。用户重新完成 Cloudflare 登录授权后，下一步直接运行 `npm run cloud:deploy`，然后验证公网首页、控制台、`/downloads/latest.json`。
+  - Version ID：`3d44a89e-52c4-477c-967f-47eed7d72a6c`
+  - 2026-05-02 13:55 用户完成 Cloudflare 授权后，已发布“旧数据库整理进学习库”通道：开发者接口 `POST /api/developer/backfill-training` 和脚本 `npm run cloud:backfill-training` 已上线。公网首页、控制台、`/downloads/latest.json` 均返回 200。
+  - 2026-05-02 13:55 已备份并回填线上 D1。备份文件包括 `backups/d1/web25-2026-05-02T05-38-54-857Z-before-training-backfill.sql`。回填结果：旧手动事件处理 156 条、旧 AI 判断处理 1070 条、AI 记忆写入尝试 130 次。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。
+  - 2026-05-02 13:55 新记录正文保存已上线：插件和 Worker 都会尽量保存回复正文；如果 X 当时不给正文，就保存 `账号线索：显示名 @handle`，避免学习样本完全空掉。旧的空正文历史不能凭空还原，只能以后尽量不再新增空样本。
   - 2026-05-02 12:22 已修复扩展 AI 首判入口：之前实际代码会把每条可读回复都排进 AI；现在 `buildReplyAiModerationCandidate` 只在强风险触发或弱风险组合时排队。普通正常回复不应消耗 AI。
-  - 2026-05-02 12:35 本地 Worker 代码已新增轻量学习闭环：新发生的 `manual_hide` / `manual_allow` 会写入 `moderation_samples` / `moderation_sample_labels`，AI 首次判断也会写入 AI 标注；这些仍然只是证据层，不会自动升级公共规则。公网未部署，线上训练样本表仍为空。
+  - 2026-05-02 13:55 轻量学习闭环已上线：新发生的 `manual_hide` / `manual_allow` 会写入 `moderation_samples` / `moderation_sample_labels`，AI 首次判断也会写入 AI 标注；这些仍然只是证据层，不会自动升级公共规则。
   - 2026-05-02 12:35 通过公网开发者审计接口核对：真实事件 `totalEvents=702`、`auto_hide=397`、`manual_hide=143`、`manual_allow=13`、`ad_home_hide=133`、`ad_reply_hide=16`；分层检查全部 PASS。Cloudflare 直接 D1 读取同样因账号登录失效失败。
   - 2026-05-02 已完成 `AI 首判、云端记忆复用`：新增并应用线上 `reply_ai_memory` 表；只把 AI 直接高置信隐藏结果写入记忆；记忆命中、旧复用、`global_blocklist` 等在控制台归入 `AI 学习库屏蔽`；用户恢复误判会停用对应记忆。发布前已备份 D1 到 `backups/d1/web25-2026-05-02-ai-memory-before-schema.sql`。
   - 2026-05-02 `/api/state` 已改为不再把公共精确规则合并进插件本地手动隐藏列表；公共规则和高共识模板只作为云端 AI 判断参考信号。公网烟测显示新测试身份返回 `manualHideKeys: []`，随后已删除该临时测试 sync key。

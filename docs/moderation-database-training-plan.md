@@ -172,15 +172,14 @@
 - 线上 AI 设置仍为开启，模型为 `deepseek-v4-flash`，Key 只显示后四位 `a6db`。
 - 事件总数为 `702`：`auto_hide=397`、`manual_hide=143`、`manual_allow=13`、`ad_home_hide=133`、`ad_reply_hide=16`。
 - 当前账号可见累计口径里，AI 直接隐藏约 `131`，AI 学习库复用隐藏约 `4`；这些是已经发生过的 AI 判断和复用，不代表每条正常回复都应该进 AI。
-- 线上 `moderation_samples` / `moderation_sample_labels` / `moderation_rule_candidates` 仍为空；也就是说，当前公网还没有把用户手动 `冲走` / `恢复` 自动沉淀成训练样本。
-- 本地代码已补上轻量闭环：新发生的 `manual_hide` / `manual_allow` 会写入样本和用户反馈标注；AI 首次判断也会写入 AI 标注。它们仍然只是证据层，不会自动变成公共规则。
-- 本轮 Cloudflare 直接数据库读取和公网发布被账号登录失效挡住，错误为 `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。用户重新完成 Cloudflare 登录后，需要发布本地代码，线上训练样本表才会开始增长。
+- 2026-05-02 13:55 已发布轻量闭环：新发生的 `manual_hide` / `manual_allow` 会写入样本和用户反馈标注；AI 首次判断也会写入 AI 标注。它们仍然只是证据层，不会自动变成公共规则。
+- 2026-05-02 13:55 已完成旧数据回填。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。样本来源：`moderation_event=150`、`reply_ai_item=1070`。标注分布：AI allow `940`、AI hide `130`、用户 allow `13`、用户 hide `143`。
 
 ## 2026-05-02 回填工具状态
 
 用户要求把现有数据库里的可用内容整理进学习样本库，并把旧 AI 判断当成“老师教过的内容”补进云端记忆。
 
-本地代码已经写好，但还没有上线执行：
+本地代码已经上线并执行过：
 
 - 新增开发者接口：`POST /api/developer/backfill-training`
 - 新增脚本：`npm run cloud:backfill-training`
@@ -193,15 +192,16 @@
 - `manual_allow/恢复` 仍然只作为抑制和纠错证据
 - 新增正文兜底：以后如果 X 没给回复正文，系统会保存 `账号线索：显示名 @handle`，避免样本完全空白；旧空正文历史无法凭空还原
 
-2026-05-02 13:15 已再次尝试发布，打包成功，但 Cloudflare 命令行登录失效，报 `Failed to fetch auth token: 401 Unauthorized`。因此线上 Worker 暂未包含这个回填接口，数据库也还没有被回填。用户重新完成 Cloudflare 登录后，执行顺序是：
+2026-05-02 13:55 用户完成 Cloudflare 授权后，已执行：
 
 1. `npm run cloud:deploy`
-2. `npm run cloud:backfill-training`
-3. `npm run cloud:audit-data-layer`
+2. D1 备份，最新回填前备份：`backups/d1/web25-2026-05-02T05-38-54-857Z-before-training-backfill.sql`
+3. 小批量回填：旧手动事件处理 156 条、旧 AI 判断处理 1070 条、AI 记忆写入尝试 130 次
+4. `npm run cloud:audit-data-layer`，所有分层检查 PASS
 
 ## 近期最实用的下一步
 
-Cloudflare 登录恢复后，先做一个小闭环：
+后续继续按这个小闭环走：
 
 1. 从 `manual_hide` 和 `manual_allow` 事件抽取样本
 2. 给每条样本写入对应 label，其中 `manual_allow` 只写成“不应隐藏 / 不应升级”的抑制信号

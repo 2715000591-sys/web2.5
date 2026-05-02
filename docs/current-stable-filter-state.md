@@ -136,8 +136,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `f931af5f-32ee-459d-ba1b-62b6dee83bb3`
-  - 2026-05-02 13:15 本地 Worker 代码已新增旧数据回填学习库接口：`POST /api/developer/backfill-training`。它会把旧 `manual_hide/冲走`、`manual_allow/恢复`、AI 首次判断整理成样本和标注，并把旧 AI 高置信隐藏补进 AI 记忆库；但公网发布被 Cloudflare 登录失效挡住，线上暂未执行回填。
+  - Version ID: `3d44a89e-52c4-477c-967f-47eed7d72a6c`
+  - 2026-05-02 13:55 已上线旧数据回填学习库接口：`POST /api/developer/backfill-training`。已把旧 `manual_hide/冲走`、`manual_allow/恢复`、AI 首次判断整理成样本和标注，并把旧 AI 高置信隐藏补进 AI 记忆库。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。
   - 2026-05-02 已完成并部署 `AI 首判、云端记忆复用`：新增 `reply_ai_memory`，只学习 AI 直接高置信隐藏结果；命中记忆展示为 `AI 学习库屏蔽`；`manual_hide/冲走` 不直接教数据库，`manual_allow/恢复` 会停用对应 AI 记忆。
   - 2026-05-02 起，`/api/state` 不再把公共精确规则合并到插件本地手动隐藏列表；公共规则和高共识模板只作为送云端 AI 判断的参考信号。
   - 数据分层防线已上线：自动全局精确规则按多贡献者计数，优先使用 `user_id`，同一账号多设备不能伪装成多人共识。
@@ -145,7 +145,7 @@
   - 2026-05-01 已修复 AI 设置保存 bug：保存开关、模型或提示词时，如果没有提交新的 Key，会保留原来的加密 Key，不再把空输入框误当成清空 Key。稳定硬规则筛选基线本身未改。
   - 2026-05-01 已收紧回复区 AI 辅助层口径：正常成人话题、色情讨论、性教育/平台治理讨论不应仅因色情词被隐藏；基础层只压诈骗、约见引流、联系方式、木马/安装包、资源包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。普通短句不能只因短就隐藏，`meaningless_bait` 必须有风险账号或导流证据支撑。提示词包见 `docs/ai-prompt-packs/sexual-leadgen-foundation/`。
   - 控制台 AI 隐藏记录支持“恢复误判”，会把单条 AI 结果改成 `manual_allow/allow`，不作为公共规则反向训练。
-  - 2026-05-02 12:35 本地 Worker 代码已新增轻量样本闭环：新发生的 `manual_hide` / `manual_allow` 和 AI 首次判断会写入 `moderation_samples` / `moderation_sample_labels`，但仍不会自动变成公共规则；公网发布因 Cloudflare 登录失效暂未完成。
+  - 2026-05-02 13:55 轻量样本闭环已上线：新发生的 `manual_hide` / `manual_allow` 和 AI 首次判断会写入 `moderation_samples` / `moderation_sample_labels`，但仍不会自动变成公共规则。
   - 2026-05-02 已部署公共地标附近问句误伤修正，稳定硬规则的主强度未放松。
   - 2026-05-02 已部署恢复记录的底层统一口径：同一条内容后来被 `manual_allow/恢复` 后，旧的 `auto_hide` / `manual_hide` / 广告隐藏事件不再算当前有效屏蔽，也不再出现在控制台当前明细或开发者待整理池里。原始 D1 历史保留，用于追溯，不作为当前规则库继续生效。
 
