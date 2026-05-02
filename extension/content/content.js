@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-1822";
+  const BUILD_ID = "2026-05-02-1846";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -17,6 +17,7 @@
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 240;
   const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v1";
+  const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
   const OFFICIAL_AD_LABEL_PATTERNS = [
     /^广告$/i,
     /^廣告$/i,
@@ -4666,6 +4667,144 @@
     return handle ? `/${handle}` : "";
   }
 
+  function normalizeAvatarImageUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw || !/^https?:\/\//i.test(raw)) {
+      return "";
+    }
+
+    try {
+      const parsed = new URL(raw);
+      const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+      if (!/(^|\.)twimg\.com$/.test(hostname)) {
+        return "";
+      }
+      return parsed.href.slice(0, 800);
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function getReplyAvatarNode(replyArticle) {
+    if (!replyArticle || !replyArticle.querySelectorAll) {
+      return null;
+    }
+
+    const selectorGroups = [
+      '[data-testid="Tweet-User-Avatar"] img[src]',
+      '[data-testid^="UserAvatar-Container"] img[src]',
+      'a[href] img[src*="profile_images"]',
+      'img[src*="profile_images"]'
+    ];
+
+    for (let index = 0; index < selectorGroups.length; index += 1) {
+      const node = replyArticle.querySelector(selectorGroups[index]);
+      if (node && normalizeAvatarImageUrl(node.getAttribute("src") || "")) {
+        return node;
+      }
+    }
+
+    return null;
+  }
+
+  function normalizeContextTextForOverlap(value) {
+    return String(value || "")
+      .replace(ZERO_WIDTH_TEXT_PATTERN, "")
+      .replace(/[^\p{Script=Han}A-Za-z0-9]+/gu, "")
+      .toLowerCase();
+  }
+
+  function hasUsefulContextOverlap(replyText, mainText) {
+    const reply = normalizeContextTextForOverlap(replyText);
+    const main = normalizeContextTextForOverlap(mainText);
+    if (!reply || !main || reply.length < 4 || main.length < 8) {
+      return false;
+    }
+
+    const grams = new Set();
+    for (let index = 0; index <= reply.length - 2; index += 1) {
+      const gram = reply.slice(index, index + 2);
+      if (/^(?:这个|那个|我们|你们|他们|一下|真的|可以|没有|就是|什么|怎么|一个)$/.test(gram)) {
+        continue;
+      }
+      grams.add(gram);
+    }
+
+    for (const gram of grams) {
+      if (gram && main.includes(gram)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function buildReplyAvatarEvidence(replyArticle, authorMeta, replyText, mainText, analysis, protectedAccount) {
+    const avatarNode = getReplyAvatarNode(replyArticle);
+    const imageUrl = avatarNode ? normalizeAvatarImageUrl(avatarNode.getAttribute("src") || "") : "";
+    const altText = avatarNode ? String(avatarNode.getAttribute("alt") || "").replace(/\s+/g, " ").trim().slice(0, 160) : "";
+    const tags = [];
+    const suspiciousHandle = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.handleLooksSuspicious === "function"
+      && window.Web25Rules.handleLooksSuspicious(authorMeta && authorMeta.handle ? authorMeta.handle : "")
+    );
+    const thinOrBait = Boolean(analysis && (
+      analysis.hasMinimalTextPayload
+      || analysis.hasFragmentedSymbolicReply
+      || analysis.hasThinSymbolOrNumberPayload
+      || analysis.hasLowInformationBadge
+      || analysis.hasDecorativeSloganBait
+      || analysis.hasPoeticSpamSloganBait
+      || analysis.hasSpamTemplateSignal
+      || analysis.hasBaitQuestionShape
+    ));
+    const contextDetached = Boolean(
+      mainText
+      && thinOrBait
+      && String(analysis && analysis.compact ? analysis.compact : replyText || "").length <= 24
+      && !hasUsefulContextOverlap(replyText, mainText)
+    );
+
+    if (suspiciousHandle) {
+      tags.push("suspicious_handle");
+    }
+    if (analysis && analysis.hasPoeticSpamSloganBait) {
+      tags.push("poetic_low_substance_reply");
+    }
+    if (analysis && analysis.hasDecorativeSloganBait) {
+      tags.push("decorative_low_substance_reply");
+    }
+    if (thinOrBait) {
+      tags.push("thin_or_bait_reply");
+    }
+    if (contextDetached) {
+      tags.push("context_detached_reply");
+    }
+
+    const shouldRequestVision = Boolean(
+      imageUrl
+      && !protectedAccount
+      && suspiciousHandle
+      && (
+        contextDetached
+        || (analysis && analysis.hasPoeticSpamSloganBait)
+        || (analysis && analysis.hasDecorativeSloganBait)
+      )
+    );
+
+    if (shouldRequestVision) {
+      tags.push("avatar_vision_requested");
+    }
+
+    return {
+      imageUrl: imageUrl,
+      altText: altText,
+      evidenceTags: Array.from(new Set(tags)),
+      fetchStatus: imageUrl ? "ok" : "missing",
+      visionRequested: shouldRequestVision ? 1 : 0
+    };
+  }
+
   function extractProfileSignalsFromHtml(html, profilePath) {
     const emptyResult = {
       profilePath: profilePath || "",
@@ -5157,6 +5296,11 @@
             replyDisplayName: task.authorMeta && task.authorMeta.displayName ? task.authorMeta.displayName : "",
             replyText: task.replyText || "",
             accountProtected: task.protectedAccount ? 1 : 0,
+            avatarImageUrl: task.avatarEvidence && task.avatarEvidence.imageUrl ? task.avatarEvidence.imageUrl : "",
+            avatarAltText: task.avatarEvidence && task.avatarEvidence.altText ? task.avatarEvidence.altText : "",
+            avatarEvidenceTags: task.avatarEvidence && Array.isArray(task.avatarEvidence.evidenceTags) ? task.avatarEvidence.evidenceTags : [],
+            avatarFetchStatus: task.avatarEvidence && task.avatarEvidence.fetchStatus ? task.avatarEvidence.fetchStatus : "not_requested",
+            avatarVisionRequested: task.avatarEvidence && task.avatarEvidence.visionRequested ? 1 : 0,
             profilePath: profileSignals && profileSignals.profilePath ? profileSignals.profilePath : "",
             profileBioText: profileSignals && profileSignals.bioText ? profileSignals.bioText : "",
             profileSignalTags: profileSignals && Array.isArray(profileSignals.signalTags) ? profileSignals.signalTags : [],
@@ -5204,7 +5348,7 @@
     return null;
   }
 
-  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, protectedAccount, analysis, aiCandidateScore) {
+  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, avatarEvidence, protectedAccount, analysis, aiCandidateScore) {
     const cacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
     if (!cacheKey) {
       return null;
@@ -5226,6 +5370,7 @@
       replyText: replyText,
       manualKeys: manualKeys,
       authorMeta: authorMeta,
+      avatarEvidence: avatarEvidence || null,
       protectedAccount: protectedAccount,
       analysis: analysis,
       aiCandidateScore: Number(aiCandidateScore || 0),
@@ -5430,6 +5575,7 @@
           : null;
         const authorMeta = getReplyAuthorMeta(replyArticle);
         const protectedAccount = isProtectedAccount(replyArticle, authorMeta);
+        const avatarEvidence = buildReplyAvatarEvidence(replyArticle, authorMeta, replyText, mainText, analysis, protectedAccount);
         const storedManualKeys = getStoredManualKeys(manualKeys, protectedAccount, replyText);
         const templateRuleMatched = hasTemplateRuleMatch(state.globalTemplateRules, manualKeys);
         const repeatSuspiciousHandle = Boolean(
@@ -5555,6 +5701,7 @@
           manualKeys: manualKeys,
           storedManualKeys: storedManualKeys,
           authorMeta: authorMeta,
+          avatarEvidence: avatarEvidence,
           analysis: analysis,
           protectedAccount: protectedAccount,
           isAllowed: isAllowed,
@@ -5654,6 +5801,7 @@
             entry.replyText,
             entry.manualKeys,
             entry.authorMeta,
+            entry.avatarEvidence,
             entry.protectedAccount,
             entry.analysis,
             entry.aiCandidateScore

@@ -146,8 +146,9 @@
 - Safari 扩展 `BUILD_ID = 2026-05-02-1747`
 - Safari 扩展 `BUILD_ID = 2026-05-02-1756`
 - Safari 扩展 `BUILD_ID = 2026-05-02-1822`
-- 扩展版本 `0.1.44`
-- App / Extension 版本 `1.0.44 (45)`
+- Safari 扩展 `BUILD_ID = 2026-05-02-1846`
+- 扩展版本 `0.1.45`
+- App / Extension 版本 `1.0.45 (46)`
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 
@@ -170,6 +171,8 @@
 2026-05-02 17:56 已替换本机 App 到 `BUILD_ID=2026-05-02-1756`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 标签页能读到 `build=2026-05-02-1756`，但当时 X 没加载出回复列表，返回 `articles=0`、`stage=scan:not-enough-articles`，所以只证明插件注入成功。2026-05-02 18:06 用户完成 Cloudflare 登录后，公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`。
 
 2026-05-02 18:22 已替换本机 App 到 `BUILD_ID=2026-05-02-1822`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari X 详情页返回 `build=2026-05-02-1822`、`flushes=4`、`manualButtons=4`、`sideButtons=3`、`articles=46`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1822`、`extensionVersion=0.1.44`，官网和控制台返回 200。
+
+2026-05-02 18:46 已替换本机 App 到 `BUILD_ID=2026-05-02-1846`，签名验证通过，`pluginkit` 已启用扩展，`npm run safari:verify-live` 通过。真实 Safari 首页标签页返回 `build=2026-05-02-1846`、`marking=1`、`stage=ads:done`。曾尝试打开旧详情页 `https://x.com/kittenhyl/status/2050347599266504791` 做更严格详情验证，但该 X 标签页停在 `stage=boot` 且 `articles=0`，属于 X 内容未加载，已关闭该卡住标签。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-1846`、`extensionVersion=0.1.45`，官网和控制台返回 200。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

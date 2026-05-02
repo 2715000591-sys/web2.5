@@ -422,6 +422,14 @@ const REPLY_AI_PROFILE_SIGNAL_LABELS = new Set([
   "profile_redirect",
   "suspicious_bio"
 ]);
+const REPLY_AI_AVATAR_EVIDENCE_TAGS = new Set([
+  "suspicious_handle",
+  "poetic_low_substance_reply",
+  "decorative_low_substance_reply",
+  "thin_or_bait_reply",
+  "context_detached_reply",
+  "avatar_vision_requested"
+]);
 let aiFeedSchemaReadyPromise = null;
 
 function shouldTrustProvisionedAiFeedSchema(env) {
@@ -1059,6 +1067,15 @@ function buildAiProviderTestItem(sample) {
     replyText: normalizeAiProviderTestText(source.replyText, "主页置顶看id", 1200),
     mainPostText: normalizeAiProviderTestText(source.mainPostText, "这是一条 AI 接入连通性测试样本，不会写入数据库。", 1800),
     accountProtected: source.accountProtected === true,
+    avatarImageUrl: normalizeReplyAiAvatarImageUrl(source.avatarImageUrl || ""),
+    avatarAltText: normalizeAiProviderTestText(source.avatarAltText, "", 160),
+    avatarEvidenceTags: normalizeReplyAiStringList(
+      source.avatarEvidenceTags || [],
+      REPLY_AI_AVATAR_EVIDENCE_TAGS,
+      8
+    ),
+    avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(source.avatarFetchStatus || "not_requested"),
+    avatarVisionRequested: source.avatarVisionRequested === true,
     profilePath: normalizeAiProviderTestText(source.profilePath, "/wx1234567890", 160),
     profileBioText: normalizeAiProviderTestText(source.profileBioText, "联系方式看主页 vx", 1200),
     profileSignalTags: normalizeReplyAiStringList(
@@ -3006,6 +3023,11 @@ async function ensureAiFeedSchemaUncached(env) {
         reply_text TEXT,
         main_post_text TEXT,
         account_protected INTEGER NOT NULL DEFAULT 0,
+        avatar_image_url TEXT NOT NULL DEFAULT '',
+        avatar_alt_text TEXT NOT NULL DEFAULT '',
+        avatar_evidence_tags_json TEXT NOT NULL DEFAULT '[]',
+        avatar_fetch_status TEXT NOT NULL DEFAULT 'not_requested',
+        avatar_vision_requested INTEGER NOT NULL DEFAULT 0,
         profile_path TEXT NOT NULL DEFAULT '',
         profile_bio_text TEXT NOT NULL DEFAULT '',
         profile_signal_tags_json TEXT NOT NULL DEFAULT '[]',
@@ -3207,6 +3229,25 @@ async function ensureAiFeedSchemaUncached(env) {
   } catch (error) {
     if (!isDuplicateColumnError(error, "blocked_topic_terms_json")) {
       throw error;
+    }
+  }
+
+  const replyAiItemColumns = [
+    ["avatar_image_url", "TEXT NOT NULL DEFAULT ''"],
+    ["avatar_alt_text", "TEXT NOT NULL DEFAULT ''"],
+    ["avatar_evidence_tags_json", "TEXT NOT NULL DEFAULT '[]'"],
+    ["avatar_fetch_status", "TEXT NOT NULL DEFAULT 'not_requested'"],
+    ["avatar_vision_requested", "INTEGER NOT NULL DEFAULT 0"]
+  ];
+  for (const [columnName, columnDefinition] of replyAiItemColumns) {
+    try {
+      await env.DB.prepare(
+        `ALTER TABLE reply_ai_items ADD COLUMN ${columnName} ${columnDefinition}`
+      ).run();
+    } catch (error) {
+      if (!isDuplicateColumnError(error, columnName)) {
+        throw error;
+      }
     }
   }
 }
@@ -6196,8 +6237,68 @@ function buildJsonObjectModeDeveloperPrompt(moderationTask) {
   ].filter(Boolean).join("\n\n");
 }
 
+function providerSupportsImageInputs(providerConfig) {
+  return Boolean(
+    providerConfig
+    && (
+      isOfficialOpenAiCompatibleBaseUrl(providerConfig.providerBaseUrl)
+      || isGeminiOpenAiCompatibleBaseUrl(providerConfig.providerBaseUrl)
+    )
+  );
+}
+
+function getAiModerationTaskImageUrls(moderationTask) {
+  const raw = moderationTask
+    && moderationTask.metadata
+    && Array.isArray(moderationTask.metadata.imageEvidenceUrls)
+    ? moderationTask.metadata.imageEvidenceUrls
+    : [];
+  return raw
+    .map((item) => normalizeReplyAiAvatarImageUrl(item))
+    .filter(Boolean)
+    .slice(0, 1);
+}
+
+function buildChatUserContentWithImages(text, imageUrls) {
+  if (!Array.isArray(imageUrls) || !imageUrls.length) {
+    return text;
+  }
+  return [
+    {
+      type: "text",
+      text
+    }
+  ].concat(imageUrls.map((url) => ({
+    type: "image_url",
+    image_url: {
+      url
+    }
+  })));
+}
+
+function buildResponsesUserContentWithImages(text, imageUrls) {
+  const content = [
+    {
+      type: "input_text",
+      text
+    }
+  ];
+  if (Array.isArray(imageUrls) && imageUrls.length) {
+    imageUrls.forEach((url) => {
+      content.push({
+        type: "input_image",
+        image_url: url
+      });
+    });
+  }
+  return content;
+}
+
 async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoningEffort, extraResponseMeta) {
   const providerConfig = moderationTask.providerConfig;
+  const imageUrls = providerSupportsImageInputs(providerConfig)
+    ? getAiModerationTaskImageUrls(moderationTask)
+    : [];
   const meta = extraResponseMeta && typeof extraResponseMeta === "object" ? extraResponseMeta : {};
   const requestedMode = Object.values(AI_PROVIDER_RESPONSE_MODES).includes(meta.responseModeOverride)
     ? meta.responseModeOverride
@@ -6219,7 +6320,7 @@ async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoni
       },
       {
         role: "user",
-        content: moderationTask.userPayloadText
+        content: buildChatUserContentWithImages(moderationTask.userPayloadText, imageUrls)
       }
     ],
   };
@@ -6282,13 +6383,17 @@ async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoni
       outputText
     }, Object.assign({}, meta, {
       responseModeOverride: undefined,
-      allowUnsupportedFallback: undefined
+      allowUnsupportedFallback: undefined,
+      imageInputAttached: imageUrls.length > 0
     }))
   };
 }
 
 async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffort, allowChatFallback) {
   const providerConfig = moderationTask.providerConfig;
+  const imageUrls = providerSupportsImageInputs(providerConfig)
+    ? getAiModerationTaskImageUrls(moderationTask)
+    : [];
   const response = await fetch(buildResponsesApiEndpoint(providerConfig.providerBaseUrl), {
     method: "POST",
     headers: {
@@ -6313,12 +6418,7 @@ async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffo
         },
         {
           role: "user",
-          content: [
-            {
-              type: "input_text",
-              text: moderationTask.userPayloadText
-            }
-          ]
+          content: buildResponsesUserContentWithImages(moderationTask.userPayloadText, imageUrls)
         }
       ],
       text: {
@@ -6361,6 +6461,7 @@ async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffo
     responseMeta: {
       adapterKey: providerConfig.adapterKey,
       responseMode: AI_PROVIDER_RESPONSE_MODES.RESPONSES_JSON_SCHEMA,
+      imageInputAttached: imageUrls.length > 0,
       id: responseJson && responseJson.id ? responseJson.id : "",
       outputText
     }
@@ -6838,6 +6939,32 @@ function normalizeReplyAiProfileFetchStatus(value) {
   return "not_requested";
 }
 
+function normalizeReplyAiAvatarFetchStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["not_requested", "ok", "missing", "error", "skipped"].includes(normalized)) {
+    return normalized;
+  }
+  return "not_requested";
+}
+
+function normalizeReplyAiAvatarImageUrl(value) {
+  const raw = normalizeAiFeedText(value, 900);
+  if (!raw || !/^https:\/\//i.test(raw)) {
+    return "";
+  }
+
+  try {
+    const parsed = new URL(raw);
+    const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+    if (!/(^|\.)twimg\.com$/.test(hostname)) {
+      return "";
+    }
+    return parsed.href.slice(0, 900);
+  } catch (error) {
+    return "";
+  }
+}
+
 function normalizeReplyAiPayload(payload) {
   const source = payload || {};
   const replyHandle = normalizeAiHandle(source.replyHandle);
@@ -6853,6 +6980,11 @@ function normalizeReplyAiPayload(payload) {
     replyText: normalizeStoredReplyText(source.replyText, replyDisplayName, replyHandle),
     mainPostText: normalizeAiFeedText(source.mainPostText, 1200),
     accountProtected: Number(source.accountProtected || 0) === 1,
+    avatarImageUrl: normalizeReplyAiAvatarImageUrl(source.avatarImageUrl),
+    avatarAltText: normalizeAiFeedText(source.avatarAltText, 160),
+    avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(source.avatarFetchStatus),
+    avatarVisionRequested: Number(source.avatarVisionRequested || 0) === 1,
     profilePath: normalizeAiFeedText(source.profilePath, 240),
     profileBioText: normalizeAiFeedText(source.profileBioText, 320),
     profileSignalTags: normalizeReplyAiStringList(source.profileSignalTags, REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
@@ -7032,6 +7164,11 @@ async function upsertReplyAiItem(env, payload) {
     replyText: payload.replyText,
     mainPostText: payload.mainPostText,
     accountProtected: payload.accountProtected ? 1 : 0,
+    avatarImageUrl: payload.avatarImageUrl,
+    avatarAltText: payload.avatarAltText,
+    avatarEvidenceTagsJson: JSON.stringify(payload.avatarEvidenceTags || []),
+    avatarFetchStatus: payload.avatarFetchStatus,
+    avatarVisionRequested: payload.avatarVisionRequested ? 1 : 0,
     profilePath: payload.profilePath,
     profileBioText: payload.profileBioText,
     profileSignalTagsJson: JSON.stringify(payload.profileSignalTags || []),
@@ -7058,7 +7195,12 @@ async function upsertReplyAiItem(env, payload) {
               profile_signal_tags_json = CASE WHEN ? != '[]' THEN ? ELSE profile_signal_tags_json END,
               profile_links_json = CASE WHEN ? != '[]' THEN ? ELSE profile_links_json END,
               profile_fetch_status = CASE WHEN ? != 'not_requested' THEN ? ELSE profile_fetch_status END,
-              profile_fetched_at = CASE WHEN ? != '' THEN ? ELSE profile_fetched_at END
+              profile_fetched_at = CASE WHEN ? != '' THEN ? ELSE profile_fetched_at END,
+              avatar_image_url = CASE WHEN ? != '' THEN ? ELSE avatar_image_url END,
+              avatar_alt_text = CASE WHEN ? != '' THEN ? ELSE avatar_alt_text END,
+              avatar_evidence_tags_json = CASE WHEN ? != '[]' THEN ? ELSE avatar_evidence_tags_json END,
+              avatar_fetch_status = CASE WHEN ? != 'not_requested' THEN ? ELSE avatar_fetch_status END,
+              avatar_vision_requested = CASE WHEN ? = 1 THEN 1 ELSE avatar_vision_requested END
             WHERE id = ?
           `
         ).bind(
@@ -7074,6 +7216,15 @@ async function upsertReplyAiItem(env, payload) {
           itemRow.profileFetchStatus,
           itemRow.profileFetchedAt,
           itemRow.profileFetchedAt,
+          itemRow.avatarImageUrl,
+          itemRow.avatarImageUrl,
+          itemRow.avatarAltText,
+          itemRow.avatarAltText,
+          itemRow.avatarEvidenceTagsJson,
+          itemRow.avatarEvidenceTagsJson,
+          itemRow.avatarFetchStatus,
+          itemRow.avatarFetchStatus,
+          itemRow.avatarVisionRequested,
           existingId
         ).run();
       }
@@ -7098,6 +7249,11 @@ async function upsertReplyAiItem(env, payload) {
         reply_text,
         main_post_text,
         account_protected,
+        avatar_image_url,
+        avatar_alt_text,
+        avatar_evidence_tags_json,
+        avatar_fetch_status,
+        avatar_vision_requested,
         profile_path,
         profile_bio_text,
         profile_signal_tags_json,
@@ -7106,7 +7262,7 @@ async function upsertReplyAiItem(env, payload) {
         profile_fetched_at,
         created_at,
         item_fingerprint
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
   ).bind(
     itemRow.syncKey,
@@ -7120,6 +7276,11 @@ async function upsertReplyAiItem(env, payload) {
     itemRow.replyText,
     itemRow.mainPostText,
     itemRow.accountProtected,
+    itemRow.avatarImageUrl,
+    itemRow.avatarAltText,
+    itemRow.avatarEvidenceTagsJson,
+    itemRow.avatarFetchStatus,
+    itemRow.avatarVisionRequested,
     itemRow.profilePath,
     itemRow.profileBioText,
     itemRow.profileSignalTagsJson,
@@ -7157,6 +7318,11 @@ async function getReplyAiItemById(env, itemId) {
         reply_text,
         main_post_text,
         account_protected,
+        avatar_image_url,
+        avatar_alt_text,
+        avatar_evidence_tags_json,
+        avatar_fetch_status,
+        avatar_vision_requested,
         profile_path,
         profile_bio_text,
         profile_signal_tags_json,
@@ -7187,6 +7353,11 @@ async function getReplyAiItemById(env, itemId) {
     replyText: row.reply_text || "",
     mainPostText: row.main_post_text || "",
     accountProtected: Number(row.account_protected || 0) === 1,
+    avatarImageUrl: normalizeReplyAiAvatarImageUrl(row.avatar_image_url || ""),
+    avatarAltText: normalizeAiFeedText(row.avatar_alt_text || "", 160),
+    avatarEvidenceTags: normalizeReplyAiStringList(parseJsonArray(row.avatar_evidence_tags_json), REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(row.avatar_fetch_status),
+    avatarVisionRequested: Number(row.avatar_vision_requested || 0) === 1,
     profilePath: row.profile_path || "",
     profileBioText: row.profile_bio_text || "",
     profileSignalTags: normalizeReplyAiStringList(parseJsonArray(row.profile_signal_tags_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
@@ -7823,6 +7994,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const hasSpamTemplateSignal = looksLikeSpamTemplateSignal(replyText);
   const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(replyText);
   const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(replyText);
+  const avatarSignals = Array.isArray(itemRow && itemRow.avatarEvidenceTags)
+    ? itemRow.avatarEvidenceTags
+    : [];
   const accountMetadataRisk = highRiskDisplayName
     || (lureDisplayName && suspiciousHandle)
     || (lureDisplayName && hasLongDigitHandle)
@@ -7870,6 +8044,12 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasPoeticSpamSloganBait && suspiciousHandle) {
     evidenceNotes.push("reply is a poetic low-substance slogan from a disposable-looking account");
   }
+  if (avatarSignals.includes("context_detached_reply")) {
+    evidenceNotes.push("reply appears detached from the thread context and may need avatar/profile evidence");
+  }
+  if (itemRow && itemRow.avatarVisionRequested && itemRow.avatarImageUrl) {
+    evidenceNotes.push("avatar image evidence was requested for this ambiguous low-substance reply");
+  }
   if (hasGeoMeetupBait || hasBaitQuestionShape) {
     evidenceNotes.push("reply shape resembles meetup/contact bait");
   }
@@ -7901,6 +8081,8 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasSpamTemplateSignal,
     hasDecorativeSloganBait,
     hasPoeticSpamSloganBait,
+    avatarEvidenceTags: normalizeReplyAiStringList(avatarSignals, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarVisionRequested: Boolean(itemRow && itemRow.avatarVisionRequested),
     evidenceNotes
   };
 }
@@ -7955,6 +8137,12 @@ function buildReplyAiMemoryContextKey(itemRow, heuristicSummary) {
   if (heuristicSummary.hasPoeticSpamSloganBait) {
     contextFlags.push("poetic-slogan");
   }
+  if (heuristicSummary.avatarVisionRequested) {
+    contextFlags.push("avatar-vision-requested");
+  }
+  (Array.isArray(heuristicSummary.avatarEvidenceTags) ? heuristicSummary.avatarEvidenceTags : []).forEach((signal) => {
+    contextFlags.push(`avatar-${signal}`);
+  });
   profileSignals.forEach((signal) => {
     if (["contact_keyword", "contact_payload", "profile_redirect", "external_link", "suspicious_bio"].includes(signal)) {
       contextFlags.push(`profile-${signal}`);
@@ -8293,10 +8481,12 @@ function buildReplyAiProviderPrompt(settings, options) {
     "A decorative, motto-like, low-substance slogan reply can be meaningless bait when it comes from a disposable-looking numeric account, but allow normal quotes, jokes, and substantive conversation.",
     "You must evaluate supplied account metadata as first-class evidence, not just reply text.",
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, profile bio, profile links, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
+    "The user payload is an evidence card for each reply. Treat reply text, display name, @handle, avatar evidence, profile bio, profile links, profile signal tags, and batch context as separate evidence fields.",
     "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
     "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 遇见温柔满人间, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
     "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
-    "If avatar or image evidence is supplied, use it only as supporting evidence; never invent avatar evidence when it is not supplied.",
+    "If avatar.visionRequested is true and an avatar image is attached, inspect the avatar for text or visual lure cues such as 全国安排, local hookup, contact, adult-service, QR/contact, or profile bait. Use avatar evidence only as supporting evidence; never invent avatar content when an image is not attached or not visible.",
+    "If avatar evidence tags say context_detached_reply, treat that as a sign that the reply may be unrelated filler; combine it with account metadata, profile, avatar, or batch patterns before hiding.",
     "Combined weak signals across name, handle, reply text, profile, and prior risk history can justify a high-confidence hide when they clearly form a lure/spam pattern.",
     "Do not ignore suspicious names or suspicious handles merely because the reply text itself is short.",
     "Profile bio and profile links are auxiliary evidence only and must never be the sole reason to hide normal discussion.",
@@ -8328,6 +8518,13 @@ function buildReplyAiProviderInputItem(clientItemId, itemRow, riskRow) {
       mainPostText: itemRow.mainPostText,
       accountProtected: Boolean(itemRow.accountProtected)
     },
+    avatar: {
+      imageUrl: itemRow.avatarImageUrl,
+      altText: itemRow.avatarAltText,
+      evidenceTags: itemRow.avatarEvidenceTags,
+      fetchStatus: itemRow.avatarFetchStatus,
+      visionRequested: Boolean(itemRow.avatarVisionRequested)
+    },
     profile: {
       path: itemRow.profilePath,
       bioText: itemRow.profileBioText,
@@ -8344,7 +8541,16 @@ function buildReplyAiProviderInputItem(clientItemId, itemRow, riskRow) {
   };
 }
 
+function buildReplyAiImageEvidenceUrls(itemRow) {
+  if (!itemRow || !itemRow.avatarVisionRequested) {
+    return [];
+  }
+  const avatarImageUrl = normalizeReplyAiAvatarImageUrl(itemRow.avatarImageUrl || "");
+  return avatarImageUrl ? [avatarImageUrl] : [];
+}
+
 async function requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow) {
+  const imageEvidenceUrls = buildReplyAiImageEvidenceUrls(itemRow);
   const response = await requestAiModerationTaskFromProvider(buildAiModerationTask({
     taskType: AI_MODERATION_TASK_TYPES.REPLY_REALTIME_MODERATION,
     providerConfig: settings,
@@ -8353,7 +8559,8 @@ async function requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRo
     developerPrompt: buildReplyAiProviderPrompt(settings, { isBatch: false }),
     userPayloadText: JSON.stringify(buildReplyAiProviderInputItem("single-item", itemRow, riskRow)),
     metadata: {
-      reasoningEffort: "low"
+      reasoningEffort: "low",
+      imageEvidenceUrls
     }
   }));
 
@@ -8378,7 +8585,8 @@ async function requestReplyAiBatchDecisionsFromProvider(env, settings, batchEntr
     developerPrompt: buildReplyAiProviderPrompt(settings, { isBatch: true }),
     userPayloadText: JSON.stringify({ items }),
     metadata: {
-      reasoningEffort: "low"
+      reasoningEffort: "low",
+      imageEvidenceUrls: []
     }
   }));
   const decisionRows = response && response.parsed && Array.isArray(response.parsed.decisions)
@@ -8707,19 +8915,36 @@ async function classifyReplyAiItemEntries(env, entries) {
     }
 
     try {
-      const decisionMap = group.entries.length <= 1
-        ? new Map([
-          [
-            group.entries[0].clientItemId,
-            await requestReplyAiDecisionFromProvider(
-              env,
-              group.settings,
-              group.entries[0].itemRow,
-              group.entries[0].riskRow
-            )
-          ]
-        ])
-        : await requestReplyAiBatchDecisionsFromProvider(env, group.settings, group.entries);
+      const decisionMap = new Map();
+      const visualEntries = [];
+      const textOnlyEntries = [];
+      group.entries.forEach((entry) => {
+        if (buildReplyAiImageEvidenceUrls(entry.itemRow).length > 0) {
+          visualEntries.push(entry);
+        } else {
+          textOnlyEntries.push(entry);
+        }
+      });
+
+      for (const entry of visualEntries) {
+        decisionMap.set(
+          entry.clientItemId,
+          await requestReplyAiDecisionFromProvider(env, group.settings, entry.itemRow, entry.riskRow)
+        );
+      }
+
+      if (textOnlyEntries.length === 1) {
+        const entry = textOnlyEntries[0];
+        decisionMap.set(
+          entry.clientItemId,
+          await requestReplyAiDecisionFromProvider(env, group.settings, entry.itemRow, entry.riskRow)
+        );
+      } else if (textOnlyEntries.length > 1) {
+        const textDecisionMap = await requestReplyAiBatchDecisionsFromProvider(env, group.settings, textOnlyEntries);
+        textDecisionMap.forEach((decision, clientItemId) => {
+          decisionMap.set(clientItemId, decision);
+        });
+      }
 
       await clearAiProviderCooldown(env, group.scopeKey, firstItemRow, group.settings);
 
