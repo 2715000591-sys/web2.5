@@ -144,8 +144,9 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `0e62a0bf-38d6-47ff-8834-369a59cb8524`
-  - 2026-05-02 17:56 Worker 源码已同步新增 `每晚准时大秀`、`找固定泡友`、`今晚准时涩播`、`蹲一个弟弟` 等风险昵称模式，并修复回复区 AI 提示词没有附带控制台补充审核要求的问题。`npm run cloud:check` 通过，但公网发布仍失败：Cloudflare 登录令牌无效。因此公网 Worker 和 `/downloads/latest.json` 仍停在 17:31 的 `BUILD_ID=2026-05-02-1726`，需要重新登录 Cloudflare 后再发布。
+  - Version ID: `13ae7164-3096-4169-a3d9-2706b97cfc42`
+  - 2026-05-02 18:06 用户完成 Cloudflare 重新登录后，已成功部署 `BUILD_ID=2026-05-02-1756` 到公网。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-1756`、`extensionVersion=0.1.43`，官网和控制台返回 200。
+  - 2026-05-02 17:56 Worker 源码已同步新增 `每晚准时大秀`、`找固定泡友`、`今晚准时涩播`、`蹲一个弟弟` 等风险昵称模式，并修复回复区 AI 提示词没有附带控制台补充审核要求的问题。回复区 AI prompt 现在会带默认规则、中文垃圾昵称示例和控制台补充审核要求。
   - 2026-05-02 17:47 Worker 源码已同步新增 `看我主页 + 附近真实约见` 风险昵称规则，并通过 `npm run cloud:check`，但公网发布没有完成：Cloudflare 返回 `Invalid access token [code: 9109]` / `Authentication error [code: 10000]`。因此公网 Worker 和 `/downloads/latest.json` 仍停在 17:31 的 `BUILD_ID=2026-05-02-1726`，需要重新登录 Cloudflare 后再发布。
   - 2026-05-02 17:31 已部署截图漏网模板修复。公网测试 7 条截图同款样本全部返回 `db_rule_pattern` 或 `db_rule_template`、`hide/high`，`model=moderation-rule-candidates-2026-05-02-v1`，说明数据库学习库先截住，不调用外部 AI。公网首页、控制台和 `/downloads/latest.json` 均返回 200，下载清单为 `buildId=2026-05-02-1726`。
   - 2026-05-02 17:11 已部署数据库优先截住低信息风险账号回复补强。公网真实接口测试 `孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 返回 `db_rule_pattern/hide/high`，`model=moderation-rule-candidates-2026-05-02-v1`，说明命中数据库学习库，不调用外部 AI。公网首页、控制台和 `/downloads/latest.json` 均返回 200，下载清单为 `buildId=2026-05-02-1650`。
