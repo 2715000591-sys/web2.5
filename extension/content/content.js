@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-01-2117";
+  const BUILD_ID = "2026-05-02-0943";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const AUTO_HIDE_ENABLED = true;
   const LIVE_MUTATION_SYNC_ENABLED = false;

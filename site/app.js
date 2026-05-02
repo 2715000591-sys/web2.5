@@ -1035,9 +1035,23 @@ function buildSourceBuckets(replyAiPayload) {
     }));
   });
 
+  const allowedRecordKeys = new Set();
+  recentItems.forEach((item) => {
+    if (getReviewEventType(item) !== "manual_allow") {
+      return;
+    }
+    const key = getReplyRecordKey(item);
+    if (key) {
+      allowedRecordKeys.add(key);
+    }
+  });
+
   recentItems.forEach((item) => {
     const eventType = getReviewEventType(item);
     const key = getReplyRecordKey(item);
+    if ((eventType === "auto_hide" || eventType === "manual_hide") && key && allowedRecordKeys.has(key)) {
+      return;
+    }
     if (eventType === "auto_hide" && key && aiRecordKeys.has(key)) {
       return;
     }
@@ -1646,6 +1660,10 @@ async function restoreItem(item, button, options) {
       throw new Error("reply-ai-restore-failed");
     }
 
+    const row = button && typeof button.closest === "function" ? button.closest(".source-detail-row") : null;
+    if (row && row.parentNode) {
+      row.parentNode.removeChild(row);
+    }
     await refreshDashboard(replyAiItemId > 0 ? "这条 AI 误判已经恢复，并会作为纠错记录保留。" : "这条内容已经恢复。");
   } catch (error) {
     setStatus("恢复失败了，点刷新再试一次。");

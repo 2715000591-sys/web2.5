@@ -211,6 +211,19 @@
     /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
     /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/
   ];
+  const CIVIC_LANDMARK_NEARBY_TERMS = [
+    "天安门",
+    "天安门广场",
+    "故宫",
+    "中南海",
+    "人民大会堂",
+    "人民英雄纪念碑",
+    "毛主席纪念堂",
+    "国家博物馆",
+    "长城",
+    "鸟巢",
+    "水立方"
+  ];
   const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
   const ACCOUNT_MENTION_PATTERN = /@[a-z0-9_]{2,20}/ig;
   const EXPLICIT_EROTIC_BAIT_PATTERNS = [
@@ -441,6 +454,17 @@
     });
   }
 
+  function looksLikeCivicLandmarkNearbyQuestion(text) {
+    const compact = buildCompact(text);
+    if (!compact || compact.length > 18) {
+      return false;
+    }
+
+    return CIVIC_LANDMARK_NEARBY_TERMS.some(function (term) {
+      return new RegExp("^(?:有(?:没)?有|有|求|蹲).{0,2}" + term + "附近(?:的|的吗|吗|嘛|呢|的人|的人吗)?$").test(compact);
+    });
+  }
+
   function countEmojiMatches(text) {
     return Array.from(String(text || "").matchAll(EMOJI_PATTERN)).length;
   }
@@ -479,6 +503,7 @@
     const raw = String(text || "");
     const normalized = normalize(text);
     const compact = buildCompact(text);
+    const hasCivicLandmarkNearbyQuestion = looksLikeCivicLandmarkNearbyQuestion(text);
     const matches = SLOT_DEFINITIONS
       .map(function (slotDefinition) {
         const index = findEarliestSlotIndex(compact, slotDefinition);
@@ -491,7 +516,7 @@
         };
       })
       .filter(function (entry) {
-        return entry.matched;
+        return entry.matched && !(hasCivicLandmarkNearbyQuestion && entry.id === "meetup");
       });
 
     const matchedSlots = matches.map(function (entry) {
@@ -550,6 +575,7 @@
       );
     const hasGeoMeetupBait = compact.length > 0
       && compact.length <= 16
+      && !hasCivicLandmarkNearbyQuestion
       && GEO_MEETUP_BAIT_PATTERNS.some(function (pattern) {
         return pattern.test(normalized) || pattern.test(compact);
       });
@@ -606,6 +632,7 @@
       hasLongDigitRun: hasLongDigitRun,
       hasLowInformationBadge: hasLowInformationBadge,
       hasFragmentedSymbolicReply: hasFragmentedSymbolicReply,
+      hasCivicLandmarkNearbyQuestion: hasCivicLandmarkNearbyQuestion,
       hasGeoMeetupBait: hasGeoMeetupBait,
       hasGeoRelationshipBait: hasGeoRelationshipBait,
       hasBaitQuestionShape: hasBaitQuestionShape,
@@ -821,6 +848,11 @@
       score += slotDefinition.weight;
       reasons.push(slotDefinition.reason);
     });
+
+    if (reply.hasCivicLandmarkNearbyQuestion) {
+      score -= 2;
+      reasons.push("civic-landmark-nearby-context");
+    }
 
     if (reply.hasMarketingNoise) {
       score += 1;

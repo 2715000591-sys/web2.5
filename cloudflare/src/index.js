@@ -337,6 +337,19 @@ const GEO_RELATIONSHIP_BAIT_PATTERNS = [
   /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
   /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/
 ];
+const CIVIC_LANDMARK_NEARBY_TERMS = [
+  "天安门",
+  "天安门广场",
+  "故宫",
+  "中南海",
+  "人民大会堂",
+  "人民英雄纪念碑",
+  "毛主席纪念堂",
+  "国家博物馆",
+  "长城",
+  "鸟巢",
+  "水立方"
+];
 const BAIT_QUESTION_ENDING_PATTERN = /(吗|嘛|么|呢|的吗|的嘛|的人吗)$/;
 const PROFILE_CONTACT_PATTERNS = [
   /(?:vx|wx|tg|qq|telegram|电报|飞机|飞機|频道|群|群号|群號|联系方式|聯繫方式|联系我|聯繫我|联系|聯繫)/i,
@@ -6409,6 +6422,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const lureDisplayName = displayNameLooksLure(displayName);
   const highRiskDisplayName = displayNameLooksHighRisk(displayName);
   const hasShareLinkScam = looksLikeShareLinkScam(replyText);
+  const hasCivicLandmarkNearbyQuestion = looksLikeCivicLandmarkNearbyQuestion(replyText);
   const hasGeoMeetupBait = looksLikeGeoMeetupBait(replyText);
   const hasGeoRelationshipBait = looksLikeGeoRelationshipBait(replyText);
   const hasBaitQuestionShape = looksLikeBaitQuestionShape(replyText);
@@ -6476,6 +6490,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasLowInformationBadge,
     shortOrThinReply,
     hasShareLinkScam,
+    hasCivicLandmarkNearbyQuestion,
     hasGeoMeetupBait,
     hasGeoRelationshipBait,
     hasBaitQuestionShape,
@@ -7799,10 +7814,24 @@ function looksLikeFragmentedSymbolicReply(text) {
   );
 }
 
+function looksLikeCivicLandmarkNearbyQuestion(text) {
+  const compact = buildCompactRuleText(text);
+  if (!compact || compact.length > 18) {
+    return false;
+  }
+
+  return CIVIC_LANDMARK_NEARBY_TERMS.some((term) => {
+    return new RegExp("^(?:有(?:没)?有|有|求|蹲).{0,2}" + term + "附近(?:的|的吗|吗|嘛|呢|的人|的人吗)?$").test(compact);
+  });
+}
+
 function looksLikeGeoMeetupBait(text) {
   const normalized = normalizeRuleText(text);
   const compact = buildCompactRuleText(text);
   if (!compact || compact.length > 16) {
+    return false;
+  }
+  if (looksLikeCivicLandmarkNearbyQuestion(text)) {
     return false;
   }
 
@@ -7823,6 +7852,9 @@ function looksLikeBaitQuestionShape(text) {
   const normalized = normalizeRuleText(text);
   const compact = buildCompactRuleText(text);
   if (!compact || compact.length > 16 || !BAIT_QUESTION_ENDING_PATTERN.test(normalized)) {
+    return false;
+  }
+  if (looksLikeCivicLandmarkNearbyQuestion(text)) {
     return false;
   }
 
@@ -7933,6 +7965,7 @@ function findEarliestTemplateSlotIndex(compact, slotDefinition) {
 function buildTemplateRuleAnalysis(text) {
   const normalized = normalizeRuleText(text);
   const compact = buildCompactRuleText(text);
+  const civicLandmarkNearbyQuestion = looksLikeCivicLandmarkNearbyQuestion(text);
   const innocentPetContext = [
     /主人公/,
     /我家.{0,3}(小狗|狗狗|小猫|猫猫)/,
@@ -7956,7 +7989,7 @@ function buildTemplateRuleAnalysis(text) {
         index
       };
     })
-    .filter((entry) => entry.matched);
+    .filter((entry) => entry.matched && !(civicLandmarkNearbyQuestion && entry.id === "meetup"));
 
   if (matches.length < 2) {
     return {
