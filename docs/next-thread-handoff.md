@@ -52,6 +52,7 @@
 - 官网 / 控制台前端改动做完后，必须立刻部署到公网并验证公网地址；只做到本地预览不算完成，因为用户需要在另一台设备上检查。
 - 影响 Safari 扩展就更新 `/Applications/web2.5.app`
 - 更新本机 App 后验证 `BUILD_ID` 和签名
+- 2026-05-02 重要教训：替换或重新构建 Safari App 后，不能只看 `/Applications/web2.5.app` 的文件、`BUILD_ID` 和签名。Safari 可能让已打开的 X 标签页暂时失去内容脚本，或者系统扩展注册被刚构建的临时 app 干扰。以后每次 `npm run cloud:deploy`、`npm run browser:artifacts`、`npm run safari:build`、替换 `/Applications/web2.5.app` 后，都必须执行：`pluginkit -e use -i com.yourCompany.web25.extension`、`npm run safari:verify-live`，并确认真实 X 页面里 `document.documentElement.dataset.web25Build` 是当前 `BUILD_ID`、详情页有可见 `冲走` 按钮、右栏有关闭按钮。没有通过前，不准说插件已可用。
 - 最后用简单中文说清楚“已经做到哪一步”
 - 用户说“做到无能为力”为止时，意思是不要停在建议或半成品；要继续做到遇到真实外部阻塞，例如账号登录、真人验证、付款、必须用户亲自验收等，并把阻塞点写清楚。
 - 用户反复提醒的长期工作习惯和项目规则，要及时写进 `AGENTS.md` 或本文档，不要只靠当前对话上下文。

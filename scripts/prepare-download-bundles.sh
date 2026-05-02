@@ -101,4 +101,11 @@ cat > "$DOWNLOAD_DIR/latest.json" <<EOF
 }
 EOF
 
+INSTALLED_APP_PATH="/Applications/web2.5.app"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
+if [[ -d "$INSTALLED_APP_PATH" ]]; then
+  "$LSREGISTER" -f -R -trusted "$INSTALLED_APP_PATH" >/dev/null 2>&1 || true
+  pluginkit -e use -i com.yourCompany.web25.extension >/dev/null 2>&1 || true
+fi
+
 echo "Prepared download bundles in $DOWNLOAD_DIR"
