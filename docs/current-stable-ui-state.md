@@ -152,8 +152,10 @@
 - Safari 扩展 `BUILD_ID = 2026-05-02-2148`
 - Safari 扩展 `BUILD_ID = 2026-05-02-2157`
 - Safari 扩展 `BUILD_ID = 2026-05-02-2317`
-- 扩展版本 `0.1.50`
-- App / Extension 版本 `1.0.50 (51)`
+- Safari 扩展 `BUILD_ID = 2026-05-02-2340`
+- Safari 扩展 `BUILD_ID = 2026-05-02-2357`
+- 扩展版本 `0.1.52`
+- App / Extension 版本 `1.0.52 (53)`
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 
@@ -188,6 +190,10 @@
 2026-05-02 21:57 已替换本机 App 到 `BUILD_ID=2026-05-02-2157`，签名验证通过，`pluginkit` 已启用扩展。这个版本补了 Safari 存储读取超时兜底，防止页面停在 `boot` 阶段。最终 `npm run safari:verify-live` 对当前 X 首页通过，返回 `build=2026-05-02-2157`、`marking=1`、`stage=ads:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2157`、`extensionVersion=0.1.49`，官网和控制台返回 200。
 
 2026-05-02 23:25 已替换本机 App 到 `BUILD_ID=2026-05-02-2317`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.50`。本轮没有改右栏 UI，只更新筛选和 AI 证据；`npm run safari:verify-live` 对当前 X 详情页和首页均读到新版 build。详情页当时没有加载出回复列表、首页没有右栏模块样本，所以只完成真实注入验证，未看到可见 `冲走` / 右栏关闭按钮数量。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2317`、`extensionVersion=0.1.50`。
+
+2026-05-02 23:43 已替换本机 App 到 `BUILD_ID=2026-05-02-2340`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.51`。本轮没有改右栏 UI，只补筛选模板；`npm run safari:verify-live` 对两个真实 X 详情页通过，返回 `build=2026-05-02-2340`、可见 `冲走` 按钮 6/12 个、右栏关闭按钮 3/4 个、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2340`、`extensionVersion=0.1.51`。
+
+2026-05-02 23:57 已替换本机 App 到 `BUILD_ID=2026-05-02-2357`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.52`。本轮没有改右栏 UI，只修数据库筛选键和发布新版包；`npm run safari:verify-live` 对两个真实 X 详情页通过，其中一个详情页返回 `build=2026-05-02-2357`、可见 `冲走` 按钮 3 个、右栏关闭按钮 3 个、`articles=15`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-02-2357`、`extensionVersion=0.1.52`。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

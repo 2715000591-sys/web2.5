@@ -383,6 +383,10 @@ const LOW_INFORMATION_BADGE_PATTERNS = [
   /^(?:置顶|顶|冲|滴滴|看看|点我|点这|主页|简介)$/
 ];
 const DECORATIVE_SLOGAN_TERMS = [
+  "晨昏",
+  "静候",
+  "柔意",
+  "情愫",
   "柔情",
   "入骨",
   "质感",
@@ -404,18 +408,29 @@ const DECORATIVE_SLOGAN_TERMS = [
   "相守",
   "朝夕",
   "安稳",
-  "立身"
+  "立身",
+  "温存",
+  "眉眼",
+  "时光赠予",
+  "俗世偏爱",
+  "缘起"
 ];
-const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・]/u;
+const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫]/u;
 const POETIC_SPAM_SLOGAN_PATTERNS = [
+  /晨昏.{0,4}(静候|柔意|情愫|生情|暗生)/,
   /烟火.{0,4}相逢/,
   /人海.{0,4}(擦肩|相逢|逢)/,
   /缘分.{0,4}(引线|牵线|人海|相逢|遇见|逢)/,
   /有缘.{0,4}(自会)?相识/,
   /自会.{0,4}相识/,
+  /温柔.{0,4}(漫染|眉眼)/,
+  /时光.{0,4}(赠予|柔情)/,
   /遇见.{0,4}(温柔|人间)/,
   /旧城.{0,4}(偶遇|故人)/,
+  /晚风.{0,4}(裹着|温柔)/,
   /晚风.{0,4}相逢/,
+  /俗世.{0,4}(偏爱|温存)/,
+  /缘起.{0,4}(眉眼|温柔)/,
   /一念.{0,4}(恰好|相逢)/,
   /(怡好|恰好|刚好).{0,4}温良友/
 ];
@@ -10864,11 +10879,11 @@ function buildRowKeys(row) {
                                   explicitEroticBait
                                     ? "pattern:explicit-erotic-bait"
                                     : (
-                                      decorativeSloganLureAccount
-                                        ? "pattern:decorative-slogan-lure-account"
+                                      poeticSloganLureAccount
+                                        ? "pattern:poetic-slogan-lure-account"
                                         : (
-                                          poeticSloganLureAccount
-                                            ? "pattern:poetic-slogan-lure-account"
+                                          decorativeSloganLureAccount
+                                            ? "pattern:decorative-slogan-lure-account"
                                             : (
                                               emojiNoiseLureAccount
                                                 ? "pattern:emoji-noise-lure-account"

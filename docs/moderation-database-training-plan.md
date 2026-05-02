@@ -245,6 +245,8 @@
 
 2026-05-02 22:43 已新增开发者只读“回复 AI 路线探针”：`POST /api/developer/reply-ai-routing-probe` 和 `npm run cloud:probe-reply-ai`。它把同一条样本按真实云端顺序检查：静态跳过条件、AI 记忆库、数据库候选规则、账号黑名单、旧复用层，最后才标记“下一步会调用外接 AI”。默认不写 D1、不调用外接 AI、不改变候选分数；只有显式加 `-- --call-provider` 才会做真实外接 AI 小额调用。线上默认样本已验证为 `db_rule_pattern/hide/high`，没有调用外接 AI，也没有写数据库。这个工具的用途是排查“为什么这条没被数据库接住 / 是否浪费 API / 是否被恢复记录压住”，不是新增筛选阈值。
 
+2026-05-02 23:57 已按用户截图明确确认，将 `pattern:poetic-slogan-lure-account` 升为开发者确认的活跃数据库规则。操作前已备份线上 D1：`backups/d1/web25-2026-05-02T15-57-00-before-poetic-slogan-rule.sql`。本次同时修正本地和 Worker 的模式键顺序：诗句式空洞模板优先于较宽的装饰空话模板。线上 7 条截图同款探针全部命中 `db_rule_pattern/hide/high`，不调用外接 AI；`pattern:decorative-slogan-lure-account` 仍保持 candidate，不扩大到普通装饰空话。
+
 ## 下一任重点：AI、数据库、API 调度关系
 
 用户下一步主要要调试这三者的关系，不是重做 UI。

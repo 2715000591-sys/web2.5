@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-02-2317";
+  const BUILD_ID = "2026-05-02-2357";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -3205,12 +3205,12 @@
       return "pattern:spam-template-signal";
     }
 
-    if (analysis && analysis.hasDecorativeSloganBait && suspiciousHandle) {
-      return "pattern:decorative-slogan-lure-account";
-    }
-
     if (analysis && analysis.hasPoeticSpamSloganBait && suspiciousHandle) {
       return "pattern:poetic-slogan-lure-account";
+    }
+
+    if (analysis && analysis.hasDecorativeSloganBait && suspiciousHandle) {
+      return "pattern:decorative-slogan-lure-account";
     }
 
     if (analysis && analysis.hasEmojiNoiseBait && suspiciousHandle) {
@@ -4880,6 +4880,7 @@
         contextDetached
         || (analysis && analysis.hasPoeticSpamSloganBait)
         || (analysis && analysis.hasDecorativeSloganBait)
+        || (analysis && analysis.hasEmojiNoiseBait)
       )
     );
 
