@@ -73,6 +73,8 @@
 
 2026-05-02 已完成数据库回填和 AI 记忆库整理：线上 `moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。这说明数据库学习库已经有内容。下一步不是继续盲目回填，而是看真实页面里每条可疑回复最终走的是哪一层。
 
+2026-05-02 15:24 已进一步上线数据库接管层：线上 `moderation_rule_candidates active=222`、`candidate=64`。现在云端收到可疑回复后，会先查 `reply_ai_memory`，再查 `moderation_rule_candidates`；命中时返回 `db_rule_*` 并直接隐藏，不再调用外部 AI。已验证 `找个同城弟弟` 命中 `db_rule_pattern`，测试 item `1097/1098` 的新外部 AI 调用数为 `0`。后续看真实页面时，重点区分 `decisionLayer=ai`（真实模型调用）、`ai_memory_*`（AI 记忆复用）、`db_rule_*`（数据库候选规则接管）。
+
 ## 4. 用户去买 API 时怎么说
 
 只有用户还没有 API，或者明确要换一个新平台时，才这样说：
@@ -225,11 +227,13 @@ AI 只能作为辅助层，不要替换当前稳定筛选主链路。
 - 插件本地只负责挑可疑候选，不负责把所有内容都送 AI。
 - 云端收到候选后，先查 `reply_ai_memory`。
 - 记忆命中直接返回结果，控制台归入 `AI 学习库屏蔽`，不消耗外部 API。
-- 记忆未命中，才读取用户 AI 设置并调用外部模型 API。
+- 记忆未命中，再查 `moderation_rule_candidates`；命中返回 `db_rule_*`，也不消耗外部 API。
+- 学习库和数据库候选都未命中，才读取用户 AI 设置并调用外部模型 API。
 - AI 首次判断写入 `reply_ai_results`。
 - AI 判断同时写入 `moderation_sample_labels`，成为训练/评测证据。
 - AI 直接高置信隐藏再写入 `reply_ai_memory`，让后续相似内容少调用 API。
 - 用户恢复误判会把单条 AI 结果改为放过，并停用对应记忆。
+- 用户恢复/开发者撤回还会压制对应候选规则；AI 低置信或中置信放过只降分，不作为硬撤回。
 
 关键代码位置：
 

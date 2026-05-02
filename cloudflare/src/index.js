@@ -74,6 +74,9 @@ const REPLY_AI_ACCOUNT_REUSE_WINDOW_HOURS = 36;
 const REPLY_AI_MEMORY_POLICY_VERSION = "reply-ai-policy-2026-05-02-ai-memory-v1";
 const REPLY_AI_MEMORY_EXACT_WINDOW_DAYS = 14;
 const REPLY_AI_MEMORY_TEMPLATE_WINDOW_DAYS = 3;
+const MODERATION_RULE_CANDIDATE_POLICY_VERSION = "moderation-rule-candidates-2026-05-02-v1";
+const MODERATION_RULE_CANDIDATE_REBUILD_LIMIT = 5000;
+const MODERATION_RULE_CANDIDATE_REFRESH_LIMIT = 2000;
 const GLOBAL_RULE_STATE_CACHE_VERSION = "contributor-layering-v2";
 const ZERO_WIDTH_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
 const COMPACT_PUNCTUATION_PATTERN = /[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g;
@@ -576,6 +579,10 @@ async function handleApi(request, env, ctx, url) {
 
   if (request.method === "POST" && url.pathname === "/api/developer/backfill-training") {
     return handleDeveloperBackfillTraining(request, env);
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/developer/rebuild-rule-candidates") {
+    return handleDeveloperRebuildRuleCandidates(request, env);
   }
 
   if (request.method === "GET" && url.pathname === "/api/state") {
@@ -2390,7 +2397,7 @@ async function processTrainingBackfillEventRows(env, rows, dryRun) {
       compactText: row.compact_text || "",
       accountProtected: Number(row.account_protected || 0) === 1,
       createdAt: row.created_at || new Date().toISOString()
-    });
+    }, { skipCandidateRefresh: true });
     processed += 1;
   }
   return { processed: dryRun ? 0 : processed, scanned: rows.length, lastId };
@@ -2407,7 +2414,7 @@ async function processTrainingBackfillReplyAiRows(env, rows, dryRun) {
     }
     const itemRow = buildReplyAiBackfillItemRow(row);
     const decision = buildReplyAiBackfillDecision(row);
-    await recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision);
+    await recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision, { skipCandidateRefresh: true });
     if (isDirectAiHighConfidenceHide(decision)) {
       await upsertReplyAiMemoryFromDecision(env, itemRow, decision);
       memoryUpserts += 1;
@@ -2452,6 +2459,30 @@ async function handleDeveloperBackfillTraining(request, env) {
         replyAiAfterId: replyAiResult.lastId || payload.replyAiAfterId,
         done: (!includeEvents || eventRows.length === 0) && (!includeAi || replyAiRows.length === 0)
       }
+    },
+    200,
+    request,
+    true,
+    buildSessionRefreshHeaders(request, viewer, env)
+  );
+}
+
+async function handleDeveloperRebuildRuleCandidates(request, env) {
+  const viewer = await requireDeveloper(request, env);
+  if (!viewer) {
+    return json({ ok: false, error: "developer-required" }, 403, request, true);
+  }
+
+  await ensureAiFeedSchema(env);
+  const payload = await readJson(request);
+  const dryRun = Boolean(payload && payload.dryRun === true);
+  const result = await rebuildModerationRuleCandidates(env, { dryRun });
+
+  return json(
+    {
+      ok: true,
+      dryRun,
+      candidates: result
     },
     200,
     request,
@@ -4487,7 +4518,592 @@ async function insertModerationTrainingLabel(env, sample, label) {
   ).run();
 }
 
-async function recordModerationTrainingLabelFromEvent(env, eventRow) {
+function buildModerationRuleCandidateSourceRow(source) {
+  const row = source && typeof source === "object" ? source : {};
+  const replyText = normalizeStoredReplyText(
+    row.replyText || row.reply_text || row.primaryText || row.primary_text || "",
+    row.replyDisplayName || row.reply_display_name || row.authorDisplayName || row.author_display_name || "",
+    row.replyHandle || row.reply_handle || row.authorHandle || row.author_handle || ""
+  );
+  const normalizedText = normalizeRuleText(row.normalizedText || row.normalized_text || replyText);
+  const compactText = buildCompactRuleText(row.compactText || row.compact_text || replyText || normalizedText);
+  return {
+    id: row.id || row.sampleId || row.sample_id || "",
+    sync_key: row.syncKey || row.sync_key || "",
+    user_id: row.userId || row.user_id || "",
+    device_id: row.deviceId || row.device_id || "",
+    reply_status_id: row.replyStatusId || row.reply_status_id || "",
+    thread_status_id: row.threadStatusId || row.thread_status_id || "",
+    reply_handle: row.replyHandle || row.reply_handle || row.authorHandle || row.author_handle || "",
+    reply_display_name: row.replyDisplayName || row.reply_display_name || row.authorDisplayName || row.author_display_name || "",
+    reply_text: replyText,
+    normalized_text: normalizedText,
+    compact_text: compactText,
+    account_protected: Number(row.accountProtected || row.account_protected || 0) === 1 ? 1 : 0,
+    created_at: row.createdAt || row.created_at || new Date().toISOString()
+  };
+}
+
+function buildModerationRuleCandidateSourceRowFromReplyAiItem(itemRow) {
+  return buildModerationRuleCandidateSourceRow({
+    id: itemRow && itemRow.id ? itemRow.id : "",
+    syncKey: itemRow && itemRow.syncKey ? itemRow.syncKey : "",
+    userId: itemRow && itemRow.userId ? itemRow.userId : "",
+    deviceId: itemRow && itemRow.deviceId ? itemRow.deviceId : "",
+    replyStatusId: itemRow && itemRow.replyStatusId ? itemRow.replyStatusId : "",
+    threadStatusId: itemRow && itemRow.threadStatusId ? itemRow.threadStatusId : "",
+    replyHandle: itemRow && itemRow.replyHandle ? itemRow.replyHandle : "",
+    replyDisplayName: itemRow && itemRow.replyDisplayName ? itemRow.replyDisplayName : "",
+    replyText: itemRow && itemRow.replyText ? itemRow.replyText : "",
+    accountProtected: itemRow && itemRow.accountProtected ? 1 : 0,
+    createdAt: itemRow && itemRow.createdAt ? itemRow.createdAt : new Date().toISOString()
+  });
+}
+
+function isUsefulModerationRuleExactKey(key) {
+  const normalized = String(key || "").trim();
+  if (normalized.startsWith("text:")) {
+    return normalized.slice(5).length >= 4;
+  }
+  if (normalized.startsWith("compact:")) {
+    return normalized.slice(8).length >= 5;
+  }
+  return false;
+}
+
+function isHighValueModerationPatternKey(key) {
+  return [
+    "pattern:geo-meetup-bait",
+    "pattern:geo-relationship-bait",
+    "pattern:bait-question-shape",
+    "pattern:low-information-lure-account",
+    "pattern:low-information-strong-lure-name",
+    "pattern:share-link-scam",
+    "pattern:spam-template-signal",
+    "pattern:mention-lure-redirect",
+    "pattern:explicit-erotic-bait"
+  ].includes(String(key || "").trim());
+}
+
+function canAutoActivateModerationPatternKey(key) {
+  return [
+    "pattern:geo-relationship-bait",
+    "pattern:low-information-lure-account",
+    "pattern:low-information-strong-lure-name",
+    "pattern:share-link-scam",
+    "pattern:spam-template-signal",
+    "pattern:mention-lure-redirect",
+    "pattern:explicit-erotic-bait"
+  ].includes(String(key || "").trim());
+}
+
+function isStrongModerationTemplateKey(key) {
+  const slots = String(key || "").replace(/^template:/, "").split("+").filter(Boolean);
+  if (slots.length < 2) {
+    return false;
+  }
+  const has = (slot) => slots.includes(slot);
+  return Boolean(
+    has("account_redirect")
+    || has("diversion")
+    || has("benefit_or_offer")
+    || (has("relationship_or_erotic") && (has("hook") || has("meetup")))
+    || (has("hook") && has("meetup") && slots.length >= 3)
+  );
+}
+
+function buildModerationRuleCandidateEntriesFromSourceRow(sourceRow) {
+  const row = buildModerationRuleCandidateSourceRow(sourceRow);
+  if (Number(row.account_protected || 0) === 1 && !shouldBypassProtectedLearning(row)) {
+    return [];
+  }
+
+  const keys = buildRowKeys(row);
+  const entries = [];
+  const add = (ruleType, patternKey) => {
+    const normalizedRuleType = normalizeAiFeedText(ruleType, 40);
+    const normalizedPatternKey = normalizeAiFeedText(patternKey, 300);
+    if (!normalizedRuleType || !normalizedPatternKey) {
+      return;
+    }
+    entries.push({
+      ruleType: normalizedRuleType,
+      patternKey: normalizedPatternKey,
+      candidateKey: `${normalizedRuleType}\u0000${normalizedPatternKey}`
+    });
+  };
+
+  if (keys.textKey && isUsefulModerationRuleExactKey(keys.textKey)) {
+    add("exact_text", keys.textKey);
+  }
+  if (keys.compactKey && isUsefulModerationRuleExactKey(keys.compactKey)) {
+    add("compact_text", keys.compactKey);
+  }
+  const templateKey = buildTemplateRuleKeyFromRow(row);
+  if (templateKey) {
+    add("template", templateKey);
+  }
+  if (keys.patternKey && isHighValueModerationPatternKey(keys.patternKey)) {
+    add("pattern", keys.patternKey);
+  }
+
+  const seen = new Set();
+  return entries.filter((entry) => {
+    if (seen.has(entry.candidateKey)) {
+      return false;
+    }
+    seen.add(entry.candidateKey);
+    return true;
+  });
+}
+
+function createModerationRuleCandidateStats(entry) {
+  return {
+    ruleType: entry.ruleType,
+    patternKey: entry.patternKey,
+    positiveLabelCount: 0,
+    negativeLabelCount: 0,
+    positiveScore: 0,
+    negativeScore: 0,
+    aiHighHideCount: 0,
+    developerHideCount: 0,
+    distinctHideContributors: new Set(),
+    distinctPositiveTexts: new Set(),
+    safetyLabelCounts: new Map(),
+    firstPositiveSampleId: "",
+    firstDeveloperDecisionId: ""
+  };
+}
+
+function getModerationRuleCandidateContributorKey(row) {
+  const userId = normalizeAiFeedText(row && (row.reviewer_user_id || row.user_id), 120);
+  if (userId) {
+    return `user:${userId}`;
+  }
+  const syncKey = normalizeAiFeedText(row && (row.reviewer_sync_key || row.sync_key), 120);
+  return syncKey ? `sync:${syncKey}` : "";
+}
+
+function addSafetyLabelsToCandidateStats(stats, labels) {
+  normalizeReplyAiStringList(labels, REPLY_AI_SAFETY_LABELS, 8).forEach((label) => {
+    stats.safetyLabelCounts.set(label, (stats.safetyLabelCounts.get(label) || 0) + 1);
+  });
+}
+
+function addModerationRuleCandidateLabelToStats(stats, row) {
+  const decision = String(row && row.decision ? row.decision : "").trim();
+  const labelSource = String(row && row.label_source ? row.label_source : "").trim();
+  const confidence = String(row && row.confidence ? row.confidence : "low").trim().toLowerCase();
+  const trustWeight = Math.max(1, Math.min(10, Number(row && row.trust_weight ? row.trust_weight : 1) || 1));
+  const normalizedText = normalizeRuleText(row && (row.normalized_text || row.primary_text || row.reply_text || ""));
+
+  if (decision === "hide") {
+    stats.positiveLabelCount += 1;
+    stats.positiveScore += trustWeight;
+    if (labelSource === "ai" && confidence === "high") {
+      stats.aiHighHideCount += 1;
+      stats.positiveScore += 2;
+    }
+    if (labelSource === "developer_review") {
+      stats.developerHideCount += 1;
+      stats.positiveScore += 4;
+      if (row && row.developer_decision_id && !stats.firstDeveloperDecisionId) {
+        stats.firstDeveloperDecisionId = String(row.developer_decision_id || "");
+      }
+    }
+    const contributorKey = getModerationRuleCandidateContributorKey(row);
+    if (contributorKey) {
+      stats.distinctHideContributors.add(contributorKey);
+    }
+    if (normalizedText) {
+      stats.distinctPositiveTexts.add(normalizedText);
+    }
+    if (!stats.firstPositiveSampleId && row && row.sample_id) {
+      stats.firstPositiveSampleId = String(row.sample_id || "");
+    }
+    addSafetyLabelsToCandidateStats(stats, parseJsonArray(row && row.safety_labels_json));
+  } else if (decision === "allow") {
+    if (labelSource === "user_feedback" || labelSource === "developer_review") {
+      stats.negativeLabelCount += 1;
+      stats.negativeScore += trustWeight + 2;
+    } else {
+      stats.negativeScore += trustWeight;
+    }
+  }
+}
+
+function getModerationRuleCandidateSafetyLabel(stats) {
+  let selected = "";
+  let selectedCount = 0;
+  for (const [label, count] of stats.safetyLabelCounts.entries()) {
+    if (count > selectedCount) {
+      selected = label;
+      selectedCount = count;
+    }
+  }
+  return selected || "lead_gen_spam";
+}
+
+function getModerationRuleCandidateConfidenceScore(stats) {
+  const score = stats.positiveScore
+    + (stats.distinctHideContributors.size * 2)
+    + (stats.distinctPositiveTexts.size)
+    + (stats.aiHighHideCount * 2)
+    + (stats.developerHideCount * 3)
+    - (stats.negativeScore * 3);
+  return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function shouldActivateModerationRuleCandidate(stats) {
+  if (!stats || stats.negativeLabelCount > 0 || stats.positiveLabelCount <= 0) {
+    return false;
+  }
+  if (stats.developerHideCount > 0) {
+    return true;
+  }
+  if (stats.ruleType === "exact_text" || stats.ruleType === "compact_text") {
+    return Boolean(
+      stats.aiHighHideCount >= 1
+      || (stats.distinctHideContributors.size >= 2 && stats.positiveLabelCount >= 2)
+    );
+  }
+  if (stats.ruleType === "template") {
+    return Boolean(
+      isStrongModerationTemplateKey(stats.patternKey)
+      && (
+        stats.aiHighHideCount >= 1
+        || (stats.distinctHideContributors.size >= 2 && stats.positiveLabelCount >= 2)
+      )
+    );
+  }
+  if (stats.ruleType === "pattern") {
+    return Boolean(
+      canAutoActivateModerationPatternKey(stats.patternKey)
+      && (
+        stats.aiHighHideCount >= 2
+        || (stats.distinctHideContributors.size >= 2 && stats.positiveLabelCount >= 2)
+      )
+    );
+  }
+  return false;
+}
+
+function buildModerationRuleCandidateDescription(stats) {
+  if (stats.ruleType === "template") {
+    return "AI 学习库模板候选";
+  }
+  if (stats.ruleType === "pattern") {
+    return "AI 学习库模式候选";
+  }
+  return "AI 学习库精确候选";
+}
+
+async function buildModerationRuleCandidateUpsertStatement(env, stats) {
+  const now = new Date().toISOString();
+  const status = shouldActivateModerationRuleCandidate(stats) ? "active" : "candidate";
+  const confidenceScore = getModerationRuleCandidateConfidenceScore(stats);
+  const id = await sha256Hex(JSON.stringify([
+    "moderation-rule-candidate-v1",
+    stats.ruleType,
+    stats.patternKey
+  ]));
+
+  return {
+    status,
+    confidenceScore,
+    statement: env.DB.prepare(
+      `
+        INSERT INTO moderation_rule_candidates (
+          id,
+          rule_type,
+          pattern_key,
+          action,
+          safety_label,
+          description,
+          positive_label_count,
+          negative_label_count,
+          distinct_user_count,
+          confidence_score,
+          status,
+          source_sample_id,
+          promoted_decision_id,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, 'hide', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(rule_type, pattern_key) DO UPDATE SET
+          action = 'hide',
+          safety_label = excluded.safety_label,
+          description = excluded.description,
+          positive_label_count = excluded.positive_label_count,
+          negative_label_count = excluded.negative_label_count,
+          distinct_user_count = excluded.distinct_user_count,
+          confidence_score = excluded.confidence_score,
+          status = CASE
+            WHEN moderation_rule_candidates.status = 'rejected' THEN moderation_rule_candidates.status
+            ELSE excluded.status
+          END,
+          source_sample_id = excluded.source_sample_id,
+          promoted_decision_id = excluded.promoted_decision_id,
+          updated_at = excluded.updated_at
+      `
+    ).bind(
+      id,
+      stats.ruleType,
+      stats.patternKey,
+      getModerationRuleCandidateSafetyLabel(stats),
+      buildModerationRuleCandidateDescription(stats),
+      stats.positiveLabelCount,
+      stats.negativeLabelCount,
+      stats.distinctHideContributors.size,
+      confidenceScore,
+      status,
+      stats.firstPositiveSampleId || null,
+      stats.firstDeveloperDecisionId || null,
+      now,
+      now
+    )
+  };
+}
+
+async function upsertModerationRuleCandidateStats(env, stats, dryRun) {
+  if (!stats || !stats.ruleType || !stats.patternKey || stats.positiveLabelCount <= 0) {
+    return false;
+  }
+  const status = shouldActivateModerationRuleCandidate(stats) ? "active" : "candidate";
+  const confidenceScore = getModerationRuleCandidateConfidenceScore(stats);
+  if (dryRun) {
+    return {
+      status,
+      confidenceScore
+    };
+  }
+
+  const built = await buildModerationRuleCandidateUpsertStatement(env, stats);
+  await built.statement.run();
+
+  return {
+    status: built.status,
+    confidenceScore: built.confidenceScore
+  };
+}
+
+function addModerationRuleCandidateLabelRowsToStats(rows, requestedEntries) {
+  const requestedKeys = requestedEntries && requestedEntries.length
+    ? new Set(requestedEntries.map((entry) => entry.candidateKey))
+    : null;
+  const statsByKey = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const sourceRow = buildModerationRuleCandidateSourceRow(row);
+    const entries = buildModerationRuleCandidateEntriesFromSourceRow(sourceRow);
+    entries.forEach((entry) => {
+      if (requestedKeys && !requestedKeys.has(entry.candidateKey)) {
+        return;
+      }
+      const stats = statsByKey.get(entry.candidateKey) || createModerationRuleCandidateStats(entry);
+      addModerationRuleCandidateLabelToStats(stats, row);
+      statsByKey.set(entry.candidateKey, stats);
+    });
+  });
+
+  return statsByKey;
+}
+
+async function listModerationRuleCandidateLabelRows(env, limit) {
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        ms.id AS sample_id,
+        ms.user_id,
+        ms.sync_key,
+        ms.device_id,
+        ms.reply_status_id,
+        ms.thread_status_id,
+        ms.author_handle AS reply_handle,
+        ms.author_display_name AS reply_display_name,
+        ms.primary_text AS reply_text,
+        ms.normalized_text,
+        ms.compact_text,
+        ms.account_protected,
+        ms.feature_keys_json,
+        msl.label_source,
+        msl.reviewer_user_id,
+        msl.reviewer_sync_key,
+        msl.decision,
+        msl.safety_labels_json,
+        msl.confidence,
+        msl.trust_weight,
+        msl.created_at
+      FROM moderation_samples ms
+      JOIN moderation_sample_labels msl
+        ON msl.sample_id = ms.id
+      ORDER BY msl.created_at DESC
+      LIMIT ?
+    `
+  ).bind(Math.max(1, Math.min(MODERATION_RULE_CANDIDATE_REBUILD_LIMIT, Number(limit || MODERATION_RULE_CANDIDATE_REBUILD_LIMIT)))).all();
+  return results;
+}
+
+async function listModerationRuleCandidateLabelRowsForEntries(env, entries) {
+  if (!Array.isArray(entries) || !entries.length) {
+    return [];
+  }
+  const clauses = entries.map(() => "ms.feature_keys_json LIKE ?").join(" OR ");
+  const binds = entries.map((entry) => `%${entry.patternKey}%`);
+  binds.push(MODERATION_RULE_CANDIDATE_REFRESH_LIMIT);
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        ms.id AS sample_id,
+        ms.user_id,
+        ms.sync_key,
+        ms.device_id,
+        ms.reply_status_id,
+        ms.thread_status_id,
+        ms.author_handle AS reply_handle,
+        ms.author_display_name AS reply_display_name,
+        ms.primary_text AS reply_text,
+        ms.normalized_text,
+        ms.compact_text,
+        ms.account_protected,
+        ms.feature_keys_json,
+        msl.label_source,
+        msl.reviewer_user_id,
+        msl.reviewer_sync_key,
+        msl.decision,
+        msl.safety_labels_json,
+        msl.confidence,
+        msl.trust_weight,
+        msl.created_at
+      FROM moderation_samples ms
+      JOIN moderation_sample_labels msl
+        ON msl.sample_id = ms.id
+      WHERE ${clauses}
+      ORDER BY msl.created_at DESC
+      LIMIT ?
+    `
+  ).bind(...binds).all();
+  return results;
+}
+
+async function listDeveloperDecisionCandidateRows(env) {
+  const { results = [] } = await env.DB.prepare(
+    `
+      SELECT
+        d.id AS developer_decision_id,
+        d.revoked_at,
+        me.id AS event_id,
+        me.user_id,
+        me.sync_key,
+        me.device_id,
+        me.reply_status_id,
+        me.thread_status_id,
+        me.reply_handle,
+        me.reply_display_name,
+        me.reply_text,
+        me.normalized_text,
+        me.compact_text,
+        me.account_protected,
+        me.created_at
+      FROM developer_global_decisions d
+      JOIN moderation_events me
+        ON me.id = d.event_id
+      WHERE ${buildVisibleDeveloperEventSql("me")}
+      ORDER BY d.last_confirmed_at DESC
+      LIMIT 800
+    `
+  ).all();
+  return results;
+}
+
+function buildDeveloperDecisionCandidateLabelRow(row) {
+  const decision = row && row.revoked_at ? "allow" : "hide";
+  return Object.assign({}, row || {}, {
+    sample_id: "",
+    label_source: "developer_review",
+    reviewer_user_id: row && row.user_id ? row.user_id : "",
+    reviewer_sync_key: row && row.sync_key ? row.sync_key : "",
+    decision,
+    safety_labels_json: JSON.stringify(["lead_gen_spam"]),
+    confidence: "high",
+    trust_weight: decision === "hide" ? 4 : 3
+  });
+}
+
+async function refreshModerationRuleCandidatesForSourceRow(env, sourceRow) {
+  const entries = buildModerationRuleCandidateEntriesFromSourceRow(sourceRow);
+  if (!entries.length) {
+    return { touched: 0, active: 0, candidate: 0 };
+  }
+  const [labelRows, developerRows] = await Promise.all([
+    listModerationRuleCandidateLabelRowsForEntries(env, entries),
+    listDeveloperDecisionCandidateRows(env)
+  ]);
+  const allRows = labelRows.concat(developerRows.map(buildDeveloperDecisionCandidateLabelRow));
+  const statsByKey = addModerationRuleCandidateLabelRowsToStats(allRows, entries);
+  let touched = 0;
+  let active = 0;
+  let candidate = 0;
+  for (const stats of statsByKey.values()) {
+    const result = await upsertModerationRuleCandidateStats(env, stats, false);
+    if (result) {
+      touched += 1;
+      if (result.status === "active") {
+        active += 1;
+      } else {
+        candidate += 1;
+      }
+    }
+  }
+  return { touched, active, candidate };
+}
+
+async function rebuildModerationRuleCandidates(env, options) {
+  await ensureAiFeedSchema(env);
+  const source = options && typeof options === "object" ? options : {};
+  const dryRun = Boolean(source.dryRun);
+  const [labelRows, developerRows] = await Promise.all([
+    listModerationRuleCandidateLabelRows(env, source.limit || MODERATION_RULE_CANDIDATE_REBUILD_LIMIT),
+    listDeveloperDecisionCandidateRows(env)
+  ]);
+  const allRows = labelRows.concat(developerRows.map(buildDeveloperDecisionCandidateLabelRow));
+  const statsByKey = addModerationRuleCandidateLabelRowsToStats(allRows);
+  let active = 0;
+  let candidate = 0;
+  let written = 0;
+  const batchStatements = [];
+  for (const stats of statsByKey.values()) {
+    if (!stats || !stats.ruleType || !stats.patternKey || stats.positiveLabelCount <= 0) {
+      continue;
+    }
+    const status = shouldActivateModerationRuleCandidate(stats) ? "active" : "candidate";
+    if (status === "active") {
+      active += 1;
+    } else {
+      candidate += 1;
+    }
+    if (!dryRun) {
+      const built = await buildModerationRuleCandidateUpsertStatement(env, stats);
+      batchStatements.push(built.statement);
+    }
+  }
+  if (!dryRun) {
+    for (let index = 0; index < batchStatements.length; index += 50) {
+      await env.DB.batch(batchStatements.slice(index, index + 50));
+    }
+    written = batchStatements.length;
+  }
+  return {
+    scannedLabels: labelRows.length,
+    scannedDeveloperDecisions: developerRows.length,
+    evaluatedCandidates: statsByKey.size,
+    activeCandidates: active,
+    pendingCandidates: candidate,
+    writtenCandidates: written
+  };
+}
+
+async function recordModerationTrainingLabelFromEvent(env, eventRow, options) {
   const eventType = normalizeModerationTrainingEventType(eventRow && eventRow.eventType);
   if (!eventType) {
     return null;
@@ -4513,10 +5129,15 @@ async function recordModerationTrainingLabelFromEvent(env, eventRow) {
     createdAt: eventRow && eventRow.createdAt ? eventRow.createdAt : new Date().toISOString()
   });
 
+  const captureOptions = options && typeof options === "object" ? options : {};
+  if (!captureOptions.skipCandidateRefresh && decision.action === "hide" && decision.confidence === "high") {
+    await refreshModerationRuleCandidatesForSourceRow(env, sample.sourceRow);
+  }
+
   return sample;
 }
 
-async function recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision) {
+async function recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision, options) {
   if (!itemRow || !itemRow.id || !decision || decision.status !== "ready" || decision.decisionLayer !== "ai") {
     return null;
   }
@@ -4543,6 +5164,11 @@ async function recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, de
     rawResponseJson: decision.rawResponseJson || null,
     createdAt: new Date().toISOString()
   });
+
+  const captureOptions = options && typeof options === "object" ? options : {};
+  if (!captureOptions.skipCandidateRefresh) {
+    await refreshModerationRuleCandidatesForSourceRow(env, sample.sourceRow);
+  }
 
   return sample;
 }
@@ -7765,6 +8391,130 @@ function buildReplyAiBlockedDecision() {
   });
 }
 
+function buildModerationRuleCandidateDecision(row) {
+  const ruleType = normalizeAiFeedText(row && row.rule_type ? row.rule_type : "rule", 24);
+  const safetyLabel = normalizeReplyAiStringList([row && row.safety_label ? row.safety_label : "lead_gen_spam"], REPLY_AI_SAFETY_LABELS, 1)[0] || "lead_gen_spam";
+  return buildDefaultReplyAiDecision({
+    action: "hide",
+    decisionLayer: `db_rule_${ruleType}`.slice(0, 40),
+    matchedSafetyLabels: [safetyLabel],
+    confidence: "high",
+    reasonShort: "命中数据库学习库",
+    status: "ready",
+    model: MODERATION_RULE_CANDIDATE_POLICY_VERSION
+  });
+}
+
+async function hasManualAllowForReplyAiItem(env, itemRow) {
+  const sourceRow = buildModerationRuleCandidateSourceRowFromReplyAiItem(itemRow);
+  const normalizedText = sourceRow.normalized_text || normalizeRuleText(sourceRow.reply_text || "");
+  const compactText = sourceRow.compact_text || buildCompactRuleText(sourceRow.reply_text || normalizedText || "");
+  const replyHandle = normalizeAiHandle(sourceRow.reply_handle || "");
+  const replyStatusId = String(sourceRow.reply_status_id || "").trim();
+  const syncKey = String(sourceRow.sync_key || "").trim();
+  if (!syncKey) {
+    return false;
+  }
+
+  const row = await env.DB.prepare(
+    `
+      SELECT id
+      FROM moderation_events
+      WHERE sync_key = ?
+        AND event_type = 'manual_allow'
+        AND (
+          (? != '' AND reply_status_id = ?)
+          OR (? != '' AND normalized_text = ? AND COALESCE(reply_handle, '') = ?)
+          OR (? != '' AND compact_text = ? AND COALESCE(reply_handle, '') = ?)
+        )
+      LIMIT 1
+    `
+  ).bind(
+    syncKey,
+    replyStatusId,
+    replyStatusId,
+    normalizedText,
+    normalizedText,
+    replyHandle,
+    compactText,
+    compactText,
+    replyHandle
+  ).first();
+
+  return Boolean(row && row.id);
+}
+
+async function findModerationRuleCandidateDecision(env, itemRow) {
+  if (!itemRow || itemRow.accountProtected) {
+    return null;
+  }
+  if (await hasManualAllowForReplyAiItem(env, itemRow)) {
+    return null;
+  }
+
+  const entries = buildModerationRuleCandidateEntriesFromSourceRow(
+    buildModerationRuleCandidateSourceRowFromReplyAiItem(itemRow)
+  );
+  if (!entries.length) {
+    return null;
+  }
+
+  const priority = ["exact_text", "compact_text", "template", "pattern"];
+  const sortedEntries = entries.slice().sort((left, right) => {
+    return priority.indexOf(left.ruleType) - priority.indexOf(right.ruleType);
+  });
+
+  for (const entry of sortedEntries) {
+    const row = await env.DB.prepare(
+      `
+        SELECT
+          rule_type,
+          pattern_key,
+          safety_label,
+          confidence_score
+        FROM moderation_rule_candidates
+        WHERE rule_type = ?
+          AND pattern_key = ?
+          AND action = 'hide'
+          AND status = 'active'
+          AND positive_label_count > 0
+          AND negative_label_count = 0
+        ORDER BY confidence_score DESC, updated_at DESC
+        LIMIT 1
+      `
+    ).bind(entry.ruleType, entry.patternKey).first();
+
+    if (row) {
+      return buildModerationRuleCandidateDecision(row);
+    }
+  }
+
+  return null;
+}
+
+async function demoteModerationRuleCandidatesForReplyAiItem(env, itemRow) {
+  const entries = buildModerationRuleCandidateEntriesFromSourceRow(
+    buildModerationRuleCandidateSourceRowFromReplyAiItem(itemRow)
+  );
+  if (!entries.length) {
+    return;
+  }
+  const now = new Date().toISOString();
+  for (const entry of entries) {
+    await env.DB.prepare(
+      `
+        UPDATE moderation_rule_candidates
+        SET status = CASE WHEN status = 'active' THEN 'candidate' ELSE status END,
+          negative_label_count = CASE WHEN negative_label_count = 0 THEN 1 ELSE negative_label_count END,
+          updated_at = ?
+        WHERE rule_type = ?
+          AND pattern_key = ?
+          AND status != 'rejected'
+      `
+    ).bind(now, entry.ruleType, entry.patternKey).run();
+  }
+}
+
 async function finalizeReplyAiDecision(env, itemRow, decision) {
   if (!itemRow || !itemRow.id) {
     return decision;
@@ -7778,6 +8528,7 @@ async function finalizeReplyAiDecision(env, itemRow, decision) {
   }
   if (decision && decision.decisionLayer === "manual_allow") {
     await deactivateReplyAiMemoryForItem(env, itemRow, "manual_restore");
+    await demoteModerationRuleCandidatesForReplyAiItem(env, itemRow);
   } else if (isDirectAiHighConfidenceHide(decision)) {
     await upsertReplyAiMemoryFromDecision(env, itemRow, decision);
   }
@@ -7831,6 +8582,12 @@ async function classifyReplyAiItemEntries(env, entries) {
     const memoryDecision = await findReplyAiMemoryDecision(env, itemRow, riskRow || null);
     if (memoryDecision) {
       results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, memoryDecision));
+      continue;
+    }
+
+    const candidateRuleDecision = await findModerationRuleCandidateDecision(env, itemRow);
+    if (candidateRuleDecision) {
+      results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, candidateRuleDecision));
       continue;
     }
 
@@ -8713,7 +9470,8 @@ function isCredentialedPath(pathname) {
     || pathname === "/api/developer/dismiss-feed"
     || pathname === "/api/developer/revoke-feed"
     || pathname === "/api/developer/data-layer-audit"
-    || pathname === "/api/developer/backfill-training";
+    || pathname === "/api/developer/backfill-training"
+    || pathname === "/api/developer/rebuild-rule-candidates";
 }
 
 function buildCorsHeaders(request, allowCredentials) {

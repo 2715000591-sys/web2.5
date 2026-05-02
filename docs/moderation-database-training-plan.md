@@ -199,6 +199,29 @@
 3. 小批量回填：旧手动事件处理 156 条、旧 AI 判断处理 1070 条、AI 记忆写入尝试 130 次
 4. `npm run cloud:audit-data-layer`，所有分层检查 PASS
 
+## 2026-05-02 数据库接管层
+
+用户明确要求把“AI 当老师、数据库当记忆本”推进到下一步：重复垃圾话术命中数据库后，不再调用外部 AI。
+
+本轮已上线：
+
+- 新增开发者接口：`POST /api/developer/rebuild-rule-candidates`
+- 新增脚本：`npm run cloud:rebuild-rule-candidates`
+- 新增实时刷新逻辑：新的 `manual_hide` / `manual_allow` 和 AI 高置信隐藏会刷新对应候选规则。
+- 云端回复审核顺序改为：静态检查 -> `reply_ai_memory` -> `moderation_rule_candidates` -> 账号黑名单/旧复用 -> 外部模型 API。
+- 命中候选规则时返回 `db_rule_exact_text` / `db_rule_compact_text` / `db_rule_template` / `db_rule_pattern`，控制台仍可归入 AI 学习库类目，但不会消耗外部 API。
+- 用户恢复误判或开发者撤回会把对应候选压回待确认；AI 自己低置信/中置信放过只降分，不再像用户恢复一样硬压制明显垃圾。
+
+线上结果：
+
+- 正式整理前 D1 备份：`backups/d1/web25-2026-05-02T07-23-57-109Z-before-rule-candidates.sql`
+- `moderation_rule_candidates active=222`
+- `moderation_rule_candidates candidate=64`
+- `找个同城的哥哥` 的精确文本和压缩文本规则已启用。
+- `pattern:geo-relationship-bait` 已启用。
+- `pattern:geo-meetup-bait` 和 `template:hook+meetup` 因存在恢复/放过证据仍保持候选，不直接启用，避免误伤 `我在万达广场附近上班`、`附近有家面馆不错` 这类正常句子。
+- 云端小测试：`找个同城弟弟` 返回 `db_rule_pattern/hide/high`，测试 item `1097/1098` 没有产生新的外部 AI 调用。
+
 ## 近期最实用的下一步
 
 后续继续按这个小闭环走：

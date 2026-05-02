@@ -119,6 +119,8 @@
   - Version ID：`3d44a89e-52c4-477c-967f-47eed7d72a6c`
   - 2026-05-02 13:55 用户完成 Cloudflare 授权后，已发布“旧数据库整理进学习库”通道：开发者接口 `POST /api/developer/backfill-training` 和脚本 `npm run cloud:backfill-training` 已上线。公网首页、控制台、`/downloads/latest.json` 均返回 200。
   - 2026-05-02 13:55 已备份并回填线上 D1。备份文件包括 `backups/d1/web25-2026-05-02T05-38-54-857Z-before-training-backfill.sql`。回填结果：旧手动事件处理 156 条、旧 AI 判断处理 1070 条、AI 记忆写入尝试 130 次。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。
+  - 2026-05-02 15:24 已上线“数据库接管重复垃圾”闭环：新增开发者接口 `POST /api/developer/rebuild-rule-candidates` 和脚本 `npm run cloud:rebuild-rule-candidates`。它会从旧样本、AI 高置信隐藏、开发者确认/撤回里整理 `moderation_rule_candidates`，云端 AI 判断前先查这张候选规则表；命中后返回 `db_rule_*`，不调用外部 AI。正式整理前已备份 D1 到 `backups/d1/web25-2026-05-02T07-23-57-109Z-before-rule-candidates.sql`。线上核验：`active=222`、`candidate=64`；`找个同城的哥哥` 精确规则和 `pattern:geo-relationship-bait` 已启用；`pattern:geo-meetup-bait` 和 `template:hook+meetup` 因存在恢复/放过证据仍是候选，未粗暴启用。
+  - 2026-05-02 15:26 真实云端小测试通过：测试样本 `找个同城弟弟` 返回 `decisionLayer=db_rule_pattern`、`action=hide`，并确认测试 item `1097/1098` 没有产生新的外部 AI 调用。误伤核验：`我在万达广场附近上班`、`附近有家面馆不错`、`pattern:geo-meetup-bait`、`template:hook+meetup` 没有活跃规则直接粗暴命中。
   - 2026-05-02 13:55 新记录正文保存已上线：插件和 Worker 都会尽量保存回复正文；如果 X 当时不给正文，就保存 `账号线索：显示名 @handle`，避免学习样本完全空掉。旧的空正文历史不能凭空还原，只能以后尽量不再新增空样本。
   - 2026-05-02 12:22 已修复扩展 AI 首判入口：之前实际代码会把每条可读回复都排进 AI；现在 `buildReplyAiModerationCandidate` 只在强风险触发或弱风险组合时排队。普通正常回复不应消耗 AI。
   - 2026-05-02 13:55 轻量学习闭环已上线：新发生的 `manual_hide` / `manual_allow` 会写入 `moderation_samples` / `moderation_sample_labels`，AI 首次判断也会写入 AI 标注；这些仍然只是证据层，不会自动升级公共规则。
@@ -127,6 +129,7 @@
   - 2026-05-02 `/api/state` 已改为不再把公共精确规则合并进插件本地手动隐藏列表；公共规则和高共识模板只作为云端 AI 判断参考信号。公网烟测显示新测试身份返回 `manualHideKeys: []`，随后已删除该临时测试 sync key。
   - 2026-05-02 控制台累计方格已固定为 5 块：`累计跳过无用内容`、`AI 直接屏蔽`、`AI 学习库屏蔽`、`你手动冲走`、`跳过官方广告`。详情入口为 `all_skipped`、`ai_direct`、`ai_memory`、`manual`、`ads`。
   - 2026-05-02 验证通过：`node --check cloudflare/src/index.js`、`node --check extension/content/rules.js`、`node --check extension/content/content.js`、`node --check site/app.js`、`git diff --check`、`npm run cloud:check`、`npm run cloud:audit-data-layer`、`npm run cloud:deploy`。公网首页、控制台、`/console/?detail=ai_memory`、`/downloads/latest.json` 均返回 200。
+  - 2026-05-02 15:24 数据库接管层上线后再次验证：`node --check cloudflare/src/index.js`、`node --check scripts/rebuild-rule-candidates.mjs`、`git diff --check`、`npm run cloud:check`、`npm run cloud:deploy`、`npm run cloud:rebuild-rule-candidates`、`npm run cloud:audit-data-layer` 均通过；公网首页、控制台、`/downloads/latest.json` 均返回 200。当前 Worker Version ID 为 `a2bf52e2-5377-48d2-85c8-8b696a399d8b`。
   - 2026-05-02 `npm run cloud:deploy` 已成功部署控制台前端方格直达详情页改动。
   - 2026-05-02 用户已亲自完成 Cloudflare 网页登录授权；本机发布权限恢复。随后已再次运行 `npm run cloud:check` 和 `npm run cloud:deploy`，公网更新成功，当前 Version ID 为 `f66362e3-0f48-46e0-9639-95bf51590205`。已用系统代理验证首页、控制台、`/console/?detail=ai_hide`、`/downloads/latest.json` 均返回 200，线上 `/app.js` 已包含详情页精简模式和设备显示修正。
   - 2026-05-02 已修复控制台“恢复这条”前台不同步：用户在来源详情页恢复后，当前列表会立刻移除原来的隐藏记录；刷新后的来源分类也会用 `manual_allow` 抑制同一条 `auto_hide` / `manual_hide`，不再让它继续留在“本地规则下沉”里。已部署到公网 Version ID `f54ff4e3-e820-4f34-840f-6a6da3c72cfa`。

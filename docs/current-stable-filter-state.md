@@ -137,6 +137,8 @@
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID: `3d44a89e-52c4-477c-967f-47eed7d72a6c`
+  - 2026-05-02 15:24 已上线数据库接管层，当前 Worker Version ID 为 `a2bf52e2-5377-48d2-85c8-8b696a399d8b`。云端在调用外部 AI 前会先查 `reply_ai_memory` 和 `moderation_rule_candidates`；命中候选规则时返回 `db_rule_*`，不再花外部 AI 调用。线上候选库核验：`active=222`、`candidate=64`。`找个同城的哥哥` 和 `pattern:geo-relationship-bait` 已可由数据库直接接管；`pattern:geo-meetup-bait` / `template:hook+meetup` 保持候选，避免把正常附近讨论一刀切。
+  - 2026-05-02 15:26 已用真实云端接口验证：测试样本 `找个同城弟弟` 命中 `db_rule_pattern` 并隐藏，测试 item `1097/1098` 没有产生新的外部 AI 调用。
   - 2026-05-02 13:55 已上线旧数据回填学习库接口：`POST /api/developer/backfill-training`。已把旧 `manual_hide/冲走`、`manual_allow/恢复`、AI 首次判断整理成样本和标注，并把旧 AI 高置信隐藏补进 AI 记忆库。只读核验：`moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。
   - 2026-05-02 已完成并部署 `AI 首判、云端记忆复用`：新增 `reply_ai_memory`，只学习 AI 直接高置信隐藏结果；命中记忆展示为 `AI 学习库屏蔽`；`manual_hide/冲走` 不直接教数据库，`manual_allow/恢复` 会停用对应 AI 记忆。
   - 2026-05-02 起，`/api/state` 不再把公共精确规则合并到插件本地手动隐藏列表；公共规则和高共识模板只作为送云端 AI 判断的参考信号。
