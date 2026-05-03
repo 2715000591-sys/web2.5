@@ -98,6 +98,8 @@
 
 2026-05-03 14:44 用户质疑“API 是不是后台没有跑，AI 是否从来没吃过真实数据”。只读核验结论：不是从来没跑，线上 `reply_ai_items=1099` / `reply_ai_results=1099`，DeepSeek 直接 AI 判断约 977 条；但用户这次怀疑“今天真实页面没跑新 AI”是对的。当天本机 Safari 的 sync key 未绑定开发者账号，`/api/state` 对该设备返回 `replyAiEnabled=false`，所以真实页面只写了 `auto_hide`，没有写新的回复 AI 结果；之前的 14:12 样本验证主要是开发者探针，探针会真实调用 DeepSeek 但默认不写数据库。已把当前 sync key / device 绑定到开发者账号，刷新真实页后写入 15 条真实 X 页面候选，15 条均为 `deepseek-v4-flash / ai / ready / hide / high`。以后排查“AI 没工作”时，先查当前设备 `/api/state` 的 `replyAiEnabled`，再查 `reply_ai_items` 最新时间，不要只看探针。
 
+2026-05-03 17:15 阶段反馈：当前 AI 参与后整体效果明显变好，用户暂时没有看到明显漏网，但有少量上下文误杀。例子：原帖在讲“没钱/有钱影响生活”，回复 `你穷怕了` 语气尖锐但和原帖相关，应允许。该条已被用户恢复并写入 `manual_allow` / `user_feedback allow`，`reply_ai_items` 中也保存了对应 `main_post_text`。后续优化 prompt/候选路由时，要把“和主帖语义相关”作为强放过证据，尤其保护粗口、反驳、讽刺、短吐槽；不要只因短、尖锐或包含“穷/钱”等词就隐藏。
+
 2026-05-02 17:11 已追加验证用户指出的风险昵称场景：`孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 命中 `db_rule_pattern`，`model=moderation-rule-candidates-2026-05-02-v1`，不是 `deepseek-v4-flash`。这说明它走数据库候选规则接管，没有进入外部 AI 调用。测试 item 为 `1099`。
 
 2026-05-02 17:31 用户截图里的 7 条漏网样本已全部验证为数据库接管：`比她好看的没她强...@designksh1/@xiaonm88`、`刷了半天的X...主页能打✈️...@designksh1/@xiaonm88`、`线下我就日过这个骚货 @designksh1`、`免费破处` 风险昵称发 `十🙈` 均返回 `db_rule_pattern` 或 `db_rule_template`，`model=moderation-rule-candidates-2026-05-02-v1`。这批样本不再调用外部 AI。测试 item 为 `1100`-`1106`。
