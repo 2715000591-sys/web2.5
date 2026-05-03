@@ -163,8 +163,11 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-1256`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1327`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1402`
-- 扩展版本 `0.1.62`
-- App / Extension 版本 `1.0.62 (63)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-2246`
+- 扩展版本 `0.1.63`
+- App / Extension 版本 `1.0.63 (64)`
+
+2026-05-03 22:46 已替换本机 App 到 `BUILD_ID=2026-05-03-2246`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.63`。本轮没有改右栏 UI，只修真实页面 AI 写入/判断落库链路和 AI 批量大小；`npm run safari:verify-live` 对真实 X 首页通过：`build=2026-05-03-2246`、`sidebar=1`、`sideButtons=5`、`marking=1`、`articles=5`、`stage=ads:done`。当前打开的是首页，不是详情页，所以本轮没有可见 `冲走` 按钮样本；用户打开详情页后可继续补真实反馈。
 
 2026-05-03 13:27 已替换本机 App 到 `BUILD_ID=2026-05-03-1327`，签名验证通过。UI 主体没改；只是为 AI 候选改成先显示 `AI 复审中` 的隐藏路线，并补 `附近的来` 这类风险昵称。`npm run safari:verify-live` 读到新版；真实 X 详情页 `https://x.com/yizhunli10167/status/2050601910487461905` 加载完成后 `build=2026-05-03-1327`、`stage=scan:done`、`articles=45`，`@hayes_jaco16929` 对应行 `display:none`。公网发布被 Cloudflare 登录令牌失效挡住，公网下载清单仍是上一版。
 

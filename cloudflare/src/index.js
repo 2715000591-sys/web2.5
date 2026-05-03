@@ -65,8 +65,8 @@ const REPLY_AI_RECLASSIFY_LIMIT = 12;
 const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
 const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
 const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
-const REPLY_AI_BATCH_MAX_ITEMS = 16;
-const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 16;
+const REPLY_AI_BATCH_MAX_ITEMS = 8;
+const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 8;
 const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
 const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
 const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
@@ -1404,6 +1404,9 @@ async function handlePostAiReplyPost(request, env) {
   const existingDecision = saved.itemId
     ? await getReplyAiResultByItemId(env, saved.itemId)
     : null;
+  if (saved.itemId && !existingDecision) {
+    await upsertReplyAiResult(env, saved.itemId, buildReplyAiPendingDecision());
+  }
   const decision = saved.itemId && (!saved.deduped || !existingDecision || !isFinalReplyAiDecisionStatus(existingDecision.status) || shouldRetryReplyAiDecision(existingDecision))
     ? await classifyReplyAiItem(env, saved.itemId)
     : existingDecision;
@@ -1456,6 +1459,9 @@ async function handlePostAiReplyBatch(request, env) {
     const existingDecision = saved.itemId
       ? await getReplyAiResultByItemId(env, saved.itemId)
       : null;
+    if (saved.itemId && !existingDecision) {
+      await upsertReplyAiResult(env, saved.itemId, buildReplyAiPendingDecision());
+    }
     if (saved.itemId && existingDecision && isFinalReplyAiDecisionStatus(existingDecision.status) && !shouldRetryReplyAiDecision(existingDecision)) {
       responseItems.push({
         clientItemId: item.clientItemId,
@@ -7538,6 +7544,15 @@ function isFinalReplyAiDecisionStatus(status) {
   return normalized === "ready" || normalized === "failed" || normalized === "skipped";
 }
 
+function buildReplyAiPendingDecision() {
+  return buildDefaultReplyAiDecision({
+    decisionLayer: "pending",
+    reasonShort: "等待 AI 判断",
+    status: "pending",
+    model: ""
+  });
+}
+
 function shouldRetryReplyAiDecision(decision) {
   if (!decision || String(decision.status || "").trim().toLowerCase() !== "failed") {
     return false;
@@ -7869,7 +7884,7 @@ async function upsertReplyAiResult(env, itemId, decision) {
       ? String(normalized.confidence || "").trim().toLowerCase()
       : "low",
     normalizeAiFeedText(normalized.reasonShort, 120),
-    ["ready", "failed", "skipped"].includes(String(normalized.status || "").trim().toLowerCase())
+    ["ready", "failed", "skipped", "pending"].includes(String(normalized.status || "").trim().toLowerCase())
       ? String(normalized.status || "").trim().toLowerCase()
       : "skipped",
     normalizeAiFeedText(normalized.model, 80),
