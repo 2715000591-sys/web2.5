@@ -160,9 +160,11 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-1001`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1039`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1117`
-- Safari 扩展 `BUILD_ID = 2026-05-03-1138`
-- 扩展版本 `0.1.59`
-- App / Extension 版本 `1.0.59 (60)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-1256`
+- 扩展版本 `0.1.60`
+- App / Extension 版本 `1.0.60 (61)`
+
+2026-05-03 13:02 已替换本机 App 到 `BUILD_ID=2026-05-03-1256`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.60`。本轮没有改右栏 UI，只提高 AI 老师实际参与强度并换新版包。`npm run safari:verify-live` 对真实 X 详情页 `https://x.com/YLDLZN/status/2050723821460853237` 通过：`build=2026-05-03-1256`、`detail=1`、`sidebar=1`、`flushes=6`、`sideButtons=3`、`manualButtons=6`、`marking=1`、`articles=22`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1256`、`extensionVersion=0.1.60`。
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 

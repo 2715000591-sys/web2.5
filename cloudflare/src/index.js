@@ -65,8 +65,8 @@ const REPLY_AI_RECLASSIFY_LIMIT = 12;
 const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
 const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
 const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
-const REPLY_AI_BATCH_MAX_ITEMS = 12;
-const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 8;
+const REPLY_AI_BATCH_MAX_ITEMS = 16;
+const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 16;
 const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
 const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
 const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
@@ -2890,11 +2890,14 @@ async function buildReplyAiRoutingProbe(env, viewer, payload) {
 
   let providerDecision = null;
   let providerError = "";
+  const teacherReviewTargetDecision = memoryProbe.decision
+    || ruleProbe.decision
+    || globalBlockDecision
+    || reusableDecision;
   const normalWouldCallProvider = Boolean(!staticDecision && !memoryProbe.decision && !ruleProbe.decision && !globalBlockDecision && !reusableDecision);
   const teacherReviewWouldCallProvider = Boolean(
     !staticDecision
-    && !memoryProbe.decision
-    && ruleProbe.decision
+    && teacherReviewTargetDecision
     && shouldRequestReplyAiTeacherReview(itemRow, settings)
   );
   const wouldCallProvider = normalWouldCallProvider || teacherReviewWouldCallProvider;
@@ -2907,8 +2910,8 @@ async function buildReplyAiRoutingProbe(env, viewer, payload) {
   }
 
   const finalDecision = staticDecision
-    || memoryProbe.decision
     || (teacherReviewWouldCallProvider && isDirectAiHighConfidenceHide(providerDecision) ? providerDecision : null)
+    || memoryProbe.decision
     || ruleProbe.decision
     || globalBlockDecision
     || reusableDecision
@@ -9286,23 +9289,60 @@ async function finalizeReplyAiDecision(env, itemRow, decision) {
 }
 
 function shouldRequestReplyAiTeacherReview(itemRow, settings) {
+  const avatarTags = Array.isArray(itemRow && itemRow.avatarEvidenceTags)
+    ? itemRow.avatarEvidenceTags
+    : [];
+  const profileTags = Array.isArray(itemRow && itemRow.profileSignalTags)
+    ? itemRow.profileSignalTags
+    : [];
+  const replyText = itemRow && itemRow.replyText ? itemRow.replyText : "";
+  const replyDisplayName = itemRow && itemRow.replyDisplayName ? itemRow.replyDisplayName : "";
+  const replyHandle = itemRow && itemRow.replyHandle ? itemRow.replyHandle : "";
+  const highRiskDisplayName = displayNameLooksHighRisk(replyDisplayName);
+  const lureDisplayName = displayNameLooksLure(replyDisplayName);
+  const suspiciousHandle = handleLooksSuspicious(replyHandle);
+  const riskyProfile = profileTags.includes("contact_keyword")
+    || profileTags.includes("contact_payload")
+    || profileTags.includes("profile_redirect")
+    || profileTags.includes("suspicious_bio");
+  const thinOrBaitText = looksLikeMinimalTextPayload(replyText)
+    || looksLikeFragmentedSymbolicReply(replyText)
+    || looksLikeThinSymbolOrNumberPayload(replyText)
+    || looksLikeLowInformationBadge(replyText)
+    || looksLikeEmojiNoiseBait(replyText)
+    || looksLikeDecorativeSloganBait(replyText)
+    || looksLikePoeticSpamSloganBait(replyText);
+  const strongTextSignal = looksLikeShareLinkScam(replyText)
+    || looksLikeGeoRelationshipBait(replyText)
+    || looksLikeSpamTemplateSignal(replyText)
+    || looksLikeExplicitEroticBait(replyText)
+    || looksLikeEroticMentionRedirect(replyText);
+  const teacherEvidenceTag = avatarTags.some((tag) => [
+    "teacher_review_requested",
+    "avatar_vision_requested",
+    "high_risk_display_name",
+    "geo_relationship_bait",
+    "spam_template_signal",
+    "poetic_low_substance_reply",
+    "decorative_low_substance_reply",
+    "emoji_noise_reply",
+    "context_detached_reply",
+    "lure_display_name"
+  ].includes(String(tag || "")));
+
   return Boolean(
     itemRow
     && settings
     && settings.replyAiEnabled
     && settings.apiKey
     && (
-      (
-        Array.isArray(itemRow.avatarEvidenceTags)
-        && (
-          itemRow.avatarEvidenceTags.includes("teacher_review_requested")
-          || itemRow.avatarEvidenceTags.includes("avatar_vision_requested")
-          || itemRow.avatarEvidenceTags.includes("high_risk_display_name")
-          || itemRow.avatarEvidenceTags.includes("geo_relationship_bait")
-          || itemRow.avatarEvidenceTags.includes("spam_template_signal")
-        )
-      )
+      teacherEvidenceTag
       || Boolean(itemRow.avatarVisionRequested)
+      || riskyProfile
+      || highRiskDisplayName
+      || (lureDisplayName && (suspiciousHandle || thinOrBaitText || strongTextSignal))
+      || (suspiciousHandle && (thinOrBaitText || strongTextSignal))
+      || (strongTextSignal && (lureDisplayName || suspiciousHandle))
     )
   );
 }
@@ -9321,6 +9361,13 @@ async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskR
   try {
     const decision = await requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow || null);
     await clearAiProviderCooldown(env, scopeKey, itemRow, settings);
+    if (decision && decision.status === "ready" && decision.decisionLayer === "ai") {
+      try {
+        await recordModerationTrainingLabelFromReplyAiDecision(env, itemRow, decision, { skipCandidateRefresh: true });
+      } catch (error) {
+        // Teacher labels are useful, but realtime moderation must not wait on training capture.
+      }
+    }
     return isDirectAiHighConfidenceHide(decision) ? decision : null;
   } catch (error) {
     const errorMessage = error && error.message ? String(error.message) : "";
@@ -9353,6 +9400,13 @@ async function classifyReplyAiItemEntries(env, entries) {
   const riskCache = new Map();
   const providerGroups = new Map();
   let teacherReviewBudget = REPLY_AI_TEACHER_REVIEW_MAX_ITEMS;
+  const maybeRequestTeacherDecision = async (settings, itemRow, riskRow) => {
+    if (teacherReviewBudget <= 0 || !shouldRequestReplyAiTeacherReview(itemRow, settings)) {
+      return null;
+    }
+    teacherReviewBudget -= 1;
+    return await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
+  };
 
   for (const entry of normalizedEntries) {
     const itemRow = await getReplyAiItemById(env, entry.itemId);
@@ -9384,25 +9438,32 @@ async function classifyReplyAiItemEntries(env, entries) {
 
     const memoryDecision = await findReplyAiMemoryDecision(env, itemRow, riskRow || null);
     if (memoryDecision) {
+      const teacherDecision = await maybeRequestTeacherDecision(settings, itemRow, riskRow || null);
+      if (teacherDecision) {
+        results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
+        continue;
+      }
       results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, memoryDecision));
       continue;
     }
 
     const candidateRuleDecision = await findModerationRuleCandidateDecision(env, itemRow);
     if (candidateRuleDecision) {
-      if (teacherReviewBudget > 0 && shouldRequestReplyAiTeacherReview(itemRow, settings)) {
-        teacherReviewBudget -= 1;
-        const teacherDecision = await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
-        if (teacherDecision) {
-          results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
-          continue;
-        }
+      const teacherDecision = await maybeRequestTeacherDecision(settings, itemRow, riskRow || null);
+      if (teacherDecision) {
+        results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
+        continue;
       }
       results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, candidateRuleDecision));
       continue;
     }
 
     if (await isReplyHandleGloballyBlocked(env, itemRow.replyHandle)) {
+      const teacherDecision = await maybeRequestTeacherDecision(settings, itemRow, riskRow || null);
+      if (teacherDecision) {
+        results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
+        continue;
+      }
       const blockedDecision = await finalizeReplyAiDecision(env, itemRow, buildReplyAiBlockedDecision());
       results.set(entry.clientItemId, blockedDecision);
       continue;
@@ -9410,6 +9471,11 @@ async function classifyReplyAiItemEntries(env, entries) {
 
     const reusedDecision = await findReusableReplyAiDecision(env, itemRow, riskRow || null);
     if (reusedDecision) {
+      const teacherDecision = await maybeRequestTeacherDecision(settings, itemRow, riskRow || null);
+      if (teacherDecision) {
+        results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
+        continue;
+      }
       results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, reusedDecision));
       continue;
     }

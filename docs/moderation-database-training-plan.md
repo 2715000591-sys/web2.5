@@ -276,6 +276,8 @@
 
 2026-05-03 10:05 已补用户新截图里的短口号变体：`浅交不如深知己`、`高质量交友贵在合拍`、`品行相近方同行`、`拒绝无效的寒暄` 搭配随机数字 handle / emoji 噪音时进入 `pattern:poetic-slogan-lure-account`；`有没有单身哥哥` 进入已启用的 `pattern:geo-relationship-bait`。根因是 X 未提供原帖正文时，旧的 emoji 噪音组合分不够，且这些短口号不在既有诗句模板里。线上探针 `高质量交友贵在合拍 🌟✂️🌟🎁` 和 `有没有单身哥哥✨🤤🫶Oa` 都返回 `db_rule_pattern / ready / hide / high`，不调用外接 AI，不写数据库。本轮没有新增 D1 表、没有清理或删除生产数据，也没有把单用户反馈升级成公共规则；复用既有活跃候选键。
 
+2026-05-03 12:56 用户明确指出“AI 根本没动，别只在模型里改，要改我们的 AI”。本轮已把老师复核从“数据库命中时少量抽查”升级为“高风险命中层前置教学”：本地可疑批量上限 16、发送等待 350ms、最小间隔 350ms、老师复核分 2、会话缓存 600，并换临时缓存号让新版重新审核；云端老师复核预算 16。现在高风险候选即使命中 `reply_ai_memory`、`moderation_rule_candidates`、账号黑名单或旧复用层，也会先给 DeepSeek 老师看；AI 高置信隐藏时最终层为 `ai`，AI 不高置信时回落到原拦截结果。老师复核的非最终 AI 判断也写入 `moderation_sample_labels`，让数据库留下“老师看过”的标注证据。线上真实调用探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 返回 `Final layer: ai / ready / hide / high`、`External AI: called`，说明不是只走数据库。
+
 ## 下一任重点：AI、数据库、API 调度关系
 
 用户下一步主要要调试这三者的关系，不是重做 UI。
@@ -293,17 +295,15 @@
   ↓
 云端先查 reply_ai_memory
   ↓
-命中则直接复用，显示为 AI 学习库屏蔽
+高风险候选即使命中记忆，也可先给 AI 老师复核
   ↓
 没命中再查 moderation_rule_candidates
   ↓
-命中则由数据库学习库直接屏蔽，不调用外部模型 API
+高风险候选即使命中数据库规则，也可先给 AI 老师复核
   ↓
-没命中才调用外部模型 API
+没有命中，或命中但需要老师教学时，才调用外部模型 API
   ↓
-AI 结果写 reply_ai_results
-  ↓
-AI 标注写 moderation_sample_labels
+AI 高置信隐藏写 reply_ai_results；非最终老师判断写 moderation_sample_labels
   ↓
 高置信隐藏再沉淀进 reply_ai_memory
   ↓
@@ -313,8 +313,8 @@ AI 标注写 moderation_sample_labels
 调试时优先看这些问题：
 
 - 是否每条回复都进 AI 队列。如果是，这是 bug，先查 `extension/content/content.js` 的 `buildReplyAiModerationCandidate`。
-- 是否记忆命中还继续调用模型。如果是，这是浪费 API，先查 `cloudflare/src/index.js` 的 `findReplyAiMemoryDecision` / `classifyReplyAiItemEntries`。
-- 是否数据库候选规则命中还继续调用模型。如果是，查 `findModerationRuleCandidateDecision` 在 `classifyReplyAiItemEntries` 中的位置。
+- 是否记忆命中还继续调用模型。2026-05-03 12:56 后这不一定是 bug：如果候选带高风险证据，可能是老师复核；先查 `shouldRequestReplyAiTeacherReview` 和 `classifyReplyAiItemEntries`。
+- 是否数据库候选规则命中还继续调用模型。2026-05-03 12:56 后这不一定是浪费：高风险数据库命中会优先给 AI 老师教学；普通低风险命中不应无差别调用。
 - 是否 AI 隐藏后没有进入样本标注。如果是，查 `recordModerationTrainingLabelFromReplyAiDecision`。
 - 是否高置信隐藏没有进入记忆库。如果是，查 `upsertReplyAiMemoryFromDecision`。
 - 是否手动冲走/恢复没有刷新数据库候选。如果是，查 `recordModerationTrainingLabelFromEvent`。
