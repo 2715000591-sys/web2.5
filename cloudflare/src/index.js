@@ -776,11 +776,11 @@ async function handleApi(request, env, ctx, url) {
   }
 
   if (request.method === "POST" && url.pathname === "/api/ai-replies/posts") {
-    return handlePostAiReplyPost(request, env);
+    return handlePostAiReplyPost(request, env, ctx);
   }
 
   if (request.method === "POST" && url.pathname === "/api/ai-replies/batch") {
-    return handlePostAiReplyBatch(request, env);
+    return handlePostAiReplyBatch(request, env, ctx);
   }
 
   const aiFeedDecisionMatch = request.method === "GET"
@@ -1390,7 +1390,7 @@ async function handlePostAiFeedPost(request, env, ctx) {
   );
 }
 
-async function handlePostAiReplyPost(request, env) {
+async function handlePostAiReplyPost(request, env, ctx) {
   await ensureAiFeedSchema(env);
   const payload = normalizeReplyAiPayload(await readJson(request));
   if (!payload.syncKey || !payload.deviceId) {
@@ -1409,7 +1409,7 @@ async function handlePostAiReplyPost(request, env) {
     await upsertReplyAiResult(env, saved.itemId, buildReplyAiPendingDecision());
   }
   const decision = saved.itemId && (!saved.deduped || !existingDecision || !isFinalReplyAiDecisionStatus(existingDecision.status) || shouldRetryReplyAiDecision(existingDecision))
-    ? await classifyReplyAiItem(env, saved.itemId)
+    ? await classifyReplyAiItem(env, saved.itemId, { ctx, deferTeacherReview: true })
     : existingDecision;
 
   return json(
@@ -1426,7 +1426,7 @@ async function handlePostAiReplyPost(request, env) {
   );
 }
 
-async function handlePostAiReplyBatch(request, env) {
+async function handlePostAiReplyBatch(request, env, ctx) {
   await ensureAiFeedSchema(env);
   const payload = normalizeReplyAiBatchPayload(await readJson(request));
   if (!payload.syncKey || !payload.deviceId) {
@@ -1481,7 +1481,7 @@ async function handlePostAiReplyBatch(request, env) {
   }
 
   const classified = pendingEntries.length
-    ? await classifyReplyAiItemEntries(env, pendingEntries)
+    ? await classifyReplyAiItemEntries(env, pendingEntries, { ctx, deferTeacherReview: true })
     : new Map();
 
   pendingEntries.forEach((entry) => {
@@ -9453,8 +9453,24 @@ async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskR
   }
 }
 
-async function classifyReplyAiItemEntries(env, entries) {
+function scheduleReplyAiTeacherReview(ctx, env, settings, itemRow, riskRow) {
+  if (!ctx || typeof ctx.waitUntil !== "function" || !shouldRequestReplyAiTeacherReview(itemRow, settings)) {
+    return false;
+  }
+
+  ctx.waitUntil((async () => {
+    const decision = await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
+    if (decision && !(await hasManualAllowForReplyAiItem(env, itemRow))) {
+      await finalizeReplyAiDecision(env, itemRow, decision);
+    }
+  })().catch(() => null));
+  return true;
+}
+
+async function classifyReplyAiItemEntries(env, entries, options) {
   await ensureAiFeedSchema(env);
+  const classifyOptions = options && typeof options === "object" ? options : {};
+  const deferTeacherReview = Boolean(classifyOptions.deferTeacherReview && classifyOptions.ctx && typeof classifyOptions.ctx.waitUntil === "function");
   const normalizedEntries = Array.isArray(entries)
     ? entries.map((entry, index) => ({
       clientItemId: normalizeReplyAiClientItemId(entry && entry.clientItemId, `reply-ai-entry-${index + 1}`),
@@ -9471,6 +9487,9 @@ async function classifyReplyAiItemEntries(env, entries) {
       return null;
     }
     teacherReviewBudget -= 1;
+    if (deferTeacherReview && scheduleReplyAiTeacherReview(classifyOptions.ctx, env, settings, itemRow, riskRow || null)) {
+      return null;
+    }
     return await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
   };
 
@@ -9580,8 +9599,10 @@ async function classifyReplyAiItemEntries(env, entries) {
       const decisionMap = new Map();
       const visualEntries = [];
       const textOnlyEntries = [];
+      const providerConfig = buildAiProviderConfig(group.settings);
+      const canSendImageEvidence = providerSupportsImageInputs(providerConfig);
       group.entries.forEach((entry) => {
-        if (buildReplyAiImageEvidenceUrls(entry.itemRow).length > 0) {
+        if (canSendImageEvidence && buildReplyAiImageEvidenceUrls(entry.itemRow).length > 0) {
           visualEntries.push(entry);
         } else {
           textOnlyEntries.push(entry);
@@ -9662,12 +9683,12 @@ async function classifyReplyAiItemEntries(env, entries) {
   return results;
 }
 
-async function classifyReplyAiItem(env, itemId) {
+async function classifyReplyAiItem(env, itemId, options) {
   const clientItemId = `reply-ai-single-${Number(itemId || 0)}`;
   const results = await classifyReplyAiItemEntries(env, [{
     clientItemId,
     itemId: Number(itemId || 0)
-  }]);
+  }], options);
   return results.get(clientItemId) || buildReplyAiNotFoundDecision();
 }
 

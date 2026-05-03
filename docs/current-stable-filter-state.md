@@ -31,6 +31,7 @@
 - 2026-05-03 23:45 起，当前 DeepSeek 配置不能直接看头像图，但插件会先用页面文字、随机账号形态、主帖相关性和批量短口号结构挡住“全国安排头像 + 中英混合空话”这类垃圾；新增 `pattern:bilingual-short-slogan-lure-account` 和 `bilingual_short_slogan_reply` 证据，避免硬写截图里的具体英文词。
 - 2026-05-04 00:37 起，重复英文标签的识别会先做字符正规化，能识别 X 渲染出的上标/花体 `ᴰᵉˡᵘˢⁱᵒⁿ`、`ᴴᵘˢʰ` 这类标签；装饰符号壳也不再把短中文空话长度撑超限。截图样本 `Pxrids`、`Xgoasmby`、`Xducqo` 这类“全国安排头像 + 随机账号 + 与主帖无关短口号”应隐藏或先临时下沉给 AI 老师复核。
 - 2026-05-04 01:24 起，`等待 AI 判断` 不再等于一律先隐藏。低风险候选仍会送 AI 老师判断和沉淀学习样本，但等待期间先显示；只有强风险或候选分数达到 3 的内容才临时下沉。AI 批量请求等待时间已放宽到 30 秒，减少云端稍慢时一直卡在 `pending`。
+- 2026-05-04 01:59 起，回复 AI 体验目标进一步改为“已知先立刻处理，未知可疑尽快 AI，等待不打扰正常内容”。页面队列 180ms 内发出；作者资料补充取证最多等 1.2 秒；AI 批量结果缺失、失败或部分返回会自动重试；只有极高风险或分数达到 6 的候选才临时隐藏。数据库 / AI 记忆 / 已知规则命中不再被 AI 老师复核阻塞，页面先拿到结果处理，老师复核在后台继续补标注和记忆。DeepSeek 不能看图时，头像证据候选继续走批量文本判断，避免拆成多次慢调用。
 - AI 第一次高置信隐藏后，云端数据库会作为“AI 记忆本”复用结果
 - 本地规则继续负责采集、风险信号、立即安全下沉和排队排序；普通正常回复不进 AI 队列。
 
@@ -142,9 +143,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-04-0124`
-  - 扩展版本 `0.1.66`
-  - App / Extension 版本 `1.0.66 (67)`
+  - `BUILD_ID = 2026-05-04-0159`
+  - 扩展版本 `0.1.67`
+  - App / Extension 版本 `1.0.67 (68)`
+  - 2026-05-04 01:59 已修用户本轮指出的回复审核速度主链路：本地等待云端结果的候选不再默认隐藏，临时隐藏阈值提高到 6；AI 队列发送等待缩到 180ms，作者资料取证加 1.2 秒上限，AI 批量返回缺项/失败时会自动重试并重新扫描页面。真实 Safari 详情页 `https://x.com/YLDLZN/status/2050723821460853237` 验证 `build=2026-05-04-0159`、`detail=1`、`flushes=12`、`manualButtons=12`、`sideButtons=4`、`articles=28`、`stage=scan:done`。本轮没有改数据库结构、没有删除 D1 数据、没有新增付费 AI 能力。
   - 2026-05-04 01:24 已修用户恢复正常回复后暴露出的 AI 等待误藏问题：本地 `buildReplyAiModerationCandidate` 继续把可疑项送 AI 老师，但新增 `pendingHideRequested`，只有强风险或候选分数达到 3 才在等待 AI 时隐藏；低风险候选等待期间显示。请求云端 AI 批量判断的等待时间从 8 秒提高到 30 秒，缓存号改为 `web25-reply-ai-cache-v8`。真实 Safari 详情页验证 `build=2026-05-04-0124`、`detail=1`、`flushes=3`、`manualButtons=3`、`sideButtons=4`、`articles=54`、`stage=scan:done`。本轮没有改本地规则阈值、没有改数据库结构、没有删除 D1 数据。
   - 2026-05-04 00:37 已补用户截图里 `Pxrids / Xgoasmby / Xducqo` 这类漏网：根因是 X 页面把 `Delusion/Hush` 渲染成上标小字母，旧的重复英文标签识别拿原始文本匹配普通英文字母，所以没有把它们送进 AI；第三条的埃及装饰壳则被算进短口号长度，刚好超过泛化短空话阈值。新版本地和 Worker 同步改为先正规化花体/上标字母，再识别重复英文标签；泛化短空话长度只看实际文字内容，不让装饰壳撑长。回归：截图三条命中；`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW`、普通账号的歌词/正常语境短句放过。
   - 2026-05-03 23:45 已补“全国安排头像同款但当前模型不能看图”的文字/上下文兜底：本地和 Worker 同步新增 `bilingual-short-slogan-lure-account`，识别随机英文数字账号发“重复英文标签包住中文空洞短句 + emoji 装饰”的批量低信息诱饵。回归：截图同款 `SADNESS/EVENING/WINDOW/RAINY/FLOWER ... 英文标签` 均隐藏；`BTC 今天走势挺强 BTC 🚀`、`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW` 放过。本轮没有改数据库结构、没有删除 D1 数据。
@@ -181,7 +183,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `9d02f64c-cbc0-4d47-b106-37c66691c0d8`
+  - Version ID: `b2c39461-7023-4c38-a252-a1d0ee84a816`
+  - 2026-05-04 01:59 已部署 `BUILD_ID=2026-05-04-0159` / `extensionVersion=0.1.67`。Worker 侧改为数据库、AI 记忆、数据库候选规则和旧复用层命中后先立刻返回给页面，AI 老师复核通过后台继续做，不再拖慢已知垃圾的处理；高置信老师隐藏仍会写入结果、标注、记忆和候选。当前 DeepSeek 不支持图片输入时，头像证据候选仍保持批量文本判断。公网首页、控制台和 `/downloads/latest.json` 已确认 200，下载清单返回 `buildId=2026-05-04-0159`、`extensionVersion=0.1.67`；`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-04 01:24 已部署 `BUILD_ID=2026-05-04-0124` / `extensionVersion=0.1.66`。这次 Worker 逻辑未改，发布是为了同步新版 Safari/Chrome 下载包和公网清单；公网首页、控制台和 `/downloads/latest.json` 已确认 200，下载清单返回 `buildId=2026-05-04-0124`、`extensionVersion=0.1.66`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-04 00:42 已部署 `BUILD_ID=2026-05-04-0037` / `extensionVersion=0.1.65`。Worker 同步修花体/上标英文标签和装饰壳短口号证据，避免本地能识别、云端数据库候选键却不一致。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，下载清单返回新版；只读路线探针显示 `Pxrids`、`Xducqo` 同类样本会进入外接 AI 路线且不写数据库。
   - 2026-05-03 23:45 已部署 `BUILD_ID=2026-05-03-2345` / `extensionVersion=0.1.64`。线上探针 `Dakfzsyv @dakfzsyv19237 / SADNESS 人间起落情绪皆有你 SADNESS 🍂🧢` 带真实 DeepSeek 调用返回 `Final layer: ai / ready / hide / high`，规则候选键为 `pattern:bilingual-short-slogan-lure-account`，理由为随机账号的无关中英混合短口号；公网 `/downloads/latest.json` 返回新 build 和版本。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
