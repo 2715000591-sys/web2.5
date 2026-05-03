@@ -13,6 +13,7 @@ This file is the first thing future Codex sessions should read. The user does no
 - If a change affects the extension filtering behavior, update both local extension code and Cloudflare Worker code in the same pass.
 - If a change affects the stable product state, update the relevant docs before finishing.
 - For the existing reply-moderation AI, the user prefers a stronger “AI as teacher” posture. Do not avoid bounded extra AI checks merely to save tokens; it is acceptable to send high-risk or database-caught candidates for sampled AI review so the database learns better. Still keep normal replies out of AI, keep batching/cooldowns, and do not introduce a new paid provider or broad full-page AI calling without explaining the cost/risk.
+- When the user sends a screenshot of missed spam, do not assume they want the exact text hard-coded into the extension. Treat the screenshot first as evidence for improving the AI/database teaching method: explain the likely signals, ask or discuss before changing code when the intent is ambiguous, and prefer better AI evidence, prompts, routing, image/avatar understanding, and database learning over one-off literal phrase patches. If older notes conflict with this, this rule wins.
 
 ## Data Safety
 
@@ -30,6 +31,7 @@ This file is the first thing future Codex sessions should read. The user does no
 
 - The current X / Safari filtering experience is a stable asset. Do not casually rewrite thresholds, UI flow, or the main hide/restore behavior.
 - Name-based filtering matters. Risky display names such as free-sex bait, local hookup bait, numeric-handle bait, and low-information lure names must continue to be considered.
+- Screenshot-level evidence matters. If avatars or images show clear solicitation or routing text such as `全国安排` / `全国可飞`, and the configured AI provider can safely inspect images, route that image evidence to AI for high-risk candidates. If the provider cannot inspect images, say so plainly and propose the smallest safe way to add image/OCR evidence before changing paid providers or broadening API usage.
 - Keep these code paths aligned:
   - `extension/content/rules.js`
   - `extension/content/content.js`
