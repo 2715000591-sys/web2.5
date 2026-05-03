@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-0022";
+  const BUILD_ID = "2026-05-03-0037";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -10,10 +10,11 @@
   const NORMAL_SCAN_DELAY_MS = 180;
   const MIN_SCAN_INTERVAL_MS = 140;
   const SCROLL_IDLE_SCAN_DELAY_MS = 260;
-  const REPLY_AI_BATCH_MAX_ITEMS = 6;
-  const REPLY_AI_BATCH_FLUSH_DELAY_MS = 1200;
-  const REPLY_AI_MIN_BATCH_INTERVAL_MS = 4000;
-  const REPLY_AI_BASE_SUSPICION_THRESHOLD = 3;
+  const REPLY_AI_BATCH_MAX_ITEMS = 8;
+  const REPLY_AI_BATCH_FLUSH_DELAY_MS = 900;
+  const REPLY_AI_MIN_BATCH_INTERVAL_MS = 1500;
+  const REPLY_AI_BASE_SUSPICION_THRESHOLD = 2;
+  const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 5;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 240;
   const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v1";
@@ -5078,7 +5079,8 @@
   function buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount) {
     const emptyCandidate = {
       shouldQueue: false,
-      score: 0
+      score: 0,
+      teacherReviewRequested: false
     };
 
     if (!state.replyAiEnabled || !state.backendBaseUrl || !state.syncKey || !state.deviceId) {
@@ -5215,6 +5217,16 @@
     if (analysis && analysis.hasAccountMention) {
       score += 1;
     }
+    if (!protectedAccount && suspiciousHandle && shortOrThinReply) {
+      score += 1;
+    }
+    if (!protectedAccount && suspiciousHandle && analysis && (
+      analysis.hasDecorativeSloganBait
+      || analysis.hasPoeticSpamSloganBait
+      || analysis.hasEmojiNoiseBait
+    )) {
+      score += 1;
+    }
     if (matchedSlots.includes("relationship_or_erotic")) {
       score += 1;
     }
@@ -5233,6 +5245,11 @@
       || Boolean(analysis && analysis.hasExternalContactPayload)
       || matchedSlots.includes("account_redirect")
       || Boolean(analysis && analysis.hasEroticMentionRedirect)
+      || (!protectedAccount && suspiciousHandle && Boolean(analysis && (
+        analysis.hasDecorativeSloganBait
+        || analysis.hasPoeticSpamSloganBait
+        || analysis.hasEmojiNoiseBait
+      )))
       || (accountMetadataSignals && shortOrThinReply);
     const hasWeakTriggerCombo = score >= REPLY_AI_BASE_SUSPICION_THRESHOLD && (
       lureDisplayName
@@ -5259,7 +5276,16 @@
 
     return {
       shouldQueue: Boolean(hasStrongTrigger || hasWeakTriggerCombo),
-      score: score
+      score: score,
+      teacherReviewRequested: Boolean(
+        hasStrongTrigger
+        || score >= REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD
+        || (!protectedAccount && suspiciousHandle && Boolean(analysis && (
+          analysis.hasDecorativeSloganBait
+          || analysis.hasPoeticSpamSloganBait
+          || analysis.hasEmojiNoiseBait
+        )))
+      )
     };
   }
 
@@ -5397,7 +5423,9 @@
             accountProtected: task.protectedAccount ? 1 : 0,
             avatarImageUrl: task.avatarEvidence && task.avatarEvidence.imageUrl ? task.avatarEvidence.imageUrl : "",
             avatarAltText: task.avatarEvidence && task.avatarEvidence.altText ? task.avatarEvidence.altText : "",
-            avatarEvidenceTags: task.avatarEvidence && Array.isArray(task.avatarEvidence.evidenceTags) ? task.avatarEvidence.evidenceTags : [],
+            avatarEvidenceTags: task.avatarEvidence && Array.isArray(task.avatarEvidence.evidenceTags)
+              ? task.avatarEvidence.evidenceTags.concat(task.teacherReviewRequested ? ["teacher_review_requested"] : [])
+              : (task.teacherReviewRequested ? ["teacher_review_requested"] : []),
             avatarFetchStatus: task.avatarEvidence && task.avatarEvidence.fetchStatus ? task.avatarEvidence.fetchStatus : "not_requested",
             avatarVisionRequested: task.avatarEvidence && task.avatarEvidence.visionRequested ? 1 : 0,
             profilePath: profileSignals && profileSignals.profilePath ? profileSignals.profilePath : "",
@@ -5447,7 +5475,7 @@
     return null;
   }
 
-  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, avatarEvidence, protectedAccount, analysis, aiCandidateScore) {
+  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, avatarEvidence, protectedAccount, analysis, aiCandidateScore, teacherReviewRequested) {
     const cacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
     if (!cacheKey) {
       return null;
@@ -5470,6 +5498,7 @@
       manualKeys: manualKeys,
       authorMeta: authorMeta,
       avatarEvidence: avatarEvidence || null,
+      teacherReviewRequested: Boolean(teacherReviewRequested),
       protectedAccount: protectedAccount,
       analysis: analysis,
       aiCandidateScore: Number(aiCandidateScore || 0),
@@ -5810,6 +5839,7 @@
           shouldQueueAi: shouldQueueAi,
           aiCacheKey: aiCacheKey,
           aiCandidateScore: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0),
+          teacherReviewRequested: Boolean(aiCandidate && aiCandidate.teacherReviewRequested),
           aiReady: Boolean(readyAiDecision),
           aiReasonShort: readyAiDecision && readyAiDecision.shouldHide === true
             ? String(readyAiDecision.reasonShort || "")
@@ -5903,7 +5933,8 @@
             entry.avatarEvidence,
             entry.protectedAccount,
             entry.analysis,
-            entry.aiCandidateScore
+            entry.aiCandidateScore,
+            entry.teacherReviewRequested
           );
         });
       root.dataset.web25Stage = "scan:actions-ready";

@@ -42,7 +42,8 @@
 - 回复区 AI 默认提示词已进一步收紧：成人/色情内容本身允许；证据不足时放过；普通短句不能只因短就隐藏；`meaningless_bait` 必须有风险账号或导流证据支撑。
 - 已补强通用 JSON 模式提示：当平台不支持严格 JSON Schema、只能走普通 JSON 对象模式时，Worker 会把允许使用的审核标签明确写进提示里，避免模型自造标签。
 - 2026-05-01 已修复扩展侧 AI 排队保护：本地规则必须先判定为可疑候选，回复才会送入 AI 队列，避免无脑调用模型。
-- 2026-05-01 已继续收紧扩展侧 AI 排队：如果本地/数据库规则已经能直接隐藏，例如 `找个同城的哥哥` 这类 `pattern:geo-relationship-bait`，就不再送 AI，避免为模板垃圾浪费 API 额度。
+- 2026-05-01 已继续收紧扩展侧 AI 排队：如果本地/数据库规则已经能直接隐藏，例如 `找个同城的哥哥` 这类 `pattern:geo-relationship-bait`，原来不再送 AI，避免为模板垃圾浪费 API 额度。
+- 2026-05-03 已按用户新要求把 AI 老师强度开大：数据库已命中的高风险候选现在可以带 `teacher_review_requested`，云端每批最多 4 条追加调用已保存的 DeepSeek 复核。普通回复仍不进 AI，已有数据库规则仍先挡住明显垃圾。
 - 2026-05-01 已收紧基础审核口径：正常成人话题、色情讨论、性教育/平台治理讨论不应仅因色情词被隐藏；基础层要保护正常表达，只隐藏诈骗、约见引流、联系方式、木马/安装包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。头像/图片只有在未来真的采集并提供给 AI 时才能作为辅助证据，不能让模型凭空脑补。
 - 官网控制台“最近 AI 隐藏记录”已新增“恢复误判”。恢复会写入 `manual_allow`，并把对应 AI 结果改成 `manual_allow/allow`，用于纠正单条误判。
 - `/api/ai-settings/test` 已支持传入临时 `sample` 做一次性识别测试；样本不会写入 `reply_ai_items`。
@@ -58,12 +59,12 @@
 
 - 站点：`https://colorful-toilet.colorful-toilet.workers.dev/`
 - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- Worker Version ID：`3d44a89e-52c4-477c-967f-47eed7d72a6c`
-- Git commit：当前分支最新提交包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护，以及保存 AI 设置时不再误清空已有 Key 的修复
+- Worker Version ID：`57c6e71e-3c8b-44a8-afb9-aa16e9cecf76`
+- 当前线上版本包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护、保存 AI 设置时不再误清空已有 Key 的修复，以及 2026-05-03 上线的 AI 老师抽查数据库命中机制。
 
 ## 3. 还没完成
 
-- DeepSeek API Key 已重新加密保存，并已通过临时引流 hide / 正常成人讨论 allow 两条测试；还需要用真实 X 回复做页面级验收。
+- DeepSeek API Key 已重新加密保存，并已通过临时引流 hide / 正常成人讨论 allow 两条测试；2026-05-03 已用开发者探针验证数据库命中时也能追加调用 DeepSeek 老师复核。后续仍应继续用自然遇到的真实 X 样本观察误判和漏网。
 - 已产生少量测试调用消耗；2026-05-01 的 6 条小样本批量测试约消耗 `2805` token。
 - 2026-05-01 的 4 条成人内容边界临时测试也产生少量调用消耗，但没有写入真实回复审核数据表。
 - 还没有做真实 X 页面回复审核验收。
@@ -74,6 +75,8 @@
 2026-05-02 已完成数据库回填和 AI 记忆库整理：线上 `moderation_samples=1220`、`moderation_sample_labels=1226`、`reply_ai_memory active=84`。这说明数据库学习库已经有内容。下一步不是继续盲目回填，而是看真实页面里每条可疑回复最终走的是哪一层。
 
 2026-05-02 15:24 已进一步上线数据库接管层：线上 `moderation_rule_candidates active=222`、`candidate=64`。现在云端收到可疑回复后，会先查 `reply_ai_memory`，再查 `moderation_rule_candidates`；命中时返回 `db_rule_*` 并直接隐藏，不再调用外部 AI。已验证 `找个同城弟弟` 命中 `db_rule_pattern`，测试 item `1097/1098` 的新外部 AI 调用数为 `0`。后续看真实页面时，重点区分 `decisionLayer=ai`（真实模型调用）、`ai_memory_*`（AI 记忆复用）、`db_rule_*`（数据库候选规则接管）。
+
+2026-05-03 09:39 已调整为“数据库先挡住，AI 老师再抽查”。数据库命中不再绝对代表外接 AI 不运行；如果插件给候选打上 `teacher_review_requested`，Worker 会在每批最多 4 条的上限内追加调用 DeepSeek。线上样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 命中 `pattern:geo-relationship-bait`，同时真实调用 DeepSeek，最终 `Final layer: ai / ready / hide / high`。开发者探针默认不写数据库。
 
 2026-05-02 17:11 已追加验证用户指出的风险昵称场景：`孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 命中 `db_rule_pattern`，`model=moderation-rule-candidates-2026-05-02-v1`，不是 `deepseek-v4-flash`。这说明它走数据库候选规则接管，没有进入外部 AI 调用。测试 item 为 `1099`。
 
@@ -247,7 +250,7 @@ AI 只能作为辅助层，不要替换当前稳定筛选主链路。
 - 插件本地只负责挑可疑候选，不负责把所有内容都送 AI。
 - 云端收到候选后，先查 `reply_ai_memory`。
 - 记忆命中直接返回结果，控制台归入 `AI 学习库屏蔽`，不消耗外部 API。
-- 记忆未命中，再查 `moderation_rule_candidates`；命中返回 `db_rule_*`，也不消耗外部 API。
+- 记忆未命中，再查 `moderation_rule_candidates`；命中会先返回 `db_rule_*` 作为兜底隐藏。2026-05-03 起，如果该候选带 `teacher_review_requested`，云端可在每批最多 4 条的上限内追加调用 AI 老师复核。
 - 学习库和数据库候选都未命中，才读取用户 AI 设置并调用外部模型 API。
 - AI 首次判断写入 `reply_ai_results`。
 - AI 判断同时写入 `moderation_sample_labels`，成为训练/评测证据。

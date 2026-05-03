@@ -116,7 +116,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`5fe62709-ebb6-4c75-97e6-f86546d4bac7`
+  - Version ID：`57c6e71e-3c8b-44a8-afb9-aa16e9cecf76`
+  - 2026-05-03 09:39 已发布 `BUILD_ID=2026-05-03-0037` / `extensionVersion=0.1.55`。这次接手上一位 AI 的半成品并补完闭环：用户明确要求 AI 辅助强度开大，AI 是老师，token 不是主要问题；新版把本地 AI 候选批量上限从 6 提到 8、发送等待从 1200ms 降到 900ms、最小间隔从 4000ms 降到 1500ms、基础候选分从 3 降到 2，并给高风险候选打 `teacher_review_requested`。云端仍先查静态规则、AI 记忆、数据库候选规则；如果数据库已命中且带老师复核标记，每批最多 4 条追加调用 DeepSeek。线上探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 命中 `pattern:geo-relationship-bait`，同时真实调用 DeepSeek，返回 `Final layer: ai / ready / hide / high`，开发者探针不写数据库。公网首页、控制台、`/downloads/latest.json` 均 200；`latest.json` 返回 `buildId=2026-05-03-0037`、`extensionVersion=0.1.55`。`npm run cloud:audit-data-layer` 通过；本轮没有改 schema、没有清理或删除 D1 数据。
   - 2026-05-03 00:22 已发布 `BUILD_ID=2026-05-03-0022` / `extensionVersion=0.1.54`。用户指出剩余 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊`，怀疑之前是在删具体样本而不是算法筛选；本次明确按算法修：本地和 Worker 都把 `人间.{0,4}(钟情|柔情)` 纳入 `pattern:poetic-slogan-lure-account`，仍依赖随机数字 handle、emoji 噪音、上下文脱节等组合信号，不是删账号、删历史或清数据库。真实 X 页面头像图片没有可读 alt，Safari 本地不能直接读出头像里的 `全国安排`；头像继续作为云端 AI 辅助证据，但即时隐藏靠可见文本和账号风险信号。线上探针返回 `db_rule_pattern / ready / hide / high`，外接 AI 不运行、数据库不写入；公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0022`、`extensionVersion=0.1.54`。本机真实 X 详情页返回 `build=2026-05-03-0022`、`stage=scan:done`、`articles=27`，`Minsqw` cell 为 `data-web25-hidden=1` 且 `display:none`。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-03 00:11 已发布 `BUILD_ID=2026-05-03-0011` / `extensionVersion=0.1.53`。用户复查仍看到这些内容，根因不是云端没同步，而是真实 X 页面里的文本不是昨天测试的 emoji 版本；实际是 `༙༚ 晨昏静候柔意 ༚༙`、`༘꙳ 温柔漫染眉眼 ꙳༘`、`༳ 晨昏暗生情愫 ༳`、`ꧨ 时光赠予柔情 ꧨ`、`꧆ 晚风裹着温柔 ꧇`、`༗ 俗世偏爱温存 ༗`、以及纯 `缘起眉眼温柔`。旧规则要求诗句模板带 emoji，所以没有自动收掉真实版本。新版本地和 Worker 都把这些固定诗句模板 + 随机数字 handle 直接归入 `pattern:poetic-slogan-lure-account`，不再要求 emoji。线上 7 条真实文字探针全部返回 `db_rule_pattern / ready / hide / high`，外接 AI 不运行；本机真实 X 详情页 7 条对应 cell 均为 `data-web25-hidden=1` 且 `display:none`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0011`、`extensionVersion=0.1.53`。
   - 2026-05-02 23:57 已发布 `BUILD_ID=2026-05-02-2357` / `extensionVersion=0.1.52`。本次不是继续扩大普通 emoji 规则，而是修正“数据库为什么没挡住”的根因：Worker 和本地手动反馈原来会把 `温柔漫染眉眼` 这类同时带诗句模板和装饰空话的样本优先归到较宽的 `pattern:decorative-slogan-lure-account`，导致没有命中更精确的 `pattern:poetic-slogan-lure-account`。新版把诗句式垃圾键排在装饰空话键前面，并在备份 D1 后把 `pattern:poetic-slogan-lure-account` 登记为开发者确认的活跃数据库规则。备份：`backups/d1/web25-2026-05-02T15-57-00-before-poetic-slogan-rule.sql`。线上 7 条截图同款 `lvdro/Gjvyhno/Mucbt/Agjghbw/Nyoad/Cyfbld/Mocbr` 探针全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，外接 AI 不需要运行；公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-02-2357`、`extensionVersion=0.1.52`。本机 App 已替换，签名、`pluginkit`、`npm run safari:verify-live` 通过；真实 X 详情页返回 `build=2026-05-02-2357`，其中一个详情页有可见 `冲走` 按钮 3 个、右栏关闭按钮 3 个。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
@@ -180,11 +181,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-03-0022`
-  - extension manifest version：`0.1.54`
-  - App / Extension version：`1.0.54 (55)`
+  - `BUILD_ID = 2026-05-03-0037`
+  - extension manifest version：`0.1.55`
+  - App / Extension version：`1.0.55 (56)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-03 09:40 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-0037` 和 `teacher_review_requested` 老师复核标记。签名验证通过，`pluginkit` 显示扩展版本 `1.0.55`。`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-03-0037`、`detail=1`、`sidebar=1`、`flushes=4`、`sideButtons=3`、`manualButtons=4`、`marking=1`、`articles=25`、`stage=scan:done`。
   - 2026-05-03 00:22 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-0022` 和 `人间.{0,4}(钟情|柔情)` 新模板。签名验证通过，`pluginkit` 显示扩展版本 `1.0.54`。`npm run safari:verify-live` 通过读取新版 build；真实 X 详情页加载到 `articles=27`，`Minsqw / 人间钟情柔情` 对应格子 `display:none`。
   - 2026-05-03 00:11 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-0011` 和新增装饰符号壳识别。签名验证通过，`pluginkit` 显示扩展版本 `1.0.53`。`npm run safari:verify-live` 通过读取新版 build；真实 X 详情页随后加载到 `articles=27`，7 条用户指出的同款全部隐藏，页面中对应格子 `display:none`。
   - 2026-05-02 23:57 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-02-2357`、新顺序的 `pattern:poetic-slogan-lure-account` 键和截图同款诗句模板。签名验证通过，`pluginkit` 显示扩展版本 `1.0.52`。`npm run safari:verify-live` 对两个真实 X 详情页通过：一个页面 `articles=15`、可见 `冲走` 按钮 3 个、右栏关闭按钮 3 个、`stage=scan:done`；另一个页面读到新版 build 但 X 暂未加载回复列表。
@@ -492,7 +494,7 @@ Safari App：
 
 可以直接把下面这段发给新对话：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`、`docs/ai-api-provider-handoff.md`，然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前 X / Safari 插件主链路稳定，`BUILD_ID=2026-05-02-1912`，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；云端必须先查 `reply_ai_memory`，再查 `moderation_rule_candidates`，都没命中才调用外部模型；AI 直接高置信隐藏要写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，并刷新数据库候选规则；用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`、`docs/ai-api-provider-handoff.md`，然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前 X / Safari 插件主链路稳定，`BUILD_ID=2026-05-03-0037`，冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，数据库已命中的高风险候选可以带 `teacher_review_requested` 追加给 AI 老师抽查复核；云端必须先查 `reply_ai_memory`，再查 `moderation_rule_candidates`，没有命中或命中但需要老师抽查时才调用外部模型；AI 直接高置信隐藏要写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，并刷新数据库候选规则；用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
 
 ## 12. 维护这份文件的规则
 

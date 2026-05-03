@@ -23,6 +23,7 @@
 
 - 评论区先过本地基础规则和云端数据库学习库，明显垃圾不能在等待 AI 时露出来
 - 云端数据库没截住的新话术，再交给 AI 审核
+- 2026-05-03 起，用户明确要求“AI 老师”多教一点：高风险或数据库已命中的可疑候选，可以在有预算上限的情况下追加给 AI 抽查复核，用来沉淀更好的 AI 记忆；普通正常回复仍然不进 AI。
 - AI 第一次高置信隐藏后，云端数据库会作为“AI 记忆本”复用结果
 - 本地规则继续负责采集、风险信号、立即安全下沉和排队排序；普通正常回复不进 AI 队列。
 
@@ -30,6 +31,7 @@
 
 - 明显已知垃圾先由基础规则 / 数据库直接截住
 - 新话术先交给 AI 判断；等待 AI 期间，高风险候选会临时下沉，AI 放过后自动显示
+- 数据库已经截住的高风险项也可以少量抽给 AI 老师复核；AI 高置信隐藏可继续写入记忆，AI 不高置信时仍回落到原数据库规则，不让明显垃圾露出来
 - AI 判过的相同或可靠相似内容，后续由云端记忆库直接复用，减少重复调用
 - 不要把用户单次 `冲走` 或旧本地规则直接升级成所有人共享的公共规则
 - 用户手动 `冲走` / `恢复` 应先成为样本和标注证据，后续再由多贡献者共识或开发者确认升级，不直接污染公共规则。
@@ -128,9 +130,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-03-0022`
-  - 扩展版本 `0.1.54`
-  - App / Extension 版本 `1.0.54 (55)`
+  - `BUILD_ID = 2026-05-03-0037`
+  - 扩展版本 `0.1.55`
+  - App / Extension 版本 `1.0.55 (56)`
+  - 2026-05-03 09:39 已按用户“AI 是老师、辅助强度可以开大”的要求上线老师复核层。本地候选更积极：批量上限从 6 到 8，发送等待从 1200ms 到 900ms，最小批量间隔从 4000ms 到 1500ms，AI 候选基础分从 3 到 2；高风险候选会带 `teacher_review_requested`。云端仍先查静态规则、AI 记忆、数据库候选规则；如果数据库已命中且带老师复核标记，每批最多 4 条追加调用 DeepSeek。公网探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 在命中 `pattern:geo-relationship-bait` 的同时真实调用外接 AI，返回 `Final layer: ai / ready / hide / high`，不写数据库。真实 Safari 详情页验证 `build=2026-05-03-0037`、`stage=scan:done`、`articles=25`、可见 `冲走` 按钮 4 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 00:22 已补用户复查后剩下的一条 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊`。这不是删除某个账号或某条历史，而是把 `人间.{0,4}(钟情|柔情)` 加入现有诗句式低信息引流模板；仍需要随机数字 handle、emoji 噪音、上下文脱节等组合信号支撑。真实 X 页头像图片本身在 DOM 里没有可读 `全国安排` 文字，Safari 本地不能直接读图识字；头像仍会作为云端 AI 辅助证据，但即时隐藏要靠可见正文、账号形态和上下文信号。真实 Safari 详情页 `https://x.com/bandagemiao/status/2050238861318754634` 已验证：`build=2026-05-03-0022`、`stage=scan:done`、`articles=27`，该 cell 为 `data-web25-hidden=1` 且 `display:none`。
   - 2026-05-03 00:11 已修复用户复查仍能看到同款垃圾的真正原因：真实 X 页面里这些回复不是 emoji 版本，而是 `༙༚ 晨昏静候柔意 ༚༙`、`༘꙳ 温柔漫染眉眼 ꙳༘`、`༳ 晨昏暗生情愫 ༳`、`ꧨ 时光赠予柔情 ꧨ`、`꧆ 晚风裹着温柔 ꧇`、`༗ 俗世偏爱温存 ༗`，以及纯 `缘起眉眼温柔`。旧规则要求诗句模板至少带 emoji，所以只标记了按钮，没有自动收掉这些真实版本。新版把这些装饰符号和纯短句模板也纳入 `poetic-slogan-from-suspicious-handle`；本地回归 7 条真实文本全部隐藏，普通账号发 `缘起眉眼温柔`、`有缘自会相识。`、`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
   - 2026-05-02 23:57 已修正数据库候选键优先级：诗句式空洞模板 + 随机数字 handle 会优先归入 `pattern:poetic-slogan-lure-account`，再考虑较宽的 `pattern:decorative-slogan-lure-account`。这保证用户截图里的 7 条同款进入数据库时用更精确的模式键；本地回归 7 条全部隐藏，`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
@@ -155,7 +158,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `5fe62709-ebb6-4c75-97e6-f86546d4bac7`
+  - Version ID: `57c6e71e-3c8b-44a8-afb9-aa16e9cecf76`
+  - 2026-05-03 09:39 已部署 `BUILD_ID=2026-05-03-0037` 到公网。新版将高风险数据库命中项纳入有上限的 AI 老师复核：带 `teacher_review_requested` 的数据库命中候选，每批最多 4 条追加调用 DeepSeek；普通回复仍不全量进 AI。线上探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 命中 `pattern:geo-relationship-bait`，同时真实调用外接 AI，返回 `Final layer: ai / ready / hide / high`。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-0037`、`extensionVersion=0.1.55`。本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 00:22 已部署 `BUILD_ID=2026-05-03-0022` 到公网。线上探针 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，外接 AI 不运行、数据库不写入；公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0022`、`extensionVersion=0.1.54`。本轮没有改数据库结构、没有删除 D1 数据，复用 2026-05-02 23:57 已登记的活跃数据库规则。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-03 00:11 已部署 `BUILD_ID=2026-05-03-0011` 到公网。线上探针用 7 条真实页面文字全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0011`、`extensionVersion=0.1.53`。本轮没有改数据库结构、没有删除 D1 数据；复用 2026-05-02 23:57 已登记的活跃数据库规则。
   - 2026-05-02 23:57 已部署 `BUILD_ID=2026-05-02-2357` 到公网。发布前备份 D1 到 `backups/d1/web25-2026-05-02T15-57-00-before-poetic-slogan-rule.sql`，随后把 `pattern:poetic-slogan-lure-account` 登记为开发者确认的活跃数据库规则。线上 7 条截图同款探针全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-02-2357`、`extensionVersion=0.1.52`，首页和控制台返回 200。`npm run cloud:audit-data-layer` 通过。

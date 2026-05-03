@@ -65,7 +65,8 @@ const REPLY_AI_RECLASSIFY_LIMIT = 12;
 const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
 const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
 const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
-const REPLY_AI_BATCH_MAX_ITEMS = 6;
+const REPLY_AI_BATCH_MAX_ITEMS = 8;
+const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 4;
 const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
 const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
 const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
@@ -489,7 +490,8 @@ const REPLY_AI_AVATAR_EVIDENCE_TAGS = new Set([
   "emoji_noise_reply",
   "thin_or_bait_reply",
   "context_detached_reply",
-  "avatar_vision_requested"
+  "avatar_vision_requested",
+  "teacher_review_requested"
 ]);
 let aiFeedSchemaReadyPromise = null;
 
@@ -2848,7 +2850,14 @@ async function buildReplyAiRoutingProbe(env, viewer, payload) {
 
   let providerDecision = null;
   let providerError = "";
-  const wouldCallProvider = Boolean(!staticDecision && !memoryProbe.decision && !ruleProbe.decision && !globalBlockDecision && !reusableDecision);
+  const normalWouldCallProvider = Boolean(!staticDecision && !memoryProbe.decision && !ruleProbe.decision && !globalBlockDecision && !reusableDecision);
+  const teacherReviewWouldCallProvider = Boolean(
+    !staticDecision
+    && !memoryProbe.decision
+    && ruleProbe.decision
+    && shouldRequestReplyAiTeacherReview(itemRow, settings)
+  );
+  const wouldCallProvider = normalWouldCallProvider || teacherReviewWouldCallProvider;
   if (wouldCallProvider && normalizedPayload.callProvider) {
     try {
       providerDecision = await requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow || null);
@@ -2859,13 +2868,16 @@ async function buildReplyAiRoutingProbe(env, viewer, payload) {
 
   const finalDecision = staticDecision
     || memoryProbe.decision
+    || (teacherReviewWouldCallProvider && isDirectAiHighConfidenceHide(providerDecision) ? providerDecision : null)
     || ruleProbe.decision
     || globalBlockDecision
     || reusableDecision
     || providerDecision
     || buildDefaultReplyAiDecision({
       decisionLayer: wouldCallProvider ? "external_ai_would_run" : "skipped",
-      reasonShort: wouldCallProvider ? "数据库和学习库都未命中，下一步会调用外接 AI" : "未进入外接 AI",
+      reasonShort: teacherReviewWouldCallProvider
+        ? "数据库已命中，但这条会追加给 AI 老师复核教学"
+        : (wouldCallProvider ? "数据库和学习库都未命中，下一步会调用外接 AI" : "未进入外接 AI"),
       status: wouldCallProvider ? "pending" : "skipped",
       model: safeSettings.model
     });
@@ -9233,6 +9245,50 @@ async function finalizeReplyAiDecision(env, itemRow, decision) {
   return decision;
 }
 
+function shouldRequestReplyAiTeacherReview(itemRow, settings) {
+  return Boolean(
+    itemRow
+    && settings
+    && settings.replyAiEnabled
+    && settings.apiKey
+    && Array.isArray(itemRow.avatarEvidenceTags)
+    && itemRow.avatarEvidenceTags.includes("teacher_review_requested")
+  );
+}
+
+async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow) {
+  if (!shouldRequestReplyAiTeacherReview(itemRow, settings)) {
+    return null;
+  }
+
+  const scopeKey = buildReplyAiProviderScopeKey(itemRow.userId, settings);
+  const cooldownRow = await getAiProviderCooldownRow(env, scopeKey);
+  if (isAiProviderCoolingDown(cooldownRow)) {
+    return null;
+  }
+
+  try {
+    const decision = await requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow || null);
+    await clearAiProviderCooldown(env, scopeKey, itemRow, settings);
+    return isDirectAiHighConfidenceHide(decision) ? decision : null;
+  } catch (error) {
+    const errorMessage = error && error.message ? String(error.message) : "";
+    const retryableProviderFailure = /ai-provider-status-(429|500|502|503|504|529)/i.test(errorMessage);
+    if (retryableProviderFailure) {
+      await recordAiProviderFailure(
+        env,
+        scopeKey,
+        itemRow,
+        settings,
+        errorMessage.match(/ai-provider-status-\d+/i)
+          ? String(errorMessage.match(/ai-provider-status-\d+/i)[0] || "")
+          : "provider-failure"
+      );
+    }
+    return null;
+  }
+}
+
 async function classifyReplyAiItemEntries(env, entries) {
   await ensureAiFeedSchema(env);
   const normalizedEntries = Array.isArray(entries)
@@ -9245,6 +9301,7 @@ async function classifyReplyAiItemEntries(env, entries) {
   const settingsCache = new Map();
   const riskCache = new Map();
   const providerGroups = new Map();
+  let teacherReviewBudget = REPLY_AI_TEACHER_REVIEW_MAX_ITEMS;
 
   for (const entry of normalizedEntries) {
     const itemRow = await getReplyAiItemById(env, entry.itemId);
@@ -9282,6 +9339,14 @@ async function classifyReplyAiItemEntries(env, entries) {
 
     const candidateRuleDecision = await findModerationRuleCandidateDecision(env, itemRow);
     if (candidateRuleDecision) {
+      if (teacherReviewBudget > 0 && shouldRequestReplyAiTeacherReview(itemRow, settings)) {
+        teacherReviewBudget -= 1;
+        const teacherDecision = await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
+        if (teacherDecision) {
+          results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
+          continue;
+        }
+      }
       results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, candidateRuleDecision));
       continue;
     }

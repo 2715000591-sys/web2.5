@@ -12,6 +12,7 @@ This file is the first thing future Codex sessions should read. The user does no
 - The user explicitly says they “only understand human language.” Do not report status with unexplained terms like stash, worktree, upstream, unstaged, untracked, commit, push, deploy, Wrangler, Worker, or D1. Translate them first, for example: “代码没有没保存的改动，也没有没上传到 GitHub 的改动” or “代码已上传，但网站还没更新到公网，因为 Cloudflare 登录失效.”
 - If a change affects the extension filtering behavior, update both local extension code and Cloudflare Worker code in the same pass.
 - If a change affects the stable product state, update the relevant docs before finishing.
+- For the existing reply-moderation AI, the user prefers a stronger “AI as teacher” posture. Do not avoid bounded extra AI checks merely to save tokens; it is acceptable to send high-risk or database-caught candidates for sampled AI review so the database learns better. Still keep normal replies out of AI, keep batching/cooldowns, and do not introduce a new paid provider or broad full-page AI calling without explaining the cost/risk.
 
 ## Data Safety
 
