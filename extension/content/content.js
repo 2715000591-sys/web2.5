@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-1001";
+  const BUILD_ID = "2026-05-03-1039";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -10,13 +10,13 @@
   const NORMAL_SCAN_DELAY_MS = 180;
   const MIN_SCAN_INTERVAL_MS = 140;
   const SCROLL_IDLE_SCAN_DELAY_MS = 260;
-  const REPLY_AI_BATCH_MAX_ITEMS = 8;
-  const REPLY_AI_BATCH_FLUSH_DELAY_MS = 900;
-  const REPLY_AI_MIN_BATCH_INTERVAL_MS = 1500;
-  const REPLY_AI_BASE_SUSPICION_THRESHOLD = 2;
-  const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 5;
+  const REPLY_AI_BATCH_MAX_ITEMS = 12;
+  const REPLY_AI_BATCH_FLUSH_DELAY_MS = 650;
+  const REPLY_AI_MIN_BATCH_INTERVAL_MS = 750;
+  const REPLY_AI_BASE_SUSPICION_THRESHOLD = 1;
+  const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 3;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
-  const REPLY_AI_SESSION_CACHE_LIMIT = 240;
+  const REPLY_AI_SESSION_CACHE_LIMIT = 360;
   const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v1";
   const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
   const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
@@ -4836,6 +4836,16 @@
       && typeof window.Web25Rules.handleLooksSuspicious === "function"
       && window.Web25Rules.handleLooksSuspicious(authorMeta && authorMeta.handle ? authorMeta.handle : "")
     );
+    const highRiskDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksHighRisk === "function"
+      && window.Web25Rules.displayNameLooksHighRisk(authorMeta && authorMeta.displayName ? authorMeta.displayName : "")
+    );
+    const lureDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksLure === "function"
+      && window.Web25Rules.displayNameLooksLure(authorMeta && authorMeta.displayName ? authorMeta.displayName : "")
+    );
     const thinOrBait = Boolean(analysis && (
       analysis.hasMinimalTextPayload
       || analysis.hasFragmentedSymbolicReply
@@ -4857,6 +4867,12 @@
     if (suspiciousHandle) {
       tags.push("suspicious_handle");
     }
+    if (highRiskDisplayName) {
+      tags.push("high_risk_display_name");
+    }
+    if (lureDisplayName) {
+      tags.push("lure_display_name");
+    }
     if (analysis && analysis.hasPoeticSpamSloganBait) {
       tags.push("poetic_low_substance_reply");
     }
@@ -4865,6 +4881,12 @@
     }
     if (analysis && analysis.hasEmojiNoiseBait) {
       tags.push("emoji_noise_reply");
+    }
+    if (analysis && analysis.hasGeoRelationshipBait) {
+      tags.push("geo_relationship_bait");
+    }
+    if (analysis && analysis.hasSpamTemplateSignal) {
+      tags.push("spam_template_signal");
     }
     if (thinOrBait) {
       tags.push("thin_or_bait_reply");
@@ -4876,9 +4898,13 @@
     const shouldRequestVision = Boolean(
       imageUrl
       && !protectedAccount
-      && suspiciousHandle
+      && (suspiciousHandle || highRiskDisplayName || lureDisplayName)
       && (
         contextDetached
+        || highRiskDisplayName
+        || (lureDisplayName && thinOrBait)
+        || (analysis && analysis.hasGeoRelationshipBait)
+        || (analysis && analysis.hasSpamTemplateSignal)
         || (analysis && analysis.hasPoeticSpamSloganBait)
         || (analysis && analysis.hasDecorativeSloganBait)
         || (analysis && analysis.hasEmojiNoiseBait)
@@ -5240,6 +5266,30 @@
       score -= 1;
     }
 
+    const highValueContentSignal = Boolean(analysis && (
+      analysis.hasShareLinkScam
+      || analysis.hasExternalContactPayload
+      || analysis.hasGeoRelationshipBait
+      || analysis.hasExplicitEroticBait
+      || analysis.hasSpamTemplateSignal
+      || analysis.hasDecorativeSloganBait
+      || analysis.hasPoeticSpamSloganBait
+      || analysis.hasEmojiNoiseBait
+      || analysis.hasEroticMentionRedirect
+    ));
+    const suspiciousHandleWithContext = Boolean(
+      suspiciousHandle
+      && (
+        shortOrThinReply
+        || hasLongDigitHandle
+        || highValueContentSignal
+        || matchedSlots.length > 0
+        || Boolean(analysis && (
+          analysis.hasBaitQuestionShape
+          || analysis.hasGeoMeetupBait
+        ))
+      )
+    );
     const hasStrongTrigger = highRiskDisplayName
       || Boolean(analysis && analysis.hasShareLinkScam)
       || Boolean(analysis && analysis.hasExternalContactPayload)
@@ -5253,23 +5303,15 @@
       || (accountMetadataSignals && shortOrThinReply);
     const hasWeakTriggerCombo = score >= REPLY_AI_BASE_SUSPICION_THRESHOLD && (
       lureDisplayName
-      || suspiciousHandle
       || accountMetadataSignals
-      || Boolean(analysis && (
-        analysis.hasMinimalTextPayload
-        || analysis.hasFragmentedSymbolicReply
-        || analysis.hasThinSymbolOrNumberPayload
-        || analysis.hasLowInformationBadge
-        || analysis.hasEmojiNoiseBait
-        || analysis.hasGeoMeetupBait
-        || analysis.hasGeoRelationshipBait
-        || analysis.hasBaitQuestionShape
-        || analysis.hasExplicitEroticBait
-        || analysis.hasSpamTemplateSignal
-        || analysis.hasDecorativeSloganBait
-        || analysis.hasPoeticSpamSloganBait
-        || analysis.hasEmojiNoiseBait
-        || analysis.hasAccountMention
+      || suspiciousHandleWithContext
+      || (highValueContentSignal && (
+        highRiskDisplayName
+        || lureDisplayName
+        || suspiciousHandle
+        || accountMetadataSignals
+        || compactReplyLength <= 24
+        || matchedSlots.length >= 1
       ))
       || matchedSlots.length >= 2
     );
@@ -5280,6 +5322,7 @@
       teacherReviewRequested: Boolean(
         hasStrongTrigger
         || score >= REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD
+        || (highValueContentSignal && (suspiciousHandleWithContext || accountMetadataSignals || lureDisplayName || compactReplyLength <= 24))
         || (!protectedAccount && suspiciousHandle && Boolean(analysis && (
           analysis.hasDecorativeSloganBait
           || analysis.hasPoeticSpamSloganBait
@@ -5424,7 +5467,7 @@
             avatarImageUrl: task.avatarEvidence && task.avatarEvidence.imageUrl ? task.avatarEvidence.imageUrl : "",
             avatarAltText: task.avatarEvidence && task.avatarEvidence.altText ? task.avatarEvidence.altText : "",
             avatarEvidenceTags: task.avatarEvidence && Array.isArray(task.avatarEvidence.evidenceTags)
-              ? task.avatarEvidence.evidenceTags.concat(task.teacherReviewRequested ? ["teacher_review_requested"] : [])
+              ? (task.teacherReviewRequested ? ["teacher_review_requested"] : []).concat(task.avatarEvidence.evidenceTags)
               : (task.teacherReviewRequested ? ["teacher_review_requested"] : []),
             avatarFetchStatus: task.avatarEvidence && task.avatarEvidence.fetchStatus ? task.avatarEvidence.fetchStatus : "not_requested",
             avatarVisionRequested: task.avatarEvidence && task.avatarEvidence.visionRequested ? 1 : 0,

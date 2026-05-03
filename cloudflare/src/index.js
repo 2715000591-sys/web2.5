@@ -65,8 +65,8 @@ const REPLY_AI_RECLASSIFY_LIMIT = 12;
 const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
 const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
 const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
-const REPLY_AI_BATCH_MAX_ITEMS = 8;
-const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 4;
+const REPLY_AI_BATCH_MAX_ITEMS = 12;
+const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 8;
 const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
 const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
 const REPLY_AI_HIDE_REUSE_WINDOW_DAYS = 14;
@@ -491,14 +491,19 @@ const REPLY_AI_PROFILE_SIGNAL_LABELS = new Set([
 ]);
 const REPLY_AI_AVATAR_EVIDENCE_TAGS = new Set([
   "suspicious_handle",
+  "high_risk_display_name",
+  "lure_display_name",
   "poetic_low_substance_reply",
   "decorative_low_substance_reply",
   "emoji_noise_reply",
+  "geo_relationship_bait",
+  "spam_template_signal",
   "thin_or_bait_reply",
   "context_detached_reply",
   "avatar_vision_requested",
   "teacher_review_requested"
 ]);
+const REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT = 12;
 let aiFeedSchemaReadyPromise = null;
 
 function shouldTrustProvisionedAiFeedSchema(env) {
@@ -1145,7 +1150,7 @@ function buildAiProviderTestItem(sample) {
     avatarEvidenceTags: normalizeReplyAiStringList(
       source.avatarEvidenceTags || [],
       REPLY_AI_AVATAR_EVIDENCE_TAGS,
-      8
+      REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT
     ),
     avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(source.avatarFetchStatus || "not_requested"),
     avatarVisionRequested: source.avatarVisionRequested === true || Number(source.avatarVisionRequested || 0) === 1,
@@ -2691,7 +2696,7 @@ function buildHeuristicProbePayload(summary) {
     hasEmojiNoiseBait: Boolean(source.hasEmojiNoiseBait),
     hasContextDetachedBait: Boolean(source.hasContextDetachedBait),
     avatarVisionRequested: Boolean(source.avatarVisionRequested),
-    avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT),
     evidenceNotes: Array.isArray(source.evidenceNotes) ? source.evidenceNotes.slice(0, 12) : []
   };
 }
@@ -7383,7 +7388,7 @@ function normalizeReplyAiPayload(payload) {
     accountProtected: Number(source.accountProtected || 0) === 1,
     avatarImageUrl: normalizeReplyAiAvatarImageUrl(source.avatarImageUrl),
     avatarAltText: normalizeAiFeedText(source.avatarAltText, 160),
-    avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT),
     avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(source.avatarFetchStatus),
     avatarVisionRequested: Number(source.avatarVisionRequested || 0) === 1,
     profilePath: normalizeAiFeedText(source.profilePath, 240),
@@ -7756,7 +7761,7 @@ async function getReplyAiItemById(env, itemId) {
     accountProtected: Number(row.account_protected || 0) === 1,
     avatarImageUrl: normalizeReplyAiAvatarImageUrl(row.avatar_image_url || ""),
     avatarAltText: normalizeAiFeedText(row.avatar_alt_text || "", 160),
-    avatarEvidenceTags: normalizeReplyAiStringList(parseJsonArray(row.avatar_evidence_tags_json), REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarEvidenceTags: normalizeReplyAiStringList(parseJsonArray(row.avatar_evidence_tags_json), REPLY_AI_AVATAR_EVIDENCE_TAGS, REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT),
     avatarFetchStatus: normalizeReplyAiAvatarFetchStatus(row.avatar_fetch_status),
     avatarVisionRequested: Number(row.avatar_vision_requested || 0) === 1,
     profilePath: row.profile_path || "",
@@ -8506,7 +8511,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasPoeticSpamSloganBait,
     hasEmojiNoiseBait,
     hasContextDetachedBait,
-    avatarEvidenceTags: normalizeReplyAiStringList(avatarSignals, REPLY_AI_AVATAR_EVIDENCE_TAGS, 8),
+    avatarEvidenceTags: normalizeReplyAiStringList(avatarSignals, REPLY_AI_AVATAR_EVIDENCE_TAGS, REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT),
     avatarVisionRequested: Boolean(itemRow && itemRow.avatarVisionRequested),
     evidenceNotes
   };
@@ -9257,8 +9262,19 @@ function shouldRequestReplyAiTeacherReview(itemRow, settings) {
     && settings
     && settings.replyAiEnabled
     && settings.apiKey
-    && Array.isArray(itemRow.avatarEvidenceTags)
-    && itemRow.avatarEvidenceTags.includes("teacher_review_requested")
+    && (
+      (
+        Array.isArray(itemRow.avatarEvidenceTags)
+        && (
+          itemRow.avatarEvidenceTags.includes("teacher_review_requested")
+          || itemRow.avatarEvidenceTags.includes("avatar_vision_requested")
+          || itemRow.avatarEvidenceTags.includes("high_risk_display_name")
+          || itemRow.avatarEvidenceTags.includes("geo_relationship_bait")
+          || itemRow.avatarEvidenceTags.includes("spam_template_signal")
+        )
+      )
+      || Boolean(itemRow.avatarVisionRequested)
+    )
   );
 }
 
