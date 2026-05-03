@@ -161,8 +161,11 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-1039`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1117`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1256`
-- 扩展版本 `0.1.60`
-- App / Extension 版本 `1.0.60 (61)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-1327`
+- 扩展版本 `0.1.61`
+- App / Extension 版本 `1.0.61 (62)`
+
+2026-05-03 13:27 已替换本机 App 到 `BUILD_ID=2026-05-03-1327`，签名验证通过。UI 主体没改；只是为 AI 候选改成先显示 `AI 复审中` 的隐藏路线，并补 `附近的来` 这类风险昵称。`npm run safari:verify-live` 读到新版；真实 X 详情页 `https://x.com/yizhunli10167/status/2050601910487461905` 加载完成后 `build=2026-05-03-1327`、`stage=scan:done`、`articles=45`，`@hayes_jaco16929` 对应行 `display:none`。公网发布被 Cloudflare 登录令牌失效挡住，公网下载清单仍是上一版。
 
 2026-05-03 13:02 已替换本机 App 到 `BUILD_ID=2026-05-03-1256`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.60`。本轮没有改右栏 UI，只提高 AI 老师实际参与强度并换新版包。`npm run safari:verify-live` 对真实 X 详情页 `https://x.com/YLDLZN/status/2050723821460853237` 通过：`build=2026-05-03-1256`、`detail=1`、`sidebar=1`、`flushes=6`、`sideButtons=3`、`manualButtons=6`、`marking=1`、`articles=22`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1256`、`extensionVersion=0.1.60`。
 

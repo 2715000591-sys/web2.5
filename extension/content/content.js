@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-1256";
+  const BUILD_ID = "2026-05-03-1327";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -17,7 +17,7 @@
   const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 2;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 600;
-  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v2";
+  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v3";
   const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
   const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
   const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
@@ -5857,6 +5857,13 @@
             const aiLayer = String(readyAiDecision.decisionLayer || "");
             hiddenSource = aiLayer === "ai" ? "ai" : "ai-memory";
           }
+        } else if (awaitingAiDecision) {
+          decision = {
+            hide: true,
+            score: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 1),
+            reasons: ["waiting-for-cloud-ai"]
+          };
+          hiddenSource = "ai-pending";
         } else if (localBaselineDecision && localBaselineDecision.hide === true) {
           decision = {
             hide: true,
@@ -5866,13 +5873,6 @@
               : ["local-baseline-hide"]
           };
           hiddenSource = "auto";
-        } else if (awaitingAiDecision) {
-          decision = {
-            hide: true,
-            score: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 1),
-            reasons: ["waiting-for-cloud-ai"]
-          };
-          hiddenSource = "ai-pending";
         } else {
           decision = {
             hide: false,

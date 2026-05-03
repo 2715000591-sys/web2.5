@@ -121,6 +121,7 @@
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
   - Version ID：`bfd0967e-cd2f-4c08-b488-729f8cbcdbb5`
+  - 2026-05-03 13:27 本地已修复 `天使熊❤️附近的来 @hayes_jaco16929 / 纯 emoji` 漏网，但公网发布失败：`wrangler deploy` 返回 Cloudflare `Authentication error [code: 10000]` / `Invalid access token [code: 9109]`。所以公网 Worker 和公网下载清单暂时仍是 `2026-05-03-1256` / `0.1.60`，需要重新登录 Cloudflare 后再发布。已改代码包含：本地和 Worker 同步把 `附近/同城/线下 + 来/来聊/来找/找我/私/约/见` 当作风险昵称诱导；本地 AI 候选显示顺序改为先 `AI 复审中` 隐藏再等云端结果；缓存号换到 `web25-reply-ai-cache-v3`。
   - 2026-05-03 12:56 已发布 `BUILD_ID=2026-05-03-1256` / `extensionVersion=0.1.60`，Worker Version ID `bfd0967e-cd2f-4c08-b488-729f8cbcdbb5`。本次是按用户明确要求“让产品里的 AI 真干活”改调度，不是继续补固定话术：本地 AI 候选批量上限 12 -> 16、发送等待 650ms -> 350ms、最小间隔 750ms -> 350ms、老师复核分 3 -> 2、会话缓存 360 -> 600，并把本页临时 AI 缓存号从 `v1` 换到 `v2`，避免旧页面继续吃旧结果。云端老师复核预算 8 -> 16；高风险候选即使已经命中 AI 记忆、数据库规则、账号黑名单或旧复用层，也会先追加给 DeepSeek 老师看，AI 高置信隐藏时最终层为 `ai`，AI 不高置信时回落到原拦截结果，不让已确认垃圾露出。老师复核的非最终 AI 判断也会写入样本标注，避免“AI 看了但没留下教学记录”。公网探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 带真实调用返回 `Final layer: ai / ready / hide / high`、`External AI: called`；公网首页和控制台 200；`/downloads/latest.json` 返回 `buildId=2026-05-03-1256`、`extensionVersion=0.1.60`；`npm run cloud:audit-data-layer` 通过。本轮没有改 schema、没有删除或清理 D1 数据。
   - 2026-05-03 11:40 已发布 `BUILD_ID=2026-05-03-1138` / `extensionVersion=0.1.59`。用户截图 `孙甜甜❤️寻男大固泡 @MonaKristi9125` 发纯 emoji 噪音仍露出，根因不是版本旧也不是没扫描：真实页 `https://x.com/YLDLZN/status/2050723821460853237` 当时为 `BUILD_ID=2026-05-03-1117`、`stage=scan:done`、`articles=55`，但旧昵称规则只覆盖 `找固定泡友/炮友/固炮`，没有覆盖 `寻男 + 固泡` 这种缩写；同时 X 把 emoji 渲染成图片 alt，旧正文读取只取 `innerText` 时漏掉了 emoji 正文。新版补 `寻男/寻女/固泡/泡友/炮友/性友` 到本地和 Worker 昵称风险词与强风险模式，并让 `getTweetText` 从 tweetText 节点收集 emoji 图片 alt。回归：同款 emoji / 空正文 + 该风险昵称隐藏，普通 `我在找固定搭档做项目`、`今晚准时看直播吗` 放过。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1138`、`extensionVersion=0.1.59`；`npm run cloud:audit-data-layer` 通过；没有改 schema、没有清理或删除 D1 数据。
   - 2026-05-03 11:21 已发布 `BUILD_ID=2026-05-03-1117` / `extensionVersion=0.1.58`。用户截图里 `Phaoswk/Abxlj/Waxnrvqf/Xarmw/Gjued/Ghxlksc/Hgpvaqb` 这批并不是 AI 扫描次数不够：真实 X 详情页 `https://x.com/Sizhe_bitcat/status/2050555799991468314` 当时已经显示 `stage=scan:done`、扫到 53 条回复。根因是 X 的正文只给到埃及象形符号壳和空洞中文短句，没有给截图里的彩色 emoji；旧的装饰口号识别不包含 `\u{13000}-\u{1342F}` 这段符号，也缺少 `灵魂/共鸣/同频/知音/三观` 等抽象交友空话词。本次同步修本地和 Worker：把这类“埃及符号壳 + 空洞交友口号 + 随机数字 handle”纳入 `decorative-slogan-from-suspicious-handle`，同时收窄 AI 候选入口，避免正常账号仅因短句和软信号就进 AI。普通正常句子如 `我们三观不合，所以还是别一起做项目了。`、`同频的人聊天很舒服...`、`灵魂不负相逢，这句歌词挺美的。` 放过。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1117`、`extensionVersion=0.1.58`；`npm run cloud:audit-data-layer` 通过；没有改 schema、没有清理或删除 D1 数据。
@@ -190,11 +191,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-03-1256`
-  - extension manifest version：`0.1.60`
-  - App / Extension version：`1.0.60 (61)`
+  - `BUILD_ID = 2026-05-03-1327`
+  - extension manifest version：`0.1.61`
+  - App / Extension version：`1.0.61 (62)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-03 13:27 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-1327`、缓存号 `web25-reply-ai-cache-v3`，并把 AI 候选显示顺序提前为 `AI 复审中`。签名验证通过，`npm run safari:verify-live` 读到新版。真实 X 详情页 `https://x.com/yizhunli10167/status/2050601910487461905` 加载完成后为 `build=2026-05-03-1327`、`stage=scan:done`、`articles=45`；`天使熊附近的来 @hayes_jaco16929` 对应行 `data-web25-hidden=1` 且 `display:none`。注意：这证明本机页面已隐藏；线上数据库个人列表没有查到该条，不能声称这条真实记录已经落库为 AI 判断。
   - 2026-05-03 13:02 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-1256`、AI 批量上限 16、缓存号 `web25-reply-ai-cache-v2`。签名验证通过，`pluginkit` 显示扩展版本 `1.0.60`。`npm run safari:verify-live` 对真实 X 详情页 `https://x.com/YLDLZN/status/2050723821460853237` 通过：`build=2026-05-03-1256`、`detail=1`、`sidebar=1`、`flushes=6`、`sideButtons=3`、`manualButtons=6`、`marking=1`、`articles=22`、`stage=scan:done`。
   - 2026-05-03 11:42 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-1138`、`寻男/固泡` 风险昵称和 emoji alt 正文提取。签名验证通过，`pluginkit` 显示扩展版本 `1.0.59`。`npm run safari:verify-live` 读到新版；真实 X 详情页随后加载完成：`build=2026-05-03-1138`、`stage=scan:done`、`articles=19`，`孙甜甜寻男大固泡 @MonaKristi9125` 对应行 `hidden=true` 且 `cellHidden=true`。
   - 2026-05-03 11:26 已替换本机 App；`/Applications/web2.5.app` 内含 `BUILD_ID=2026-05-03-1117`、`灵魂` 等新装饰口号词、`\u{13000}-\u{1342F}` 符号壳识别和 `decorative-slogan-from-suspicious-handle` 证据。签名验证通过，`pluginkit` 显示扩展版本 `1.0.58`。`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-03-1117`、`detail=1`、`sidebar=1`、`flushes=11`、`sideButtons=3`、`manualButtons=11`、`marking=1`、`articles=15`、`stage=scan:done`。进一步检查该页 `灵魂/余生/静待/远离/同频/静候/随缘` 等关键词和截图账号，`matchedRows=[]`，说明这些漏网回复已不在可见页面里。
