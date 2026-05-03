@@ -130,9 +130,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-03-1039`
-  - 扩展版本 `0.1.57`
-  - App / Extension 版本 `1.0.57 (58)`
+  - `BUILD_ID = 2026-05-03-1117`
+  - 扩展版本 `0.1.58`
+  - App / Extension 版本 `1.0.58 (59)`
+  - 2026-05-03 11:21 已补用户截图里仍露出的“全国安排头像 + 埃及符号壳 + 空洞交友口号”一组。根因不是 AI 扫描次数有限：真实 X 详情页已经 `stage=scan:done`，并扫到 53 条回复；漏网是因为旧规则没把 `\u{13000}-\u{1342F}` 这段埃及象形符号当成装饰壳，也缺少 `灵魂/共鸣/同频/知音/三观` 等抽象交友空话词。新版把这类“装饰符号壳 + 空洞口号 + 随机数字 handle”纳入 `decorative-slogan-from-suspicious-handle`，本地和 Worker 同步。回归：7 条截图同款全部隐藏；`我们三观不合，所以还是别一起做项目了。`、`同频的人聊天很舒服...`、`灵魂不负相逢，这句歌词挺美的。` 等普通语境放过。真实 Safari 详情页验证 `build=2026-05-03-1117`、`stage=scan:done`、`articles=15`、可见 `冲走` 按钮 11 个、右栏关闭按钮 3 个；进一步查截图关键词和账号，`matchedRows=[]`。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 10:46 已按用户明确要求继续提高 AI 老师参与强度。本地批量上限 8 -> 12，发送等待 900ms -> 650ms，最小间隔 1500ms -> 750ms，基础候选分 2 -> 1，老师复核分 5 -> 3，缓存 240 -> 360；但仍保留边界：随机数字 handle 不能单独让普通长回复进 AI，必须配合短/薄/诱导/模板/emoji/上下文风险等信号。头像证据更积极：风险昵称、关系诱导、垃圾模板、头像取证会带更多证据标签，`teacher_review_requested` 会优先保留。真实 Safari 详情页验证 `build=2026-05-03-1039`、`stage=scan:done`、`articles=26`、可见 `冲走` 按钮 12 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 10:05 已补用户截图里新一批“全国安排头像 + 随机英文数字号 + 短口号/emoji”漏网。根因不是云端没同步，而是 X 没稳定暴露原帖正文时，旧规则只按 `emoji-noise + suspicious-handle` 打到 2 分；`浅交不如深知己`、`高质量交友贵在合拍`、`品行相近方同行`、`拒绝无效的寒暄` 也不在既有诗句模板里。新版把这些短口号纳入 `poetic-slogan-from-suspicious-handle`，并把 `有没有单身哥哥` 纳入 `geo-relationship-bait`。本地回归 5 条截图同款全部隐藏；`高质量交友贵在合拍，关键是共同爱好和边界感。`、`有没有单身哥哥一起打游戏？`、`附近有家面馆不错`、`生日快乐🎂🎉🥳` 放过。真实 Safari 详情页验证 `build=2026-05-03-1001`、`stage=scan:done`、`articles=22`、可见 `冲走` 按钮 12 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 09:39 已按用户“AI 是老师、辅助强度可以开大”的要求上线老师复核层。本地候选更积极：批量上限从 6 到 8，发送等待从 1200ms 到 900ms，最小批量间隔从 4000ms 到 1500ms，AI 候选基础分从 3 到 2；高风险候选会带 `teacher_review_requested`。云端仍先查静态规则、AI 记忆、数据库候选规则；如果数据库已命中且带老师复核标记，每批最多 4 条追加调用 DeepSeek。公网探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 在命中 `pattern:geo-relationship-bait` 的同时真实调用外接 AI，返回 `Final layer: ai / ready / hide / high`，不写数据库。真实 Safari 详情页验证 `build=2026-05-03-0037`、`stage=scan:done`、`articles=25`、可见 `冲走` 按钮 4 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
@@ -160,7 +161,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `dc841ce2-8455-44a6-b09a-f186f31e18be`
+  - Version ID: `fc8fba7e-1b25-48a5-b667-070d6b71032a`
+  - 2026-05-03 11:21 已部署 `BUILD_ID=2026-05-03-1117` 到公网。Worker 同步认识埃及象形装饰符号壳和新增抽象交友空话词，避免本地挡住但云端训练/候选键不一致。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1117`、`extensionVersion=0.1.58`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 10:46 已部署 `BUILD_ID=2026-05-03-1039` 到公网。云端批量上限同步为 12，数据库命中后的老师复核预算从每批 4 条提高到 8 条；除 `teacher_review_requested` 外，头像取证、风险昵称、关系诱导、垃圾模板等证据也可触发老师复核。线上探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 带老师复核标记时命中 `pattern:geo-relationship-bait`，同时真实调用 DeepSeek，返回 `Final layer: ai / ready / hide / high`。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-1039`、`extensionVersion=0.1.57`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 10:05 已部署 `BUILD_ID=2026-05-03-1001` 到公网。线上探针 `Vgfsrtjw @vgfsrtjw28371 / 高质量交友贵在合拍 🌟✂️🌟🎁` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`；`亦琪🌸🌸 @TaylorChar13948 / 有没有单身哥哥✨🤤🫶Oa` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:geo-relationship-bait`。两条均未调用外接 AI、未写数据库。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-1001`、`extensionVersion=0.1.56`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 09:39 已部署 `BUILD_ID=2026-05-03-0037` 到公网。新版将高风险数据库命中项纳入有上限的 AI 老师复核：带 `teacher_review_requested` 的数据库命中候选，每批最多 4 条追加调用 DeepSeek；普通回复仍不全量进 AI。线上探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 命中 `pattern:geo-relationship-bait`，同时真实调用外接 AI，返回 `Final layer: ai / ready / hide / high`。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-0037`、`extensionVersion=0.1.55`。本轮没有 schema 变更、没有 D1 清理或删除。

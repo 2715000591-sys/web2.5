@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-1039";
+  const BUILD_ID = "2026-05-03-1117";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -5266,17 +5266,20 @@
       score -= 1;
     }
 
-    const highValueContentSignal = Boolean(analysis && (
+    const strongContentSignal = Boolean(analysis && (
       analysis.hasShareLinkScam
       || analysis.hasExternalContactPayload
       || analysis.hasGeoRelationshipBait
       || analysis.hasExplicitEroticBait
       || analysis.hasSpamTemplateSignal
-      || analysis.hasDecorativeSloganBait
-      || analysis.hasPoeticSpamSloganBait
-      || analysis.hasEmojiNoiseBait
       || analysis.hasEroticMentionRedirect
     ));
+    const softLowSubstanceSignal = Boolean(analysis && (
+      analysis.hasDecorativeSloganBait
+      || analysis.hasPoeticSpamSloganBait
+      || analysis.hasEmojiNoiseBait
+    ));
+    const highValueContentSignal = strongContentSignal || softLowSubstanceSignal;
     const suspiciousHandleWithContext = Boolean(
       suspiciousHandle
       && (
@@ -5310,7 +5313,7 @@
         || lureDisplayName
         || suspiciousHandle
         || accountMetadataSignals
-        || compactReplyLength <= 24
+        || (strongContentSignal && compactReplyLength <= 24)
         || matchedSlots.length >= 1
       ))
       || matchedSlots.length >= 2
@@ -5322,7 +5325,12 @@
       teacherReviewRequested: Boolean(
         hasStrongTrigger
         || score >= REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD
-        || (highValueContentSignal && (suspiciousHandleWithContext || accountMetadataSignals || lureDisplayName || compactReplyLength <= 24))
+        || (highValueContentSignal && (
+          suspiciousHandleWithContext
+          || accountMetadataSignals
+          || lureDisplayName
+          || (strongContentSignal && compactReplyLength <= 24)
+        ))
         || (!protectedAccount && suspiciousHandle && Boolean(analysis && (
           analysis.hasDecorativeSloganBait
           || analysis.hasPoeticSpamSloganBait

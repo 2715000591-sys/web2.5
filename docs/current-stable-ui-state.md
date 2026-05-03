@@ -159,8 +159,9 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-0037`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1001`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1039`
-- 扩展版本 `0.1.57`
-- App / Extension 版本 `1.0.57 (58)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-1117`
+- 扩展版本 `0.1.58`
+- App / Extension 版本 `1.0.58 (59)`
 
 2026-05-02 13:59 换新 AI 前复查：`/Applications/web2.5.app` 签名验证通过，`pluginkit -e use -i com.yourCompany.web25.extension` 通过，`npm run safari:verify-live` 通过。真实 Safari `https://x.com/home` 返回 `BUILD_ID=2026-05-02-1307`。当前没有发现插件失效。
 
@@ -209,6 +210,8 @@
 2026-05-03 10:07 已替换本机 App 到 `BUILD_ID=2026-05-03-1001`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.56`。本轮没有改右栏 UI，只补筛选模板和发布新版包。`npm run safari:verify-live` 对真实 X 详情页 `https://x.com/wysgdmn/status/2050614965938389445` 通过：`build=2026-05-03-1001`、`detail=1`、`sidebar=1`、`flushes=12`、`sideButtons=3`、`manualButtons=12`、`marking=1`、`articles=22`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1001`、`extensionVersion=0.1.56`。
 
 2026-05-03 10:48 已替换本机 App 到 `BUILD_ID=2026-05-03-1039`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.57`。本轮没有改右栏 UI，只提高 AI 老师参与强度和发布新版包。`npm run safari:verify-live` 对真实 X 首页和详情页通过：详情页 `https://x.com/wysgdmn/status/2050614965938389445` 返回 `build=2026-05-03-1039`、`detail=1`、`sidebar=1`、`flushes=12`、`sideButtons=3`、`manualButtons=12`、`marking=1`、`articles=26`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1039`、`extensionVersion=0.1.57`。
+
+2026-05-03 11:26 已替换本机 App 到 `BUILD_ID=2026-05-03-1117`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.58`。本轮没有改右栏 UI，只补筛选证据和发布新版包。`npm run safari:verify-live` 对真实 X 详情页 `https://x.com/Sizhe_bitcat/status/2050555799991468314` 通过：`build=2026-05-03-1117`、`detail=1`、`sidebar=1`、`flushes=11`、`sideButtons=3`、`manualButtons=11`、`marking=1`、`articles=15`、`stage=scan:done`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1117`、`extensionVersion=0.1.58`。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

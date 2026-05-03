@@ -414,9 +414,24 @@ const DECORATIVE_SLOGAN_TERMS = [
   "眉眼",
   "时光赠予",
   "俗世偏爱",
-  "缘起"
+  "缘起",
+  "灵魂",
+  "不负",
+  "相逢",
+  "余生",
+  "静待",
+  "世间",
+  "共鸣",
+  "三观",
+  "不合",
+  "同频",
+  "知音",
+  "岁月",
+  "随缘",
+  "远离",
+  "方可"
 ];
-const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫༙༚༘༳༗꙳꧆꧇ꧨ]/u;
+const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[\u{13000}-\u{1342F}◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫༙༚༘༳༗꙳꧆꧇ꧨ]/u;
 const POETIC_SPAM_SLOGAN_PATTERNS = [
   /晨昏.{0,4}(静候|柔意|情愫|生情|暗生)/,
   /浅交.{0,4}(深知|知己)/,
