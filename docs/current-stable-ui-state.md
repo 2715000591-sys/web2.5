@@ -166,8 +166,11 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-2246`
 - Safari 扩展 `BUILD_ID = 2026-05-03-2345`
 - Safari 扩展 `BUILD_ID = 2026-05-04-0037`
-- 扩展版本 `0.1.65`
-- App / Extension 版本 `1.0.65 (66)`
+- Safari 扩展 `BUILD_ID = 2026-05-04-0124`
+- 扩展版本 `0.1.66`
+- App / Extension 版本 `1.0.66 (67)`
+
+2026-05-04 01:29 已替换本机 App 到 `BUILD_ID=2026-05-04-0124`，签名验证通过，App / Extension 版本为 `1.0.66 (67)`，manifest 为 `0.1.66`。本轮没有改右栏 UI，只修 AI 等待判断期间低风险内容被先藏的问题，并把 AI 批量请求等待时间放宽到 30 秒；`npm run safari:verify-live` 对真实 X 首页和详情页通过：首页 `build=2026-05-04-0124`、`sidebar=1`、`sideButtons=5`、`marking=1`、`articles=4`、`stage=ads:done`；详情页 `https://x.com/ronronzi/status/2050591230275539384` 返回 `build=2026-05-04-0124`、`detail=1`、`sidebar=1`、`flushes=3`、`sideButtons=4`、`manualButtons=3`、`marking=1`、`articles=54`、`stage=scan:done`。
 
 2026-05-04 00:59 已替换本机 App 到 `BUILD_ID=2026-05-04-0037`，签名验证通过，App / Extension 版本为 `1.0.65 (66)`，manifest 为 `0.1.65`。本轮没有改右栏 UI，只修“花体/上标英文标签 + 中文短口号”和“装饰符号壳 + 中文短口号”的筛选证据；`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-04-0037`、`detail=1`、`sidebar=1`、`flushes=1`、`sideButtons=4`、`manualButtons=1`、`marking=1`、`articles=12`、`stage=scan:done`。
 

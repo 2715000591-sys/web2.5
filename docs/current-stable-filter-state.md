@@ -27,6 +27,7 @@
 - 2026-05-03 22:46 起，真实页面 AI 记录要区分三层：`reply_ai_items` 表示插件已监听并写入真实样本；`reply_ai_results.status=pending` 表示正在等待 AI 判断；`ready` 才表示 AI 已给最终结论。开发者探针默认不写数据库，不能和真实页面写入混为一谈。
 - 2026-05-03 23:45 起，当前 DeepSeek 配置不能直接看头像图，但插件会先用页面文字、随机账号形态、主帖相关性和批量短口号结构挡住“全国安排头像 + 中英混合空话”这类垃圾；新增 `pattern:bilingual-short-slogan-lure-account` 和 `bilingual_short_slogan_reply` 证据，避免硬写截图里的具体英文词。
 - 2026-05-04 00:37 起，重复英文标签的识别会先做字符正规化，能识别 X 渲染出的上标/花体 `ᴰᵉˡᵘˢⁱᵒⁿ`、`ᴴᵘˢʰ` 这类标签；装饰符号壳也不再把短中文空话长度撑超限。截图样本 `Pxrids`、`Xgoasmby`、`Xducqo` 这类“全国安排头像 + 随机账号 + 与主帖无关短口号”应隐藏或先临时下沉给 AI 老师复核。
+- 2026-05-04 01:24 起，`等待 AI 判断` 不再等于一律先隐藏。低风险候选仍会送 AI 老师判断和沉淀学习样本，但等待期间先显示；只有强风险或候选分数达到 3 的内容才临时下沉。AI 批量请求等待时间已放宽到 30 秒，减少云端稍慢时一直卡在 `pending`。
 - AI 第一次高置信隐藏后，云端数据库会作为“AI 记忆本”复用结果
 - 本地规则继续负责采集、风险信号、立即安全下沉和排队排序；普通正常回复不进 AI 队列。
 
@@ -35,7 +36,7 @@
 也就是说，当前推荐做法是：
 
 - 明显已知垃圾先由基础规则 / 数据库直接截住
-- 新话术先交给 AI 判断；等待 AI 期间，高风险候选会临时下沉，AI 放过后自动显示
+- 新话术先交给 AI 判断；等待 AI 期间，只有高风险候选会临时下沉，AI 放过后自动显示；低风险候选等待时先保持可见
 - 数据库已经截住的高风险项也可以少量抽给 AI 老师复核；AI 高置信隐藏可继续写入记忆，AI 不高置信时仍回落到原数据库规则，不让明显垃圾露出来
 - AI 判过的相同或可靠相似内容，后续由云端记忆库直接复用，减少重复调用
 - 不要把用户单次 `冲走` 或旧本地规则直接升级成所有人共享的公共规则
@@ -138,9 +139,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-04-0037`
-  - 扩展版本 `0.1.65`
-  - App / Extension 版本 `1.0.65 (66)`
+  - `BUILD_ID = 2026-05-04-0124`
+  - 扩展版本 `0.1.66`
+  - App / Extension 版本 `1.0.66 (67)`
+  - 2026-05-04 01:24 已修用户恢复正常回复后暴露出的 AI 等待误藏问题：本地 `buildReplyAiModerationCandidate` 继续把可疑项送 AI 老师，但新增 `pendingHideRequested`，只有强风险或候选分数达到 3 才在等待 AI 时隐藏；低风险候选等待期间显示。请求云端 AI 批量判断的等待时间从 8 秒提高到 30 秒，缓存号改为 `web25-reply-ai-cache-v8`。真实 Safari 详情页验证 `build=2026-05-04-0124`、`detail=1`、`flushes=3`、`manualButtons=3`、`sideButtons=4`、`articles=54`、`stage=scan:done`。本轮没有改本地规则阈值、没有改数据库结构、没有删除 D1 数据。
   - 2026-05-04 00:37 已补用户截图里 `Pxrids / Xgoasmby / Xducqo` 这类漏网：根因是 X 页面把 `Delusion/Hush` 渲染成上标小字母，旧的重复英文标签识别拿原始文本匹配普通英文字母，所以没有把它们送进 AI；第三条的埃及装饰壳则被算进短口号长度，刚好超过泛化短空话阈值。新版本地和 Worker 同步改为先正规化花体/上标字母，再识别重复英文标签；泛化短空话长度只看实际文字内容，不让装饰壳撑长。回归：截图三条命中；`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW`、普通账号的歌词/正常语境短句放过。
   - 2026-05-03 23:45 已补“全国安排头像同款但当前模型不能看图”的文字/上下文兜底：本地和 Worker 同步新增 `bilingual-short-slogan-lure-account`，识别随机英文数字账号发“重复英文标签包住中文空洞短句 + emoji 装饰”的批量低信息诱饵。回归：截图同款 `SADNESS/EVENING/WINDOW/RAINY/FLOWER ... 英文标签` 均隐藏；`BTC 今天走势挺强 BTC 🚀`、`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW` 放过。本轮没有改数据库结构、没有删除 D1 数据。
   - 2026-05-03 22:46 修真实页面 AI 写入链路：只读 D1 发现当前设备真实页面已写入 `reply_ai_items`，但 2026-05-03 09:00 UTC 后部分样本没有对应 `reply_ai_results`，说明监听和写入已通，最终判断落库仍可能断。新版把本地和 Worker 单批 AI 候选上限从 16 降到 8、缓存号改为 `web25-reply-ai-cache-v5`，并让云端收到真实样本后先写 `pending / 等待 AI 判断`，AI 成功后再覆盖为 `ready`。这不是降低 AI 老师参与，而是让真实页面判断更稳、更可追踪。
@@ -176,7 +178,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `1632b53a-5494-4d52-a0e6-2240ab3d6d4e`
+  - Version ID: `9d02f64c-cbc0-4d47-b106-37c66691c0d8`
+  - 2026-05-04 01:24 已部署 `BUILD_ID=2026-05-04-0124` / `extensionVersion=0.1.66`。这次 Worker 逻辑未改，发布是为了同步新版 Safari/Chrome 下载包和公网清单；公网首页、控制台和 `/downloads/latest.json` 已确认 200，下载清单返回 `buildId=2026-05-04-0124`、`extensionVersion=0.1.66`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-04 00:42 已部署 `BUILD_ID=2026-05-04-0037` / `extensionVersion=0.1.65`。Worker 同步修花体/上标英文标签和装饰壳短口号证据，避免本地能识别、云端数据库候选键却不一致。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，下载清单返回新版；只读路线探针显示 `Pxrids`、`Xducqo` 同类样本会进入外接 AI 路线且不写数据库。
   - 2026-05-03 23:45 已部署 `BUILD_ID=2026-05-03-2345` / `extensionVersion=0.1.64`。线上探针 `Dakfzsyv @dakfzsyv19237 / SADNESS 人间起落情绪皆有你 SADNESS 🍂🧢` 带真实 DeepSeek 调用返回 `Final layer: ai / ready / hide / high`，规则候选键为 `pattern:bilingual-short-slogan-lure-account`，理由为随机账号的无关中英混合短口号；公网 `/downloads/latest.json` 返回新 build 和版本。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-03 22:46 已部署 `BUILD_ID=2026-05-03-2246` / `extensionVersion=0.1.63`。Worker 同步把单批 AI 接收上限和老师复核预算从 16 降到 8，并新增 `pending` 结果落库，避免真实页面只写样本、不留判断状态。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-2246`、`extensionVersion=0.1.63`；公网首页和控制台返回 200；AI 路线探针真实调用 DeepSeek，返回 `Final layer: ai / ready / hide / high`，且明确 `Database writes: no`。

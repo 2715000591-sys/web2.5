@@ -281,6 +281,7 @@
       const credentials = message.credentials === "include" ? "include" : "omit";
       const responseType = String(message.responseType || "json").trim().toLowerCase();
       const extraHeaders = message.headers && typeof message.headers === "object" ? message.headers : {};
+      const timeoutMs = Number(message.timeoutMs || 0);
 
       if (!endpoint) {
         sendResponse({ ok: false, error: "missing-endpoint" });
@@ -292,13 +293,29 @@
         headers.set("Content-Type", "application/json");
       }
 
+      const controller = typeof AbortController !== "undefined" && timeoutMs > 0
+        ? new AbortController()
+        : null;
+      const timeoutId = controller
+        ? setTimeout(function () {
+          controller.abort();
+        }, timeoutMs)
+        : null;
+      const clearRequestTimeout = function () {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+      };
+
       fetch(endpoint, {
         method: method,
         credentials: credentials,
         cache: "no-store",
         headers,
-        body: method === "GET" ? undefined : JSON.stringify(payload)
+        body: method === "GET" ? undefined : JSON.stringify(payload),
+        signal: controller ? controller.signal : undefined
       }).then(async function (response) {
+        clearRequestTimeout();
         let data = null;
         try {
           if (responseType === "text") {
@@ -316,6 +333,7 @@
           data: data
         });
       }).catch(function (error) {
+        clearRequestTimeout();
         sendResponse({
           ok: false,
           error: error && error.message ? error.message : String(error)

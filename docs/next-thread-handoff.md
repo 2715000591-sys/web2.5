@@ -1,6 +1,6 @@
 # Colorful Toilet 下一轮接力说明
 
-最后整理日期：2026-05-03
+最后整理日期：2026-05-04
 
 这份文件是给下一轮 Codex / 开发助手看的，不是产品宣传文档。目标只有一个：新对话打开后，能快速、安全、连续地接手，不重复解释，不误删数据，不改坏已经稳定的插件。
 
@@ -124,7 +124,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`1632b53a-5494-4d52-a0e6-2240ab3d6d4e`
+  - Version ID：`9d02f64c-cbc0-4d47-b106-37c66691c0d8`
+  - 2026-05-04 01:24 已发布 `BUILD_ID=2026-05-04-0124` / `extensionVersion=0.1.66`。用户恢复多条“角度/光线/JK/长裙”正常回复后追问“为什么 AI 等待后才判断、不是实时判断”：只读 D1 确认其中两条仍停在 `pending / 等待 AI 判断`，根因是旧版前端把所有“等待 AI”的候选都先隐藏，同时浏览器只等云端 8 秒；DeepSeek 批量判断稍慢时，普通内容会先被藏住并留在等待状态。新版把“送 AI 老师看”和“等待时先隐藏”分开：低风险候选继续送 AI，但页面先显示；只有强风险或分数达到 3 的候选才临时隐藏。AI 批量请求等待时间从 8 秒放宽到 30 秒，后台转发也支持对应超时取消，缓存号换到 `web25-reply-ai-cache-v8`。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，`latest.json` 返回 `buildId=2026-05-04-0124`、`extensionVersion=0.1.66`。本轮没有改 schema、没有清理或删除 D1 数据，也没有新增付费 AI 能力。
   - 2026-05-04 00:42 已发布 `BUILD_ID=2026-05-04-0037` / `extensionVersion=0.1.65`。用户截图 `Pxrids @pxrids78304 / ᴰᵉˡᵘˢⁱᵒⁿ 甘愿沉溺在有你的梦境 ᴰᵉˡᵘˢⁱᵒⁿ`、`Xgoasmby @xgoasmby17820 / ᴴᵘˢʰ 世界安静唯独思念喧嚣 ᴴᵘˢʰ`、`Xducqo @xducqo27774 / 𓇜𓇝 情深似海甘愿被情缚 𓇜𓇝` 仍露出的根因不是 AI 语义看不懂，而是没有进入审核：真实 DOM 里英文标签是上标/花体 Unicode，旧重复英文标签识别从原始文本找普通 `[a-z]`，所以没命中；埃及符号壳被算进短口号长度，导致泛化短空话超限。新版同步本地和 Worker：重复英文标签先正规化再匹配，泛化短空话长度只看实际文字内容；截图同类会隐藏或先临时下沉进入 AI 老师复核。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，`latest.json` 返回 `buildId=2026-05-04-0037`、`extensionVersion=0.1.65`；只读路线探针显示 `Pxrids`、`Xducqo` 同类样本会进入外接 AI 路线且不写数据库。没有改 schema、没有清理或删除 D1 数据。
   - 2026-05-03 23:45 已发布 `BUILD_ID=2026-05-03-2345` / `extensionVersion=0.1.64`。用户问“DeepSeek 不能看图，那这种全国安排头像同款是不是就没法挡”：结论是能挡，不靠头像读字，而靠页面可读证据。新版本地和 Worker 同步新增 `bilingual_short_slogan_reply` 证据标签和 `pattern:bilingual-short-slogan-lure-account` 候选键，识别随机英文数字账号发“重复英文标签 + 中文空洞短句 + 同一英文标签 + emoji 装饰”的批量无关口号；AI prompt 也描述这种结构，但没有硬写截图里的具体英文词。回归：`SADNESS/EVENING/WINDOW/RAINY/FLOWER ... 英文标签` 5 条同款本地隐藏；`BTC 今天走势挺强 BTC 🚀`、`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW` 放过。线上探针 `Dakfzsyv @dakfzsyv19237 / SADNESS 人间起落情绪皆有你 SADNESS 🍂🧢` 带真实 DeepSeek 调用返回 `Final layer=ai / ready / hide / high`，候选键为 `pattern:bilingual-short-slogan-lure-account`，不写数据库。`npm run cloud:check`、`npm run cloud:deploy`、`npm run cloud:audit-data-layer` 通过；公网首页 200，`/downloads/latest.json` 返回 `buildId=2026-05-03-2345`、`extensionVersion=0.1.64`。本轮没有 schema 变更、没有清理或删除 D1 数据。
   - 2026-05-03 22:46 已发布 `BUILD_ID=2026-05-03-2246` / `extensionVersion=0.1.63`。本次不是改提示词，而是修真实页面 AI 写入链路：只读 D1 查到当前设备真实页面已写入 `reply_ai_items`，但 2026-05-03 09:00 UTC 后 16 条里有 14 条没有对应 `reply_ai_results`，说明“真实写入”和“最终 AI 判断”之间仍可能断开。新版把前端和 Worker 单批 AI 候选上限从 16 降到 8、老师复核预算从 16 降到 8，并在云端收到真实页面样本后先写入 `pending / 等待 AI 判断` 结果；AI 成功后再覆盖为 `ready`，如果后续页面重试看到 `pending` 也会重新判断。以后排查时要区分：开发者探针默认不写数据库；真实页面 `reply_ai_items` 代表已监听和写入；`reply_ai_results.status=pending` 代表等待 AI；`ready` 才代表 AI 已给最终结论。`npm run cloud:check`、`npm run cloud:audit-data-layer`、`npm run cloud:deploy` 通过；公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-2246`。
@@ -201,11 +202,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-04-0037`
-  - extension manifest version：`0.1.65`
-  - App / Extension version：`1.0.65 (66)`
+  - `BUILD_ID = 2026-05-04-0124`
+  - extension manifest version：`0.1.66`
+  - App / Extension version：`1.0.66 (67)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-04 01:29 已替换本机 App 到 `BUILD_ID=2026-05-04-0124`、缓存号 `web25-reply-ai-cache-v8`。签名验证通过，App / Extension 版本为 `1.0.66 (67)`，manifest 为 `0.1.66`；`npm run safari:verify-live` 对真实 X 首页和详情页通过：首页 `build=2026-05-04-0124`、`sidebar=1`、`sideButtons=5`、`marking=1`、`articles=4`、`stage=ads:done`；详情页 `https://x.com/ronronzi/status/2050591230275539384` 返回 `build=2026-05-04-0124`、`detail=1`、`sidebar=1`、`flushes=3`、`sideButtons=4`、`manualButtons=3`、`marking=1`、`articles=54`、`stage=scan:done`。本轮没有改右栏 UI，只修 AI 等待时的误藏和批量请求等待时间。
   - 2026-05-04 00:59 已替换本机 App 到 `BUILD_ID=2026-05-04-0037`、缓存号 `web25-reply-ai-cache-v7`。签名验证通过，App / Extension 版本为 `1.0.65 (66)`，manifest 为 `0.1.65`；`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-04-0037`、`detail=1`、`sidebar=1`、`flushes=1`、`sideButtons=4`、`manualButtons=1`、`marking=1`、`articles=12`、`stage=scan:done`。本轮修花体/上标英文标签和装饰壳短口号证据。
   - 2026-05-03 23:45 已替换本机 App 到 `BUILD_ID=2026-05-03-2345`、缓存号 `web25-reply-ai-cache-v6`、新增中英混合短口号证据。签名验证通过，`pluginkit` 显示扩展版本 `1.0.64`；`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-03-2345`、`detail=1`、`sidebar=1`、`flushes=10`、`sideButtons=4`、`manualButtons=10`、`marking=1`、`articles=13`、`stage=scan:done`。
   - 2026-05-03 22:46 已替换本机 App 到 `BUILD_ID=2026-05-03-2246`、缓存号 `web25-reply-ai-cache-v5`、单批 AI 候选 8。签名验证通过，`pluginkit` 显示扩展版本 `1.0.63`；`npm run safari:verify-live` 对真实 X 首页通过：`build=2026-05-03-2246`、`sidebar=1`、`sideButtons=5`、`marking=1`、`articles=5`、`stage=ads:done`。当前打开的是首页，不是详情页，所以本轮尚未产生新的真实回复 AI 样本；用户可以打开 X 详情页继续刷，后续用 D1 区分 `pending` 和 `ready`。
@@ -537,7 +539,7 @@ Safari App：
 
 可以直接把下面这段发给新对话：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`，再快速读 `docs/next-thread-handoff.md` 的第 0、1、2、9、10、11、12 节；第 3 节旧发布记录只按关键词查，不要逐条复述。再读 `docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md` 的顶部结论；只有改 AI 设置、接口、模型或 Key 时再细读 `docs/ai-api-provider-handoff.md`。然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前应以 `BUILD_ID=2026-05-04-0037` / `extensionVersion=0.1.65` 为最新目标；这版在 `2345` 的中英混合短口号基础上，修正 X DOM 里的上标/花体英文标签和装饰符号壳短口号，避免这些候选没进入 AI/数据库审核。上一版 1402 用户确认“屏蔽挺好，没有明显漏过”，下一阶段重点仍是减少少量误杀，尤其保护和原帖强相关的尖锐、粗口、反驳、吐槽。冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。用户发漏网内容时，先当作诊断和 AI 训练素材，不要无脑把截图文字写进数据库或本地规则；先解释为什么没挡住，再优先补证据输入、AI 老师复核、AI 标注/记忆/候选写回。只有 AI/数据库证据充分或用户明确确认后，才把可复用模式写成本地和 Worker 同构规则。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，高风险候选即使命中 `reply_ai_memory`、`moderation_rule_candidates`、账号黑名单或旧复用层，也可以带 `teacher_review_requested` 或头像/风险昵称/关系诱导等证据先给 AI 老师复核；AI 高置信隐藏时最终层用 `ai` 并写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，AI 不高置信时回落到原拦截结果，且非最终老师判断也要写入样本标注。必须区分“开发者探针调用过模型”和“真实 Safari 页面写入了 AI 学习记录”；探针默认不写数据库，真实页面 `reply_ai_items` 是已写入，`reply_ai_results.status=pending` 是待判断，`ready` 才是最终 AI 结论。用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`，再快速读 `docs/next-thread-handoff.md` 的第 0、1、2、9、10、11、12 节；第 3 节旧发布记录只按关键词查，不要逐条复述。再读 `docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md` 的顶部结论；只有改 AI 设置、接口、模型或 Key 时再细读 `docs/ai-api-provider-handoff.md`。然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前应以 `BUILD_ID=2026-05-04-0124` / `extensionVersion=0.1.66` 为最新目标；这版修复用户恢复正常回复后暴露出的 AI 等待误藏问题：低风险候选仍送 AI 老师学习，但等待期间先显示，只有强风险或分数达到 3 的候选才临时隐藏；AI 批量请求等待时间已从 8 秒放宽到 30 秒，缓存号为 `web25-reply-ai-cache-v8`。上一版 1402 用户确认“屏蔽挺好，没有明显漏过”，下一阶段重点仍是减少少量误杀，尤其保护和原帖强相关的尖锐、粗口、反驳、吐槽。冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。用户发漏网内容时，先当作诊断和 AI 训练素材，不要无脑把截图文字写进数据库或本地规则；先解释为什么没挡住，再优先补证据输入、AI 老师复核、AI 标注/记忆/候选写回。只有 AI/数据库证据充分或用户明确确认后，才把可复用模式写成本地和 Worker 同构规则。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，高风险候选即使命中 `reply_ai_memory`、`moderation_rule_candidates`、账号黑名单或旧复用层，也可以带 `teacher_review_requested` 或头像/风险昵称/关系诱导等证据先给 AI 老师复核；AI 高置信隐藏时最终层用 `ai` 并写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，AI 不高置信时回落到原拦截结果，且非最终老师判断也要写入样本标注。必须区分“开发者探针调用过模型”和“真实 Safari 页面写入了 AI 学习记录”；探针默认不写数据库，真实页面 `reply_ai_items` 是已写入，`reply_ai_results.status=pending` 是待判断，`ready` 才是最终 AI 结论。用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
 
 2026-05-03 用户明确补充：他们发来的任何漏网内容都是为了优化 AI 配置和 AI 老师学习链路，不是让 Codex 自己在本地硬写截图短语。后续应优先让 AI 老师判断并写入标签、记忆和候选规则，再由 AI/数据库证据或用户明确确认把可复用模式写回本地和 Worker。不要把单张截图直接变成本地规则。
 

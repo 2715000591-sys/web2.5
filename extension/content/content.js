@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-0037";
+  const BUILD_ID = "2026-05-04-0124";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -15,9 +15,12 @@
   const REPLY_AI_MIN_BATCH_INTERVAL_MS = 350;
   const REPLY_AI_BASE_SUSPICION_THRESHOLD = 1;
   const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 2;
+  const REPLY_AI_PENDING_HIDE_SCORE_THRESHOLD = 3;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
+  const BACKEND_JSON_REQUEST_TIMEOUT_MS = 8000;
+  const REPLY_AI_REQUEST_TIMEOUT_MS = 30000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 600;
-  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v7";
+  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v8";
   const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
   const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
   const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
@@ -2388,7 +2391,8 @@
     writeIndexedManualState(payload, callback);
   }
 
-  function requestBackendJson(method, endpoint, payload, callback, withCredentials) {
+  function requestBackendJson(method, endpoint, payload, callback, withCredentials, timeoutMs) {
+    const requestTimeoutMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : BACKEND_JSON_REQUEST_TIMEOUT_MS;
     let settled = false;
     const finish = function (data) {
       if (settled) {
@@ -2400,7 +2404,7 @@
     };
     const timeoutId = setTimeout(function () {
       finish(null);
-    }, 8000);
+    }, requestTimeoutMs);
 
     if (api.runtime && typeof api.runtime.sendMessage === "function") {
       api.runtime.sendMessage({
@@ -2408,7 +2412,8 @@
         endpoint: endpoint,
         method: method,
         payload: payload || {},
-        credentials: withCredentials ? "include" : "omit"
+        credentials: withCredentials ? "include" : "omit",
+        timeoutMs: requestTimeoutMs + 1000
       }, function (response) {
         if (api.runtime && api.runtime.lastError) {
           finish(null);
@@ -5141,7 +5146,8 @@
     const emptyCandidate = {
       shouldQueue: false,
       score: 0,
-      teacherReviewRequested: false
+      teacherReviewRequested: false,
+      pendingHideRequested: false
     };
 
     if (!state.replyAiEnabled || !state.backendBaseUrl || !state.syncKey || !state.deviceId) {
@@ -5394,6 +5400,7 @@
     return {
       shouldQueue: Boolean(hasStrongTrigger || hasWeakTriggerCombo),
       score: score,
+      pendingHideRequested: Boolean(hasStrongTrigger || score >= REPLY_AI_PENDING_HIDE_SCORE_THRESHOLD),
       teacherReviewRequested: Boolean(
         hasStrongTrigger
         || score >= REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD
@@ -5426,7 +5433,7 @@
         return;
       }
       callback(payload);
-    }, false);
+    }, false, REPLY_AI_REQUEST_TIMEOUT_MS);
   }
 
   function loadReplyProfileSignalsAsync(replyArticle, authorMeta, analysis, protectedAccount) {
@@ -5852,6 +5859,7 @@
         const readyAiDecision = cachedAiDecision && cachedAiDecision.status === "ready"
           ? cachedAiDecision
           : null;
+        const aiCandidateScore = Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0);
         let decision;
         let hiddenSource = null;
         const isAllowed = hasAllowDecisionKey(state.manualAllowTexts, storedManualKeys);
@@ -5885,6 +5893,11 @@
             isRepeatSuspiciousHandle: repeatSuspiciousHandle
           })
           : null;
+        const shouldHideWhileAwaitingAi = Boolean(
+          awaitingAiDecision
+          && aiCandidate
+          && aiCandidate.pendingHideRequested
+        );
 
         if (isAllowed) {
           decision = {
@@ -5923,10 +5936,10 @@
             const aiLayer = String(readyAiDecision.decisionLayer || "");
             hiddenSource = aiLayer === "ai" ? "ai" : "ai-memory";
           }
-        } else if (awaitingAiDecision) {
+        } else if (awaitingAiDecision && shouldHideWhileAwaitingAi) {
           decision = {
             hide: true,
-            score: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 1),
+            score: aiCandidateScore || 1,
             reasons: ["waiting-for-cloud-ai"]
           };
           hiddenSource = "ai-pending";
@@ -5963,7 +5976,7 @@
           isManuallyHidden: isManuallyHidden,
           shouldQueueAi: shouldQueueAi,
           aiCacheKey: aiCacheKey,
-          aiCandidateScore: Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0),
+          aiCandidateScore: aiCandidateScore,
           teacherReviewRequested: Boolean(aiCandidate && aiCandidate.teacherReviewRequested),
           aiReady: Boolean(readyAiDecision),
           aiReasonShort: readyAiDecision && readyAiDecision.shouldHide === true
