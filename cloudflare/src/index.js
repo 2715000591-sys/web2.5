@@ -10588,8 +10588,8 @@ function looksLikeEmojiNoiseBait(text) {
 function looksLikeGenericShortSloganBait(text) {
   const raw = String(text || "");
   const compact = buildCompactRuleText(raw);
-  const chars = Array.from(compact);
-  if (!compact || chars.length < 4 || chars.length > 12) {
+  const contentChars = Array.from(compact).filter((char) => /[\p{Script=Han}a-z0-9]/iu.test(char));
+  if (!compact || contentChars.length < 4 || contentChars.length > 12) {
     return false;
   }
 
@@ -10605,11 +10605,12 @@ function looksLikeGenericShortSloganBait(text) {
   const hasDecorativeCue = Array.from(raw.matchAll(EMOJI_PATTERN)).length > 0 || DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
   const hasConversationAnchor = /(我觉得|你说|他说|她说|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
   const commonGreeting = /(生日快乐|新年快乐|恭喜|加油|谢谢|感谢|辛苦|好看|漂亮|可爱|厉害|牛逼|早安|晚安)/.test(compact);
-  return hasDecorativeCue && cjkCount >= Math.ceil(chars.length * 0.6) && !hasConversationAnchor && !commonGreeting;
+  return hasDecorativeCue && cjkCount >= Math.ceil(contentChars.length * 0.6) && !hasConversationAnchor && !commonGreeting;
 }
 
 function looksLikeBilingualShortSloganBait(text) {
   const raw = String(text || "");
+  const normalized = normalizeRuleText(raw);
   const compact = buildCompactRuleText(raw);
   const chars = Array.from(compact);
   if (!compact || chars.length < 8 || chars.length > 36) {
@@ -10624,7 +10625,7 @@ function looksLikeBilingualShortSloganBait(text) {
     return false;
   }
 
-  const latinWords = Array.from(raw.matchAll(/\b[a-z]{3,14}\b/gi))
+  const latinWords = Array.from(normalized.matchAll(/\b[a-z]{3,14}\b/gi))
     .map((match) => String(match[0] || "").toLowerCase())
     .filter(Boolean);
   if (latinWords.length < 2) {

@@ -26,6 +26,7 @@
 - 2026-05-03 起，用户明确要求“AI 老师”多教一点：高风险或数据库已命中的可疑候选，可以在有预算上限的情况下追加给 AI 抽查复核，用来沉淀更好的 AI 记忆；普通正常回复仍然不进 AI。
 - 2026-05-03 22:46 起，真实页面 AI 记录要区分三层：`reply_ai_items` 表示插件已监听并写入真实样本；`reply_ai_results.status=pending` 表示正在等待 AI 判断；`ready` 才表示 AI 已给最终结论。开发者探针默认不写数据库，不能和真实页面写入混为一谈。
 - 2026-05-03 23:45 起，当前 DeepSeek 配置不能直接看头像图，但插件会先用页面文字、随机账号形态、主帖相关性和批量短口号结构挡住“全国安排头像 + 中英混合空话”这类垃圾；新增 `pattern:bilingual-short-slogan-lure-account` 和 `bilingual_short_slogan_reply` 证据，避免硬写截图里的具体英文词。
+- 2026-05-04 00:37 起，重复英文标签的识别会先做字符正规化，能识别 X 渲染出的上标/花体 `ᴰᵉˡᵘˢⁱᵒⁿ`、`ᴴᵘˢʰ` 这类标签；装饰符号壳也不再把短中文空话长度撑超限。截图样本 `Pxrids`、`Xgoasmby`、`Xducqo` 这类“全国安排头像 + 随机账号 + 与主帖无关短口号”应隐藏或先临时下沉给 AI 老师复核。
 - AI 第一次高置信隐藏后，云端数据库会作为“AI 记忆本”复用结果
 - 本地规则继续负责采集、风险信号、立即安全下沉和排队排序；普通正常回复不进 AI 队列。
 
@@ -137,9 +138,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-03-2345`
-  - 扩展版本 `0.1.64`
-  - App / Extension 版本 `1.0.64 (65)`
+  - `BUILD_ID = 2026-05-04-0037`
+  - 扩展版本 `0.1.65`
+  - App / Extension 版本 `1.0.65 (66)`
+  - 2026-05-04 00:37 已补用户截图里 `Pxrids / Xgoasmby / Xducqo` 这类漏网：根因是 X 页面把 `Delusion/Hush` 渲染成上标小字母，旧的重复英文标签识别拿原始文本匹配普通英文字母，所以没有把它们送进 AI；第三条的埃及装饰壳则被算进短口号长度，刚好超过泛化短空话阈值。新版本地和 Worker 同步改为先正规化花体/上标字母，再识别重复英文标签；泛化短空话长度只看实际文字内容，不让装饰壳撑长。回归：截图三条命中；`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW`、普通账号的歌词/正常语境短句放过。
   - 2026-05-03 23:45 已补“全国安排头像同款但当前模型不能看图”的文字/上下文兜底：本地和 Worker 同步新增 `bilingual-short-slogan-lure-account`，识别随机英文数字账号发“重复英文标签包住中文空洞短句 + emoji 装饰”的批量低信息诱饵。回归：截图同款 `SADNESS/EVENING/WINDOW/RAINY/FLOWER ... 英文标签` 均隐藏；`BTC 今天走势挺强 BTC 🚀`、`LOVE 生日快乐 LOVE 🎂`、`WINDOW 窗口函数这个问题可以这么理解 WINDOW` 放过。本轮没有改数据库结构、没有删除 D1 数据。
   - 2026-05-03 22:46 修真实页面 AI 写入链路：只读 D1 发现当前设备真实页面已写入 `reply_ai_items`，但 2026-05-03 09:00 UTC 后部分样本没有对应 `reply_ai_results`，说明监听和写入已通，最终判断落库仍可能断。新版把本地和 Worker 单批 AI 候选上限从 16 降到 8、缓存号改为 `web25-reply-ai-cache-v5`，并让云端收到真实样本后先写 `pending / 等待 AI 判断`，AI 成功后再覆盖为 `ready`。这不是降低 AI 老师参与，而是让真实页面判断更稳、更可追踪。
   - 2026-05-03 14:12 用户发截图让 GPT-5.5 自判，指出 `舒希🌸🌸 / 想dD找会疼人的哥哥`、`怂歆🌸来个真人认识一下🌸 / 6❤🎁😊💌`、`芭乐芭乐❤️附近的DD啊 / 5🙊🙈`、`椰子 / 🤓独具魅力`、`丽莎 / ⭐克服睡眼` 都应有问题，`云酱Yuiun / 你这问题有意思...` 是正常粗口评论。根因分三层：旧数据库还没有 `generic-short-slogan-lure-account` 这种候选键；本地 AI 入口不认识 `来个真人认识一下`、`附近的DD` 和 `⭐` 这类装饰符号，弱随机 handle 的短口号也不够分；DeepSeek 老师提示词对“没有露骨词/联系方式”的短口号过于保守，最初把 `独具魅力`、`克服睡眼` 放过。新版同步本地和 Worker：风险昵称认识 `来个真人认识一下`、`附近的DD`，`⭐` 进入 emoji/装饰符识别；短、无上下文、带装饰符号/emoji、来自随机样 handle 的口号会发出 `generic_short_slogan_reply` 和 `pattern:generic-short-slogan-lure-account`，先送 AI 老师并临时下沉；AI prompt 明确这类批量号短口号本身是 `meaningless_bait`，不再要求出现露骨招嫖或联系方式。线上探针：`独具魅力`、`克服睡眼` 均为 `ai / ready / hide / high`，正常粗口评论为 `ai / ready / allow / low`。真实 Safari 页 `https://x.com/ronronzi/status/2050591230275539384` 验证 `build=2026-05-03-1402`、`articles=47`，`PaulBarbar6873`、`RyanTerrel92368`、`zhizi856`、`dffgfoo02` 对应 cell 均 `data-web25-hidden=1` 且 `display:none`，`sorallllllan` 仍可见。本轮没有改 schema、没有删除 D1 数据。
@@ -174,7 +176,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `ca852304-4377-4385-b327-087b621a7c1e`
+  - Version ID: `1632b53a-5494-4d52-a0e6-2240ab3d6d4e`
+  - 2026-05-04 00:42 已部署 `BUILD_ID=2026-05-04-0037` / `extensionVersion=0.1.65`。Worker 同步修花体/上标英文标签和装饰壳短口号证据，避免本地能识别、云端数据库候选键却不一致。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，下载清单返回新版；只读路线探针显示 `Pxrids`、`Xducqo` 同类样本会进入外接 AI 路线且不写数据库。
   - 2026-05-03 23:45 已部署 `BUILD_ID=2026-05-03-2345` / `extensionVersion=0.1.64`。线上探针 `Dakfzsyv @dakfzsyv19237 / SADNESS 人间起落情绪皆有你 SADNESS 🍂🧢` 带真实 DeepSeek 调用返回 `Final layer: ai / ready / hide / high`，规则候选键为 `pattern:bilingual-short-slogan-lure-account`，理由为随机账号的无关中英混合短口号；公网 `/downloads/latest.json` 返回新 build 和版本。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-03 22:46 已部署 `BUILD_ID=2026-05-03-2246` / `extensionVersion=0.1.63`。Worker 同步把单批 AI 接收上限和老师复核预算从 16 降到 8，并新增 `pending` 结果落库，避免真实页面只写样本、不留判断状态。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-2246`、`extensionVersion=0.1.63`；公网首页和控制台返回 200；AI 路线探针真实调用 DeepSeek，返回 `Final layer: ai / ready / hide / high`，且明确 `Database writes: no`。
   - 2026-05-03 14:12 已部署 `BUILD_ID=2026-05-03-1402` / `extensionVersion=0.1.62` 到公网。Worker 同步新增 `generic-short-slogan-lure-account` 候选键、`generic_short_slogan_reply` AI 证据标签，并收紧 AI 老师提示词：无上下文短口号 + 随机样 handle + emoji/装饰符是无意义诱饵。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1402`、`extensionVersion=0.1.62`；控制台返回 200；`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
