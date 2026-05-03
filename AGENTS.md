@@ -33,6 +33,7 @@ This file is the first thing future Codex sessions should read. The user does no
 ## Filtering Rules
 
 - The current X / Safari filtering experience is a stable asset. Do not casually rewrite thresholds, UI flow, or the main hide/restore behavior.
+- The target reply-moderation route is simple and should be treated as the product goal: database/memory scans first; if the database clearly knows it is bad, remove it immediately; if the database does not know, send it to AI as quickly as possible; AI hide decisions should remove the item and be written back into labels/memory/database candidates; AI allow decisions should leave the item visible. Temporary hiding before an AI result is only an exceptional safety bridge for confirmed or very high-risk content, not the default user experience, and future work should keep shrinking that bridge.
 - Name-based filtering matters. Risky display names such as free-sex bait, local hookup bait, numeric-handle bait, and low-information lure names must continue to be considered.
 - Screenshot-level evidence matters. If avatars or images show clear solicitation or routing text such as `全国安排` / `全国可飞`, and the configured AI provider can safely inspect images, route that image evidence to AI for high-risk candidates. If the provider cannot inspect images, say so plainly and propose the smallest safe way to add image/OCR evidence before changing paid providers or broadening API usage.
 - Keep these code paths aligned:
