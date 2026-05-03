@@ -4,24 +4,28 @@
 
 这份文件是给下一轮 Codex / 开发助手看的，不是产品宣传文档。目标只有一个：新对话打开后，能快速、安全、连续地接手，不重复解释，不误删数据，不改坏已经稳定的插件。
 
+重要读法：这份文件是地图，不是历史书。新对话只需要先抓当前状态、用户工作方式、下一步优先级和关键文件；第 3 节里大量按日期排列的发布记录，只在排查某个版本、某个漏网样本或某次回归时按关键词查，不要逐条复述或长时间分析。
+
 ## 0. 新对话开场必须先做
 
 下一轮接手时，先按这个顺序做：
 
 1. 进入仓库：`/Users/boriszhang/Documents/Codex/project 1`
 2. 运行：`git status --branch --short`
-3. 先读：
-   - `AGENTS.md`
-   - `docs/next-thread-handoff.md`
-   - `docs/current-stable-filter-state.md`
-   - `docs/current-stable-ui-state.md`
-   - `docs/moderation-database-training-plan.md`
-   - `docs/ai-api-provider-handoff.md`
+3. 先读，但不要逐条背历史：
+   - 完整读 `AGENTS.md`
+   - 快速读本文档第 0、1、2、9、10、11、12 节
+   - 第 3 节只抓最新当前锚点；旧日期记录只在排查时用 `rg` 搜关键词
+   - `docs/current-stable-filter-state.md` 和 `docs/current-stable-ui-state.md` 先读顶部结论和“不要改坏”的基线
+   - `docs/moderation-database-training-plan.md` 先读 AI 老师、数据库记忆、`manual_hide` / `manual_allow` 口径
+   - `docs/ai-api-provider-handoff.md` 只在改 AI 设置、接口、模型、Key 时细读
 4. 再根据用户最新一句话行动，不要被旧上下文带偏。
 
 不要假设工作区是干净的。不要回退自己没改过的东西。
 
 当前活跃分支是 `codex/cloudflare-public-foundation`。用户看到多个分支时，不要让用户手动切换、合并或删除分支；继续使用当前活跃分支即可。`main` 和旧的 `codex/...backup...` / `codex/update...` 分支先视为历史线或备份线，除非用户明确要求清理，否则不要动。
+
+2026-05-03 用户担心交接文档太长会让新 AI 每次浪费时间。以后接手时要先用当前锚点回答和行动，不要把历史发布流水当成必须逐条消化的上下文；维护本文档时也要优先压缩旧记录、更新当前结论，避免旧状态和新提示词互相矛盾。
 
 ## 1. 用户工作方式
 
@@ -428,6 +432,17 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 
 当前用户明确说，下一位 AI 主要要继续调试“AI 数据库、AI 审核本身、API 调度之间的关系”。这件事可以继续做，但不要重设计主页和控制台，用户已经认可当前主页和控制台形态。
 
+当前最可能继续遇到的问题：
+
+- AI 实际有没有读到真实页面：必须区分“开发者探针调用过模型”和“真实 Safari 页面写入了 `reply_ai_items` / `reply_ai_results`”。探针默认不写数据库，不能拿探针结果冒充真实页面学习记录。
+- 当前设备有没有拿到 AI 设置：如果当前 `sync_key` / 设备没有绑定到开发者账号，`/api/state` 可能返回 `replyAiEnabled=false`，真实页面就不会产生新的 AI 学习记录。
+- 漏网截图的正确处理：用户发漏网内容是在优化 AI 配置、证据输入和 AI 老师学习链路，不是让 Codex 直接手写截图短语。先看正文、昵称、handle、头像、图片、上下文和批量相邻这些证据，再决定是否需要 AI 复核、OCR/图片能力、样本标注或同构规则。
+- 少量误杀会成为下一阶段重点：当前 2026-05-03 17:15 的筛选已经基本好用，后续不要继续无脑加严；要保护和原帖强相关的尖锐、粗口、反驳、吐槽，例如 `你穷怕了` 这类上下文相关评论。
+- Safari 真实页面可能没有加载新版：替换本机 App 或发布下载包后，必须验证真实 X 页面里的 `BUILD_ID`、`冲走` 按钮和右栏关闭按钮；只看文件、签名或下载清单不够。
+- 旧缓存可能影响判断：如果改了 AI 路由、候选显示顺序或缓存含义，需要检查本地 AI 缓存号是否要换，避免旧页面继续吃旧结果。
+- 高风险数据库命中后继续叫 AI 不一定是浪费：2026-05-03 后这是“AI 老师补课”的设计；但普通正常回复仍不能全量调用 AI。
+- Cloudflare 登录可能偶尔失效：如果发布失败，要用人话告诉用户“网站还没更新到公网，原因是 Cloudflare 登录失效”，不要让用户读错误码。
+
 第一优先级：把 AI 审核链路跑清楚
 
 - 先确认插件不是每条回复都调用 AI：本地 `buildReplyAiModerationCandidate` 必须只把强风险或弱风险组合送进队列。
@@ -438,13 +453,14 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 - 用户点 `恢复误判` / `恢复这条` 后，应写入 `manual_allow`，停用对应 AI 记忆，压低对应数据库候选，并把旧隐藏从当前统计和当前明细里移走。
 - 2026-05-02 19:29 已修 `recordModerationTrainingLabelFromEvent`：手动 `冲走` / `恢复` 写完 label 后会刷新候选规则；单用户反馈仍只算候选证据，不直接变公共规则。
 
-第二优先级：调 API 调度和省钱策略
+第二优先级：调 API 调度和预算边界
 
 - 先用控制台“测试一次 AI 接入”确认 Key、接口地址、模型名可用；这一步只测 API，不写真实回复审核表。
 - 真实 X 页面调试时，只拿少量自然遇到的边界样本跑，不要大批量乱刷 API。
 - 观察每条样本最后落到哪一层：本地规则直接下沉、AI 直接屏蔽、AI 学习库复用、用户手动冲走、用户恢复。
 - 如果调用量异常，先查扩展队列和云端记忆命中，不要先改提示词。
 - 如果误判异常，先查 AI 输入证据和提示词边界，不要把 `manual_allow` 当成公共放行规则。
+- 用户已经明确：前期学习阶段不要为了省 token 让用户本人反复手动训练数据库；高风险、边界模糊、头像/图片有证据、数据库已命中但值得复核的候选，应在有上限的预算内让 AI 老师多看一点。
 
 第三优先级：数据安全和真实验收
 
@@ -514,7 +530,7 @@ Safari App：
 
 可以直接把下面这段发给新对话：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`、`docs/next-thread-handoff.md`、`docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md`、`docs/ai-api-provider-handoff.md`，然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前本机 Safari 插件主链路稳定，`BUILD_ID=2026-05-03-1327`；公网仍停在 `2026-05-03-1256`，因为 Cloudflare 登录令牌失效。冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。用户发漏网截图时，先当作诊断和 AI 训练素材，不要无脑把截图文字写进数据库或本地规则；先解释为什么没挡住，再优先补证据输入、AI 老师复核、AI 标注/记忆/候选写回。只有 AI/数据库证据充分或用户明确确认后，才把可复用模式写成本地和 Worker 同构规则。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，高风险候选即使命中 `reply_ai_memory`、`moderation_rule_candidates`、账号黑名单或旧复用层，也可以带 `teacher_review_requested` 或头像/风险昵称/关系诱导等证据先给 AI 老师复核；AI 高置信隐藏时最终层用 `ai` 并写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，AI 不高置信时回落到原拦截结果，且非最终老师判断也要写入样本标注。用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`，再快速读 `docs/next-thread-handoff.md` 的第 0、1、2、9、10、11、12 节；第 3 节旧发布记录只按关键词查，不要逐条复述。再读 `docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md` 的顶部结论；只有改 AI 设置、接口、模型或 Key 时再细读 `docs/ai-api-provider-handoff.md`。然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前本机 Safari 插件和公网都已到 `BUILD_ID=2026-05-03-1402` / `extensionVersion=0.1.62`；这版真实刷起来用户确认“屏蔽挺好，没有明显漏过”，下一阶段重点是减少少量误杀，尤其保护和原帖强相关的尖锐、粗口、反驳、吐槽。冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。用户发漏网内容时，先当作诊断和 AI 训练素材，不要无脑把截图文字写进数据库或本地规则；先解释为什么没挡住，再优先补证据输入、AI 老师复核、AI 标注/记忆/候选写回。只有 AI/数据库证据充分或用户明确确认后，才把可复用模式写成本地和 Worker 同构规则。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，高风险候选即使命中 `reply_ai_memory`、`moderation_rule_candidates`、账号黑名单或旧复用层，也可以带 `teacher_review_requested` 或头像/风险昵称/关系诱导等证据先给 AI 老师复核；AI 高置信隐藏时最终层用 `ai` 并写入 `reply_ai_results`、`moderation_sample_labels`、`reply_ai_memory`，AI 不高置信时回落到原拦截结果，且非最终老师判断也要写入样本标注。必须区分“开发者探针调用过模型”和“真实 Safari 页面写入了 AI 学习记录”；探针默认不写数据库。用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
 
 2026-05-03 用户明确补充：他们发来的任何漏网内容都是为了优化 AI 配置和 AI 老师学习链路，不是让 Codex 自己在本地硬写截图短语。后续应优先让 AI 老师判断并写入标签、记忆和候选规则，再由 AI/数据库证据或用户明确确认把可复用模式写回本地和 Worker。不要把单张截图直接变成本地规则。
 
@@ -527,5 +543,7 @@ Safari App：
 - 保持短、准、可执行
 - 删除过时数字，不把历史计数写成实时状态
 - 当前版本锚点要及时更新
+- 第 11 节给新对话的提示词必须和第 3 节最新版本锚点一致
+- 旧发布流水如果继续增长，应压缩或移到历史归档，不要让新 AI 每次接手都从头读完
 - 新增高风险规则要写清楚原因
 - 不要把聊天流水账搬进来

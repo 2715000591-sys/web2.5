@@ -69,9 +69,11 @@ Read these before touching core behavior:
 
 - Keep `docs/next-thread-handoff.md` concise, current, and operational.
 - Do not let it become a chat transcript or a pile of historical counts.
+- New sessions should use handoff docs as a map: read current anchors and durable rules first, and search old dated logs only when diagnosing a specific version or regression. Do not spend time line-by-line analyzing historical release notes unless the user asks.
 - When the user repeats a working preference or a durable project rule, promote it into this file or `docs/next-thread-handoff.md` instead of relying on chat memory.
 - When a deployment, local Safari app build, database migration, or stable behavior changes, update the handoff and the relevant stable-state doc in the same change.
 - Prefer dated version anchors, exact paths, and verification commands over vague reminders.
+- If the handoff grows too long, compress old release logs or move them into a history/archive document, and keep the direct new-thread prompt aligned with the latest current version.
 
 ## High-Risk Actions
 
