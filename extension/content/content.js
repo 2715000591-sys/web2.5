@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-1117";
+  const BUILD_ID = "2026-05-03-1138";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -168,6 +168,12 @@
     "在线等你",
     "取精",
     "固炮",
+    "固泡",
+    "泡友",
+    "炮友",
+    "性友",
+    "寻男",
+    "寻女",
     "骚"
   ];
   const LOCAL_MANUAL_STATE_KEY = "web25-manual-memory-v1";
@@ -2983,7 +2989,9 @@
     const blocks = Array.from(article.querySelectorAll('div[data-testid="tweetText"], div[lang]'));
     const pieces = blocks
       .map(function (node) {
-        return node.innerText.trim();
+        const inlineParts = [];
+        collectInlineTextParts(node, inlineParts);
+        return (inlineParts.length ? inlineParts.join("") : node.innerText).trim();
       })
       .filter(Boolean);
 
@@ -4991,7 +4999,7 @@
     if (/(?:看主页|点主页|置顶|简介|资料|签名|自介|搜id|小号|入口)/i.test(combined)) {
       signalTags.push("profile_redirect");
     }
-    if (/(?:免费|无偿|同城|搭子|主人|小狗|破处|约炮|福利|资源|频道|群号)/i.test(combined)) {
+    if (/(?:免费|无偿|同城|搭子|主人|小狗|破处|约炮|固炮|固泡|泡友|炮友|性友|寻男|寻女|福利|资源|频道|群号)/i.test(combined)) {
       signalTags.push("suspicious_bio");
     }
 

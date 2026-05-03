@@ -137,7 +137,13 @@ const SIMILARITY_TERMS = [
   "救赎之道",
   "极品尤物",
   "推特第一骚",
-  "固炮"
+  "固炮",
+  "固泡",
+  "泡友",
+  "炮友",
+  "性友",
+  "寻男",
+  "寻女"
 ];
 const SUBSTANTIVE_MARKERS = [
   "因为",
@@ -249,8 +255,8 @@ const TEMPLATE_SLOT_DEFINITIONS = [
   },
   {
     id: "relationship_or_erotic",
-    terms: ["暧昧", "陪伴", "陪聊", "想要", "调教", "小狗", "汪汪", "主人", "搭子", "固定搭子", "固炮", "单男", "处男", "破处", "约炮", "骚", "宠你"],
-    patterns: [/(陪|调教|主人|小狗|搭子|固炮|破处|约炮|骚)/]
+    terms: ["暧昧", "陪伴", "陪聊", "想要", "调教", "小狗", "汪汪", "主人", "搭子", "固定搭子", "固炮", "固泡", "泡友", "炮友", "性友", "寻男", "寻女", "单男", "处男", "破处", "约炮", "骚", "宠你"],
+    patterns: [/(陪|调教|主人|小狗|搭子|固炮|固泡|泡友|炮友|性友|寻男|寻女|破处|约炮|骚)/]
   },
   {
     id: "petplay_owner_request",
@@ -305,6 +311,12 @@ const DISPLAY_NAME_MARKETING_TERMS = [
   "单男",
   "男单",
   "固炮",
+  "固泡",
+  "泡友",
+  "炮友",
+  "性友",
+  "寻男",
+  "寻女",
   "约炮",
   "搭子",
   "调教",
@@ -327,7 +339,7 @@ const DISPLAY_NAME_LURE_PATTERNS = [
   /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
   /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
   /日泡/,
-  /(破处|约炮|单男|固炮|调教|主人|小狗|搭子)/,
+  /(破处|约炮|单男|固炮|固泡|泡友|炮友|性友|寻男|寻女|调教|主人|小狗|搭子)/,
   /(主页|置顶|简介|资料|签名|自介).{0,6}(id|号|账号|小号|入口|联系方式|飞机|电报|tg|vx|wx|群|频道)/,
   /(纸飞机|飞机号|扣扣|企鹅|群号|频道号|频道|群聊)/,
   /(搜|加).{0,3}(id|号|账号|小号|vx|wx|tg|电报|飞机)/
@@ -342,7 +354,9 @@ const DISPLAY_NAME_STRONG_LURE_PATTERNS = [
   /(每晚|今晚).{0,3}准时.{0,3}(大秀|涩播|色播|直播|开播)/,
   /准时.{0,3}(大秀|涩播|色播)/,
   /(?:月|周|长期)固定/,
-  /(找|求|蹲).{0,4}(固定)?(泡友|炮友|固炮|性友)/,
+  /(寻|找|求|蹲).{0,4}(固定)?(泡友|炮友|固炮|固泡|性友)/,
+  /(寻|找|求|蹲).{0,5}(男大|女大|男高|女高|男生|女生|哥哥|弟弟|姐姐|妹妹|单男|男单).{0,5}(泡友|炮友|固炮|固泡|性友)/,
+  /(泡友|炮友|固炮|固泡|性友).{0,5}(男大|女大|男高|女高|男生|女生|哥哥|弟弟|姐姐|妹妹|单男|男单)/,
   /(蹲|找|求).{0,3}(一个)?(弟弟|哥哥|姐姐|妹妹)/,
   /可约.{0,4}(私|主页|置顶|简介|资料|id|号|vx|wx|tg)/
 ];
@@ -8934,7 +8948,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "Always inspect replyDisplayName, replyHandle, handle shape, long digit runs, profile bio, profile links, and whether the reply is fragmented emoji/symbol noise or an almost-empty bait reply.",
     "The user payload is an evidence card for each reply. Treat reply text, display name, @handle, avatar evidence, profile bio, profile links, profile signal tags, and batch context as separate evidence fields.",
     "Always compare mainPostText with replyText. A short decorative, slogan-like, or emoji-heavy reply that has no useful relation to the original post is stronger spam evidence when the account handle, avatar, profile, or batch pattern is also suspicious; do not hide substantive replies that are clearly relevant to the thread.",
-    "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
+    "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 寻男大固泡, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
     "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 浅交不如深知己, 高质量交友贵在合拍, 品行相近方同行, 拒绝无效的寒暄, 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 有缘自会相识, 遇见温柔满人间, 怡好刚好温良友, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
     "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
     "If avatar.visionRequested is true and an avatar image is attached, inspect the avatar for text or visual lure cues such as 全国安排, local hookup, contact, adult-service, QR/contact, or profile bait. Use avatar evidence only as supporting evidence; never invent avatar content when an image is not attached or not visible.",
@@ -10809,7 +10823,7 @@ function displayNameLooksLure(name) {
   const marketingTermCount = DISPLAY_NAME_MARKETING_TERMS.reduce((count, term) => {
     return count + (compact.includes(term) ? 1 : 0);
   }, 0);
-  const lureTermCount = ["破处", "小狗", "主人", "搭子", "单男", "约", "撩", "调教", "固炮"].reduce((count, term) => {
+  const lureTermCount = ["破处", "小狗", "主人", "搭子", "单男", "约", "撩", "调教", "固炮", "固泡", "泡友", "炮友", "性友", "寻男", "寻女"].reduce((count, term) => {
     return count + (compact.includes(term) ? 1 : 0);
   }, 0);
   const hasMarketingBadge = /[👉❤️💕💋🥵🤤🍑🍆🌸]/u.test(raw) || compact.includes("ovo");
