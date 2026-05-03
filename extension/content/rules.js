@@ -650,9 +650,51 @@
 
     const cjkCount = (compact.match(/\p{Script=Han}/gu) || []).length;
     const hasDecorativeCue = countEmojiMatches(raw) > 0 || DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
-    const hasConversationAnchor = /(我|你|他|她|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
+    const hasConversationAnchor = /(我觉得|你说|他说|她说|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
     const commonGreeting = /(生日快乐|新年快乐|恭喜|加油|谢谢|感谢|辛苦|好看|漂亮|可爱|厉害|牛逼|早安|晚安)/.test(compact);
     return hasDecorativeCue && cjkCount >= Math.ceil(chars.length * 0.6) && !hasConversationAnchor && !commonGreeting;
+  }
+
+  function looksLikeBilingualShortSloganBait(text) {
+    const raw = String(text || "");
+    const compact = buildCompact(raw);
+    const chars = Array.from(compact);
+    if (!compact || chars.length < 8 || chars.length > 36) {
+      return false;
+    }
+
+    if (countMatches(compact, SUBSTANTIVE_MARKERS) > 0 || countMatches(compact, FINANCE_MARKERS) > 0) {
+      return false;
+    }
+
+    if (/[?？!！]/.test(raw)) {
+      return false;
+    }
+
+    const latinWords = Array.from(raw.matchAll(/\b[a-z]{3,14}\b/gi))
+      .map(function (match) {
+        return String(match[0] || "").toLowerCase();
+      })
+      .filter(Boolean);
+    if (latinWords.length < 2) {
+      return false;
+    }
+
+    const firstLatinWord = latinWords[0];
+    const repeatedLatinWrapper = latinWords.slice(1).some(function (word) {
+      return word === firstLatinWord;
+    });
+    const cjkCount = (compact.match(/\p{Script=Han}/gu) || []).length;
+    const latinCount = (compact.match(/[a-z]/gi) || []).length;
+    const hasDecorativeCue = countEmojiMatches(raw) > 0 || DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
+    const hasConversationAnchor = /(我觉得|你说|他说|她说|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
+    const commonGreeting = /(生日快乐|新年快乐|恭喜|加油|谢谢|感谢|辛苦|好看|漂亮|可爱|厉害|牛逼|早安|晚安)/.test(compact);
+    return repeatedLatinWrapper
+      && hasDecorativeCue
+      && cjkCount >= 4
+      && latinCount >= firstLatinWord.length * 2
+      && !hasConversationAnchor
+      && !commonGreeting;
   }
 
   function normalizeContextForOverlap(text) {
@@ -696,6 +738,7 @@
       && (
         reply.hasEmojiNoiseBait
         || reply.hasGenericShortSloganBait
+        || reply.hasBilingualShortSloganBait
         || reply.hasDecorativeSloganBait
         || reply.hasPoeticSpamSloganBait
         || reply.hasSpamTemplateSignal
@@ -854,6 +897,7 @@
     const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(raw);
     const hasEmojiNoiseBait = looksLikeEmojiNoiseBait(raw);
     const hasGenericShortSloganBait = looksLikeGenericShortSloganBait(raw);
+    const hasBilingualShortSloganBait = looksLikeBilingualShortSloganBait(raw);
     const hasEroticMentionRedirect = hasAccountMention && (
       hasExplicitEroticBait
       || EROTIC_MENTION_REDIRECT_MARKERS.some(function (term) {
@@ -898,6 +942,7 @@
       hasPoeticSpamSloganBait: hasPoeticSpamSloganBait,
       hasEmojiNoiseBait: hasEmojiNoiseBait,
       hasGenericShortSloganBait: hasGenericShortSloganBait,
+      hasBilingualShortSloganBait: hasBilingualShortSloganBait,
       hasEroticMentionRedirect: hasEroticMentionRedirect
     };
   }
@@ -1294,6 +1339,11 @@
       reasons.push("decorative-slogan-from-suspicious-handle");
     }
 
+    if (reply.hasBilingualShortSloganBait && suspiciousHandle) {
+      score += 5;
+      reasons.push("bilingual-short-slogan-from-suspicious-handle");
+    }
+
     if (suspiciousHandle && (lureDisplayName || reply.hasMinimalTextPayload || reply.matchedSlots.length > 0)) {
       score += 1;
       reasons.push("suspicious-handle");
@@ -1350,6 +1400,7 @@
     looksLikeDecorativeSloganBait: looksLikeDecorativeSloganBait,
     looksLikePoeticSpamSloganBait: looksLikePoeticSpamSloganBait,
     looksLikeGenericShortSloganBait: looksLikeGenericShortSloganBait,
+    looksLikeBilingualShortSloganBait: looksLikeBilingualShortSloganBait,
     looksLikeEmojiNoiseBait: looksLikeEmojiNoiseBait,
     looksLikeContextDetachedBait: looksLikeContextDetachedBait,
     looksLikeInnocentPetContext: looksLikeInnocentPetContext

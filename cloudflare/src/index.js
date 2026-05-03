@@ -539,6 +539,7 @@ const REPLY_AI_AVATAR_EVIDENCE_TAGS = new Set([
   "poetic_low_substance_reply",
   "decorative_low_substance_reply",
   "generic_short_slogan_reply",
+  "bilingual_short_slogan_reply",
   "emoji_noise_reply",
   "geo_relationship_bait",
   "spam_template_signal",
@@ -5126,6 +5127,7 @@ function isHighValueModerationPatternKey(key) {
     "pattern:decorative-slogan-lure-account",
     "pattern:poetic-slogan-lure-account",
     "pattern:emoji-noise-lure-account",
+    "pattern:bilingual-short-slogan-lure-account",
     "pattern:generic-short-slogan-lure-account"
   ].includes(String(key || "").trim());
 }
@@ -5142,6 +5144,7 @@ function canAutoActivateModerationPatternKey(key) {
     "pattern:decorative-slogan-lure-account",
     "pattern:poetic-slogan-lure-account",
     "pattern:emoji-noise-lure-account",
+    "pattern:bilingual-short-slogan-lure-account",
     "pattern:generic-short-slogan-lure-account"
   ].includes(String(key || "").trim());
 }
@@ -8469,6 +8472,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(replyText);
   const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(replyText);
   const hasGenericShortSloganBait = looksLikeGenericShortSloganBait(replyText);
+  const hasBilingualShortSloganBait = looksLikeBilingualShortSloganBait(replyText);
   const hasEmojiNoiseBait = looksLikeEmojiNoiseBait(replyText);
   const avatarSignals = Array.isArray(itemRow && itemRow.avatarEvidenceTags)
     ? itemRow.avatarEvidenceTags
@@ -8484,12 +8488,14 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     || hasLowInformationBadge
     || hasThinSymbolOrNumberPayload
     || hasGenericShortSloganBait
+    || hasBilingualShortSloganBait
     || hasEmojiNoiseBait;
   const hasContextDetachedBait = looksLikeContextDetachedBait(replyText, itemRow && itemRow.mainPostText ? itemRow.mainPostText : "", {
     hasEmojiNoiseBait,
     hasDecorativeSloganBait,
     hasPoeticSpamSloganBait,
     hasGenericShortSloganBait,
+    hasBilingualShortSloganBait,
     hasSpamTemplateSignal,
     hasLowInformationBadge,
     hasFragmentedSymbolicReply,
@@ -8539,6 +8545,9 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
   if (hasGenericShortSloganBait && (suspiciousHandle || /^[a-z]{4,}[0-9]{2,}$/i.test(rawHandle) || /^[a-z]{6,}$/i.test(rawHandle))) {
     evidenceNotes.push("reply is a generic short low-substance slogan from a disposable-looking account");
   }
+  if (hasBilingualShortSloganBait && (suspiciousHandle || /^[a-z]{4,}[0-9]{2,}$/i.test(rawHandle) || /^[a-z]{6,}$/i.test(rawHandle))) {
+    evidenceNotes.push("reply is a repeated English-label Chinese slogan from a disposable-looking account");
+  }
   if (hasContextDetachedBait) {
     evidenceNotes.push("reply appears unrelated to the main post context");
   }
@@ -8580,6 +8589,7 @@ function buildReplyAiHeuristicSummary(itemRow, riskRow) {
     hasDecorativeSloganBait,
     hasPoeticSpamSloganBait,
     hasGenericShortSloganBait,
+    hasBilingualShortSloganBait,
     hasEmojiNoiseBait,
     hasContextDetachedBait,
     avatarEvidenceTags: normalizeReplyAiStringList(avatarSignals, REPLY_AI_AVATAR_EVIDENCE_TAGS, REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT),
@@ -8640,6 +8650,9 @@ function buildReplyAiMemoryContextKey(itemRow, heuristicSummary) {
   }
   if (heuristicSummary.hasGenericShortSloganBait) {
     contextFlags.push("generic-short-slogan");
+  }
+  if (heuristicSummary.hasBilingualShortSloganBait) {
+    contextFlags.push("bilingual-short-slogan");
   }
   if (heuristicSummary.hasEmojiNoiseBait) {
     contextFlags.push("emoji-noise");
@@ -8996,6 +9009,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "Always compare mainPostText with replyText. A short decorative, slogan-like, or emoji-heavy reply that has no useful relation to the original post is stronger spam evidence when the account handle, avatar, profile, or batch pattern is also suspicious; do not hide substantive replies that are clearly relevant to the thread.",
     "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 寻男大固泡, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, 附近真实约见, 来个真人认识一下, and 附近的DD.",
     "Also treat batches of poetic or generic short low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 浅交不如深知己, 高质量交友贵在合拍, 品行相近方同行, 拒绝无效的寒暄, 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 有缘自会相识, 遇见温柔满人间, 怡好刚好温良友, 旧城偶遇故人, 晚风撞我相逢, 一念恰好相逢, 独具魅力, or 克服睡眼 with emoji/symbol decoration and no thread relevance.",
+    "Also treat a repeated English label wrapping a short Chinese low-substance slogan, followed by emoji decoration, as the same batch-visibility bait when the handle looks disposable and the reply has no useful relation to the thread.",
     "For these generic short slogan cases, hide with confidence high when the account handle looks random/disposable and the reply is detached; use allow only for common greetings/congratulations/thanks, relevant jokes, or substantive comments. A rough but substantive comment such as 你这问题有意思。男的就是会这样犯贱啊 should be allowed.",
     "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
     "If avatar.visionRequested is true and an avatar image is attached, inspect the avatar for text or visual lure cues such as 全国安排, local hookup, contact, adult-service, QR/contact, or profile bait. Use avatar evidence only as supporting evidence; never invent avatar content when an image is not attached or not visible.",
@@ -9357,6 +9371,7 @@ function shouldRequestReplyAiTeacherReview(itemRow, settings) {
     || looksLikeLowInformationBadge(replyText)
     || looksLikeEmojiNoiseBait(replyText)
     || looksLikeGenericShortSloganBait(replyText)
+    || looksLikeBilingualShortSloganBait(replyText)
     || looksLikeDecorativeSloganBait(replyText)
     || looksLikePoeticSpamSloganBait(replyText);
   const strongTextSignal = looksLikeShareLinkScam(replyText)
@@ -9373,6 +9388,7 @@ function shouldRequestReplyAiTeacherReview(itemRow, settings) {
     "poetic_low_substance_reply",
     "decorative_low_substance_reply",
     "generic_short_slogan_reply",
+    "bilingual_short_slogan_reply",
     "emoji_noise_reply",
     "context_detached_reply",
     "lure_display_name"
@@ -9391,6 +9407,7 @@ function shouldRequestReplyAiTeacherReview(itemRow, settings) {
       || (lureDisplayName && (suspiciousHandle || thinOrBaitText || strongTextSignal))
       || (suspiciousHandle && (thinOrBaitText || strongTextSignal))
       || (weakDisposableHandle && looksLikeGenericShortSloganBait(replyText) && thinOrBaitText)
+      || (weakDisposableHandle && looksLikeBilingualShortSloganBait(replyText) && thinOrBaitText)
       || (strongTextSignal && (lureDisplayName || suspiciousHandle))
     )
   );
@@ -10586,9 +10603,47 @@ function looksLikeGenericShortSloganBait(text) {
 
   const cjkCount = (compact.match(/\p{Script=Han}/gu) || []).length;
   const hasDecorativeCue = Array.from(raw.matchAll(EMOJI_PATTERN)).length > 0 || DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
-  const hasConversationAnchor = /(我|你|他|她|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
+  const hasConversationAnchor = /(我觉得|你说|他说|她说|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
   const commonGreeting = /(生日快乐|新年快乐|恭喜|加油|谢谢|感谢|辛苦|好看|漂亮|可爱|厉害|牛逼|早安|晚安)/.test(compact);
   return hasDecorativeCue && cjkCount >= Math.ceil(chars.length * 0.6) && !hasConversationAnchor && !commonGreeting;
+}
+
+function looksLikeBilingualShortSloganBait(text) {
+  const raw = String(text || "");
+  const compact = buildCompactRuleText(raw);
+  const chars = Array.from(compact);
+  if (!compact || chars.length < 8 || chars.length > 36) {
+    return false;
+  }
+
+  if (countRuleTermMatches(compact, SUBSTANTIVE_MARKERS) > 0 || countRuleTermMatches(compact, FINANCE_MARKERS) > 0) {
+    return false;
+  }
+
+  if (/[?？!！]/.test(raw)) {
+    return false;
+  }
+
+  const latinWords = Array.from(raw.matchAll(/\b[a-z]{3,14}\b/gi))
+    .map((match) => String(match[0] || "").toLowerCase())
+    .filter(Boolean);
+  if (latinWords.length < 2) {
+    return false;
+  }
+
+  const firstLatinWord = latinWords[0];
+  const repeatedLatinWrapper = latinWords.slice(1).some((word) => word === firstLatinWord);
+  const cjkCount = (compact.match(/\p{Script=Han}/gu) || []).length;
+  const latinCount = (compact.match(/[a-z]/gi) || []).length;
+  const hasDecorativeCue = Array.from(raw.matchAll(EMOJI_PATTERN)).length > 0 || DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
+  const hasConversationAnchor = /(我觉得|你说|他说|她说|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
+  const commonGreeting = /(生日快乐|新年快乐|恭喜|加油|谢谢|感谢|辛苦|好看|漂亮|可爱|厉害|牛逼|早安|晚安)/.test(compact);
+  return repeatedLatinWrapper
+    && hasDecorativeCue
+    && cjkCount >= 4
+    && latinCount >= firstLatinWord.length * 2
+    && !hasConversationAnchor
+    && !commonGreeting;
 }
 
 function normalizeContextForOverlap(text) {
@@ -10632,6 +10687,7 @@ function looksLikeContextDetachedBait(replyText, contextText, heuristicSummary) 
     || summary.hasDecorativeSloganBait
     || summary.hasPoeticSpamSloganBait
     || summary.hasGenericShortSloganBait
+    || summary.hasBilingualShortSloganBait
     || summary.hasSpamTemplateSignal
     || summary.hasLowInformationBadge
     || summary.hasFragmentedSymbolicReply
@@ -11079,6 +11135,16 @@ function buildRowKeys(row) {
         || /^[a-z]{6,}$/i.test(String(row.reply_handle || row.replyHandle || "").replace(/^@/, ""))
       )
     );
+  const bilingualShortSloganLureAccount = protectedGuardApplies
+    ? false
+    : (
+      looksLikeBilingualShortSloganBait(replyText || normalized)
+      && (
+        handleLooksSuspicious(row.reply_handle || row.replyHandle || "")
+        || /^[a-z]{4,}[0-9]{2,}$/i.test(String(row.reply_handle || row.replyHandle || "").replace(/^@/, ""))
+        || /^[a-z]{6,}$/i.test(String(row.reply_handle || row.replyHandle || "").replace(/^@/, ""))
+      )
+    );
   const lowInformationStrongLureName = protectedGuardApplies
     ? false
     : (
@@ -11149,11 +11215,15 @@ function buildRowKeys(row) {
                                               emojiNoiseLureAccount
                                                 ? "pattern:emoji-noise-lure-account"
                                                 : (
-                                                  genericShortSloganLureAccount
-                                                    ? "pattern:generic-short-slogan-lure-account"
-                                                    : (matchedTerms.length > 0
-                                                      ? "pattern:" + matchedTerms.join("|")
-                                                      : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                                  bilingualShortSloganLureAccount
+                                                    ? "pattern:bilingual-short-slogan-lure-account"
+                                                    : (
+                                                      genericShortSloganLureAccount
+                                                        ? "pattern:generic-short-slogan-lure-account"
+                                                        : (matchedTerms.length > 0
+                                                          ? "pattern:" + matchedTerms.join("|")
+                                                          : (loosePattern.length >= 4 ? "pattern:" + loosePattern : ""))
+                                                    )
                                                 )
                                             )
                                         )

@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-2246";
+  const BUILD_ID = "2026-05-03-2345";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -17,7 +17,7 @@
   const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 2;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 600;
-  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v5";
+  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v6";
   const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
   const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
   const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
@@ -3236,6 +3236,10 @@
       return "pattern:emoji-noise-lure-account";
     }
 
+    if (analysis && analysis.hasBilingualShortSloganBait && (suspiciousHandle || weakDisposableHandle)) {
+      return "pattern:bilingual-short-slogan-lure-account";
+    }
+
     if (analysis && analysis.hasGenericShortSloganBait && (suspiciousHandle || weakDisposableHandle)) {
       return "pattern:generic-short-slogan-lure-account";
     }
@@ -4874,6 +4878,7 @@
       || analysis.hasThinSymbolOrNumberPayload
       || analysis.hasLowInformationBadge
       || analysis.hasGenericShortSloganBait
+      || analysis.hasBilingualShortSloganBait
       || analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
       || analysis.hasEmojiNoiseBait
@@ -4908,6 +4913,9 @@
     if (analysis && analysis.hasGenericShortSloganBait) {
       tags.push("generic_short_slogan_reply");
     }
+    if (analysis && analysis.hasBilingualShortSloganBait) {
+      tags.push("bilingual_short_slogan_reply");
+    }
     if (analysis && analysis.hasGeoRelationshipBait) {
       tags.push("geo_relationship_bait");
     }
@@ -4933,6 +4941,7 @@
         || (analysis && analysis.hasSpamTemplateSignal)
         || (analysis && analysis.hasPoeticSpamSloganBait)
         || (analysis && analysis.hasDecorativeSloganBait)
+        || (analysis && analysis.hasBilingualShortSloganBait)
         || (analysis && analysis.hasEmojiNoiseBait)
       )
     );
@@ -5184,6 +5193,7 @@
         || analysis.hasLureEmoji
         || analysis.hasEmojiNoiseBait
         || analysis.hasGenericShortSloganBait
+        || analysis.hasBilingualShortSloganBait
         || analysis.hasShareLinkScam
         || analysis.hasAccountMention
         || analysis.hasExternalContactPayload
@@ -5208,6 +5218,7 @@
         || analysis.hasLowInformationBadge
         || analysis.hasEmojiNoiseBait
         || analysis.hasGenericShortSloganBait
+        || analysis.hasBilingualShortSloganBait
       ));
     let score = 0;
 
@@ -5262,6 +5273,9 @@
     if (!protectedAccount && analysis && analysis.hasGenericShortSloganBait) {
       score += contextDetachedBait ? 3 : 1;
     }
+    if (!protectedAccount && analysis && analysis.hasBilingualShortSloganBait) {
+      score += contextDetachedBait ? 3 : 1;
+    }
     if (analysis && analysis.hasEroticMentionRedirect) {
       score += 3;
     }
@@ -5293,11 +5307,15 @@
       analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
       || analysis.hasEmojiNoiseBait
+      || (analysis.hasBilingualShortSloganBait && contextDetachedBait)
       || (analysis.hasGenericShortSloganBait && contextDetachedBait)
     )) {
       score += 1;
     }
     if (!protectedAccount && weakDisposableHandle && analysis && analysis.hasGenericShortSloganBait && contextDetachedBait) {
+      score += 1;
+    }
+    if (!protectedAccount && weakDisposableHandle && analysis && analysis.hasBilingualShortSloganBait && contextDetachedBait) {
       score += 1;
     }
     if (matchedSlots.includes("relationship_or_erotic")) {
@@ -5325,6 +5343,7 @@
       analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
       || analysis.hasEmojiNoiseBait
+      || (analysis.hasBilingualShortSloganBait && contextDetachedBait)
       || (analysis.hasGenericShortSloganBait && contextDetachedBait)
     ));
     const highValueContentSignal = strongContentSignal || softLowSubstanceSignal;
@@ -5350,8 +5369,10 @@
         analysis.hasDecorativeSloganBait
         || analysis.hasPoeticSpamSloganBait
         || analysis.hasEmojiNoiseBait
+        || (analysis.hasBilingualShortSloganBait && contextDetachedBait)
       )))
       || (!protectedAccount && disposableHandle && contextDetachedBait && Boolean(analysis && analysis.hasGenericShortSloganBait))
+      || (!protectedAccount && disposableHandle && contextDetachedBait && Boolean(analysis && analysis.hasBilingualShortSloganBait))
       || (accountMetadataSignals && shortOrThinReply);
     const hasWeakTriggerCombo = score >= REPLY_AI_BASE_SUSPICION_THRESHOLD && (
       lureDisplayName
@@ -5366,6 +5387,7 @@
         || matchedSlots.length >= 1
       ))
       || (!protectedAccount && disposableHandle && contextDetachedBait && Boolean(analysis && analysis.hasGenericShortSloganBait))
+      || (!protectedAccount && disposableHandle && contextDetachedBait && Boolean(analysis && analysis.hasBilingualShortSloganBait))
       || matchedSlots.length >= 2
     );
 
@@ -5385,6 +5407,7 @@
           analysis.hasDecorativeSloganBait
           || analysis.hasPoeticSpamSloganBait
           || analysis.hasEmojiNoiseBait
+          || (analysis.hasBilingualShortSloganBait && contextDetachedBait)
           || (analysis.hasGenericShortSloganBait && contextDetachedBait)
         )))
       )

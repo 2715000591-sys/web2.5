@@ -164,8 +164,11 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-1327`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1402`
 - Safari 扩展 `BUILD_ID = 2026-05-03-2246`
-- 扩展版本 `0.1.63`
-- App / Extension 版本 `1.0.63 (64)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-2345`
+- 扩展版本 `0.1.64`
+- App / Extension 版本 `1.0.64 (65)`
+
+2026-05-03 23:45 已替换本机 App 到 `BUILD_ID=2026-05-03-2345`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.64`。本轮没有改右栏 UI，只补“中英混合短口号 + 随机账号 + 与主帖无关”的筛选证据；`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-03-2345`、`detail=1`、`sidebar=1`、`flushes=10`、`sideButtons=4`、`manualButtons=10`、`marking=1`、`articles=13`、`stage=scan:done`。
 
 2026-05-03 22:46 已替换本机 App 到 `BUILD_ID=2026-05-03-2246`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.63`。本轮没有改右栏 UI，只修真实页面 AI 写入/判断落库链路和 AI 批量大小；`npm run safari:verify-live` 对真实 X 首页通过：`build=2026-05-03-2246`、`sidebar=1`、`sideButtons=5`、`marking=1`、`articles=5`、`stage=ads:done`。当前打开的是首页，不是详情页，所以本轮没有可见 `冲走` 按钮样本；用户打开详情页后可继续补真实反馈。
 
