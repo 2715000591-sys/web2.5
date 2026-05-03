@@ -130,9 +130,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-03-1327`
-  - 扩展版本 `0.1.61`
-  - App / Extension 版本 `1.0.61 (62)`
+  - `BUILD_ID = 2026-05-03-1402`
+  - 扩展版本 `0.1.62`
+  - App / Extension 版本 `1.0.62 (63)`
+  - 2026-05-03 14:12 用户发截图让 GPT-5.5 自判，指出 `舒希🌸🌸 / 想dD找会疼人的哥哥`、`怂歆🌸来个真人认识一下🌸 / 6❤🎁😊💌`、`芭乐芭乐❤️附近的DD啊 / 5🙊🙈`、`椰子 / 🤓独具魅力`、`丽莎 / ⭐克服睡眼` 都应有问题，`云酱Yuiun / 你这问题有意思...` 是正常粗口评论。根因分三层：旧数据库还没有 `generic-short-slogan-lure-account` 这种候选键；本地 AI 入口不认识 `来个真人认识一下`、`附近的DD` 和 `⭐` 这类装饰符号，弱随机 handle 的短口号也不够分；DeepSeek 老师提示词对“没有露骨词/联系方式”的短口号过于保守，最初把 `独具魅力`、`克服睡眼` 放过。新版同步本地和 Worker：风险昵称认识 `来个真人认识一下`、`附近的DD`，`⭐` 进入 emoji/装饰符识别；短、无上下文、带装饰符号/emoji、来自随机样 handle 的口号会发出 `generic_short_slogan_reply` 和 `pattern:generic-short-slogan-lure-account`，先送 AI 老师并临时下沉；AI prompt 明确这类批量号短口号本身是 `meaningless_bait`，不再要求出现露骨招嫖或联系方式。线上探针：`独具魅力`、`克服睡眼` 均为 `ai / ready / hide / high`，正常粗口评论为 `ai / ready / allow / low`。真实 Safari 页 `https://x.com/ronronzi/status/2050591230275539384` 验证 `build=2026-05-03-1402`、`articles=47`，`PaulBarbar6873`、`RyanTerrel92368`、`zhizi856`、`dffgfoo02` 对应 cell 均 `data-web25-hidden=1` 且 `display:none`，`sorallllllan` 仍可见。本轮没有改 schema、没有删除 D1 数据。
   - 2026-05-03 13:49 用户追问截图 `天使熊❤️附近的来 @hayes_jaco16929 / 纯 emoji` 为什么仍露出。复查发现前一轮说法不够严谨：同内容开发者探针会调用 DeepSeek，但真实 Safari 页面里的这条当时没有进入 AI 队列，也没有被隐藏。根因是旧昵称风险只强认识 `固泡/同城上门/无偿线下/免费破处` 等，`附近的来` 这种短昵称没有被当成诱导昵称；纯 emoji 正文和可疑 handle 分数不够。新版本地和 Worker 同步加入 `附近/同城/线下 + 来/来聊/来找/找我/私/约/见` 昵称诱导模式，并把 AI 候选的显示顺序提前：凡是应送 AI 的高风险项先按 `AI 复审中` 隐藏，再等云端结果。临时 AI 缓存号换到 `web25-reply-ai-cache-v3`。本地回归：截图同款隐藏，`附近有家面馆不错` 放过。用户完成 Cloudflare 登录后已发布公网；线上探针同款样本真实调用 DeepSeek，返回 `Final layer: ai / ready / hide / high`、`External AI: called`、`Database writes: no`。真实 Safari 页 `https://x.com/yizhunli10167/status/2050601910487461905` 验证 `build=2026-05-03-1327`、`articles=52`，`@hayes_jaco16929` 对应 cell 为 `data-web25-hidden=1`、`display:none`。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1327`、`extensionVersion=0.1.61`；本轮没有改 schema、没有删除 D1 数据。
   - 2026-05-03 12:56 已按用户“AI 根本没干活，要改产品里的 AI”要求提高 AI 老师实际参与度。本地批量上限 12 -> 16，发送等待 650ms -> 350ms，最小间隔 750ms -> 350ms，老师复核分 3 -> 2，会话缓存 360 -> 600，并把临时缓存号换成 `web25-reply-ai-cache-v2`，让新版重新审核可疑项。云端老师复核预算 8 -> 16；高风险候选即使命中 AI 记忆、数据库规则、账号黑名单或旧复用层，也会先追加给 DeepSeek 老师复核；AI 高置信隐藏则最终层为 `ai`，AI 不高置信时回落到原拦截结果，非最终老师判断也写入样本标注。真实 Safari 详情页验证 `build=2026-05-03-1256`、`stage=scan:done`、`articles=22`、可见 `冲走` 按钮 6 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 11:40 已补用户截图里 `孙甜甜❤️寻男大固泡 @MonaKristi9125 / 纯 emoji 噪音` 漏网。根因有两层：旧昵称规则认识 `找固定泡友/炮友/固炮`，但没认识 `寻男 + 固泡` 缩写；同时 X 把 tweet 正文 emoji 渲染成图片，旧 `getTweetText` 只读 `innerText` 时会漏掉 emoji alt。新版把 `寻男/寻女/固泡/泡友/炮友/性友` 纳入风险昵称和强风险模式，本地和 Worker 同步；并让正文读取从 tweetText 节点收集 emoji 图片 alt。回归：同款 emoji / 空正文 + 风险昵称隐藏；`我在找固定搭档做项目`、`今晚准时看直播吗` 放过。真实 Safari 页验证 `build=2026-05-03-1138`、`stage=scan:done`、`articles=19`，该行 `hidden=true` 且 `cellHidden=true`。本轮没有改数据库结构，没有删除 D1 数据。
@@ -164,7 +165,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `a461e4f2-2687-4e00-91e8-7b12dd49aeaa`
+  - Version ID: `968014ae-0027-4426-a759-a036b7a48fcd`
+  - 2026-05-03 14:12 已部署 `BUILD_ID=2026-05-03-1402` / `extensionVersion=0.1.62` 到公网。Worker 同步新增 `generic-short-slogan-lure-account` 候选键、`generic_short_slogan_reply` AI 证据标签，并收紧 AI 老师提示词：无上下文短口号 + 随机样 handle + emoji/装饰符是无意义诱饵。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1402`、`extensionVersion=0.1.62`；控制台返回 200；`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 13:45 已部署 `BUILD_ID=2026-05-03-1327` 到公网。Worker 同步认识 `附近/同城/线下 + 来/来聊/来找/找我/私/约/见` 昵称诱导，并保留高风险候选先给 AI 老师复核的链路。公网首页和控制台均返回 200，`/downloads/latest.json` 返回 `buildId=2026-05-03-1327`、`extensionVersion=0.1.61`。线上同款探针 `天使熊❤️附近的来 @hayes_jaco16929 / 🐱🤠🚗🐟🌝🐱🦁` 真实调用 DeepSeek，返回 `Final layer: ai / ready / hide / high`、`External AI: called`、`Database writes: no`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 12:56 已部署 `BUILD_ID=2026-05-03-1256` 到公网。Worker 同步把批量接收上限提到 16，数据库/记忆库/账号黑名单/旧复用命中的高风险项也会在预算内先给 AI 老师复核；老师返回高置信隐藏时用 AI 结果，老师没给高置信隐藏时回落到原拦截结果。公网探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 返回 `Final layer: ai / ready / hide / high`、`External AI: called`。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-1256`、`extensionVersion=0.1.60`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 11:40 已部署 `BUILD_ID=2026-05-03-1138` 到公网。Worker 同步认识 `寻男/寻女/固泡/泡友/炮友/性友` 昵称风险词，并在回复区 AI prompt 示例里加入 `寻男大固泡`，避免云端训练/候选和本地即时隐藏脱节。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-1138`、`extensionVersion=0.1.59`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。

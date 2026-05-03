@@ -1,7 +1,7 @@
 (function () {
   const ZERO_WIDTH_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
   const COMPACT_PUNCTUATION_PATTERN = /[~～`!！?？,，。.、:：;；'"“”‘’()[\]{}<>《》…—\-_=+*\/\\|]/g;
-  const EMOJI_PATTERN = /[\u{1F100}-\u{1FAFF}\u2600-\u27BF]/gu;
+  const EMOJI_PATTERN = /[\u{1F100}-\u{1FAFF}\u2600-\u27BF\u2B00-\u2BFF]/gu;
   const SHORT_REPLY_LIMIT = 12;
   const AUTO_HIDE_THRESHOLD = 5;
 
@@ -78,7 +78,10 @@
     "炮友",
     "性友",
     "寻男",
-    "寻女"
+    "寻女",
+    "dd",
+    "滴滴",
+    "会疼人"
   ];
   const DISPLAY_NAME_MARKETING_TERMS = [
     "免费",
@@ -119,8 +122,12 @@
     /(无偿|无常|无线|无限).{0,2}线下/,
     /线下.{0,2}(无偿|无常|无线|无限)/,
     /(?:男|女).{0,2}无偿/,
+    /(来个|找个|找|求|蹲).{0,4}(真人|dd|滴滴|哥哥|弟弟|姐姐|妹妹).{0,4}(认识|聊|找|私|约|见)?/i,
+    /真人.{0,4}(认识|来|聊|找|私|约|见)/,
     /(附近|同城|线下).{0,3}(的)?(来|来聊|来找|找我|找下|私|约|见)/,
     /(来|来聊|来找|找我|找下|私|约|见).{0,3}(附近|同城|线下)/,
+    /(附近|同城|线下).{0,4}(dd|滴滴|哥哥|弟弟|姐姐|妹妹)/i,
+    /(dd|滴滴|哥哥|弟弟|姐姐|妹妹).{0,4}(附近|同城|线下)/i,
     /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
     /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
     /日泡/,
@@ -240,7 +247,9 @@
     /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
     /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/,
     /^(?:有(?:没)?有|有).{0,3}(单身|温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)[a-z]{0,3}\d{0,3}$/,
-    /^(?:找|求|蹲)(?:个|一个)?.{0,2}(温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)\d{0,3}$/
+    /^(?:找|求|蹲)(?:个|一个)?.{0,2}(温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)\d{0,3}$/,
+    /^(?:想|找|求|蹲).{0,4}(dd|滴滴).{0,6}(哥哥|弟弟|姐姐|妹妹|疼人)$/,
+    /^(?:想|找|求|蹲).{0,4}(会)?疼人.{0,4}(哥哥|弟弟|姐姐|妹妹)$/
   ];
   const CIVIC_LANDMARK_NEARBY_TERMS = [
     "天安门",
@@ -623,6 +632,29 @@
     return emojiCount >= 4 || (emojiCount >= 3 && Array.from(compact).length <= 10);
   }
 
+  function looksLikeGenericShortSloganBait(text) {
+    const raw = String(text || "");
+    const compact = buildCompact(raw);
+    const chars = Array.from(compact);
+    if (!compact || chars.length < 4 || chars.length > 12) {
+      return false;
+    }
+
+    if (countMatches(compact, SUBSTANTIVE_MARKERS) > 0 || countMatches(compact, FINANCE_MARKERS) > 0) {
+      return false;
+    }
+
+    if (/[?？!！]/.test(raw)) {
+      return false;
+    }
+
+    const cjkCount = (compact.match(/\p{Script=Han}/gu) || []).length;
+    const hasDecorativeCue = countEmojiMatches(raw) > 0 || DECORATIVE_SLOGAN_SYMBOL_PATTERN.test(raw);
+    const hasConversationAnchor = /(我|你|他|她|我们|你们|他们|这个|那个|问题|帖子|视频|哈哈|笑死|真的|确实|不是|没有|可以|应该|为什么|怎么|什么)/.test(compact);
+    const commonGreeting = /(生日快乐|新年快乐|恭喜|加油|谢谢|感谢|辛苦|好看|漂亮|可爱|厉害|牛逼|早安|晚安)/.test(compact);
+    return hasDecorativeCue && cjkCount >= Math.ceil(chars.length * 0.6) && !hasConversationAnchor && !commonGreeting;
+  }
+
   function normalizeContextForOverlap(text) {
     return buildCompact(text).replace(/[的了呢吗嘛啊呀哦哈吧把和与及又也就都很挺真这那我你他她它们一个一下这个那个我们你们他们是不是怎么什么]/g, "");
   }
@@ -663,6 +695,7 @@
       reply
       && (
         reply.hasEmojiNoiseBait
+        || reply.hasGenericShortSloganBait
         || reply.hasDecorativeSloganBait
         || reply.hasPoeticSpamSloganBait
         || reply.hasSpamTemplateSignal
@@ -820,6 +853,7 @@
     const hasDecorativeSloganBait = looksLikeDecorativeSloganBait(raw);
     const hasPoeticSpamSloganBait = looksLikePoeticSpamSloganBait(raw);
     const hasEmojiNoiseBait = looksLikeEmojiNoiseBait(raw);
+    const hasGenericShortSloganBait = looksLikeGenericShortSloganBait(raw);
     const hasEroticMentionRedirect = hasAccountMention && (
       hasExplicitEroticBait
       || EROTIC_MENTION_REDIRECT_MARKERS.some(function (term) {
@@ -863,6 +897,7 @@
       hasDecorativeSloganBait: hasDecorativeSloganBait,
       hasPoeticSpamSloganBait: hasPoeticSpamSloganBait,
       hasEmojiNoiseBait: hasEmojiNoiseBait,
+      hasGenericShortSloganBait: hasGenericShortSloganBait,
       hasEroticMentionRedirect: hasEroticMentionRedirect
     };
   }
@@ -1314,6 +1349,7 @@
     looksLikeShareLinkScam: looksLikeShareLinkScam,
     looksLikeDecorativeSloganBait: looksLikeDecorativeSloganBait,
     looksLikePoeticSpamSloganBait: looksLikePoeticSpamSloganBait,
+    looksLikeGenericShortSloganBait: looksLikeGenericShortSloganBait,
     looksLikeEmojiNoiseBait: looksLikeEmojiNoiseBait,
     looksLikeContextDetachedBait: looksLikeContextDetachedBait,
     looksLikeInnocentPetContext: looksLikeInnocentPetContext

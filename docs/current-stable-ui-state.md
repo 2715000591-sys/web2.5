@@ -162,8 +162,9 @@
 - Safari 扩展 `BUILD_ID = 2026-05-03-1117`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1256`
 - Safari 扩展 `BUILD_ID = 2026-05-03-1327`
-- 扩展版本 `0.1.61`
-- App / Extension 版本 `1.0.61 (62)`
+- Safari 扩展 `BUILD_ID = 2026-05-03-1402`
+- 扩展版本 `0.1.62`
+- App / Extension 版本 `1.0.62 (63)`
 
 2026-05-03 13:27 已替换本机 App 到 `BUILD_ID=2026-05-03-1327`，签名验证通过。UI 主体没改；只是为 AI 候选改成先显示 `AI 复审中` 的隐藏路线，并补 `附近的来` 这类风险昵称。`npm run safari:verify-live` 读到新版；真实 X 详情页 `https://x.com/yizhunli10167/status/2050601910487461905` 加载完成后 `build=2026-05-03-1327`、`stage=scan:done`、`articles=45`，`@hayes_jaco16929` 对应行 `display:none`。公网发布被 Cloudflare 登录令牌失效挡住，公网下载清单仍是上一版。
 
@@ -222,6 +223,8 @@
 2026-05-03 11:42 已替换本机 App 到 `BUILD_ID=2026-05-03-1138`，签名验证通过，`pluginkit` 显示扩展版本 `1.0.59`。本轮没有改右栏 UI，只补筛选证据和发布新版包。`npm run safari:verify-live` 读到新版；真实 X 详情页 `https://x.com/YLDLZN/status/2050723821460853237` 随后返回 `build=2026-05-03-1138`、`stage=scan:done`、`articles=19`，`孙甜甜寻男大固泡 @MonaKristi9125` 对应行已隐藏。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1138`、`extensionVersion=0.1.59`。
 
 2026-05-03 13:50 已确认本机 App 为 `BUILD_ID=2026-05-03-1327`，签名验证通过，App / Extension 版本 `1.0.61 (62)`。本轮没有改右栏 UI，只补 AI 老师复核和筛选证据链。`npm run safari:verify-live` 刷新真实 X 详情页后先遇到 X 短暂未加载回复列表；等待后直接查 DOM，真实页 `https://x.com/yizhunli10167/status/2050601910487461905` 返回 `build=2026-05-03-1327`、`articles=52`，`@hayes_jaco16929` 对应回复存在但 cell 为 `data-web25-hidden=1` 且 `display:none`。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1327`、`extensionVersion=0.1.61`。
+
+2026-05-03 14:12 已替换本机 App 到 `BUILD_ID=2026-05-03-1402`，签名验证通过，App / Extension 版本 `1.0.62 (63)`。本轮没有改右栏 UI，只补 AI 老师证据入口和提示词口径。`npm run safari:verify-live` 先遇到 X 短暂未加载回复列表；等待后真实 X 详情页 `https://x.com/ronronzi/status/2050591230275539384` 返回 `build=2026-05-03-1402`、`stage=scan:done`、`articles=47`。截图同页复查：`PaulBarbar6873`、`RyanTerrel92368`、`zhizi856`、`dffgfoo02` 对应回复都存在但 cell 为 `data-web25-hidden=1` 且 `display:none`；正常粗口评论 `sorallllllan` 仍可见。公网下载包已发布，`/downloads/latest.json` 返回 `buildId=2026-05-03-1402`、`extensionVersion=0.1.62`。
 
 2026-05-02 云端控制台已部署到 Worker Version ID `3d44a89e-52c4-477c-967f-47eed7d72a6c`：恢复某条隐藏记录后，不只是当前前台列表立刻消失，后台统计、最近记录、累计明细、广告详情和开发者待整理池也统一按“已恢复，不再算当前屏蔽”处理。D1 里仍保留原始历史和恢复历史，方便追溯。
 

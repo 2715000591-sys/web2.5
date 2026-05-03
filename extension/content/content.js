@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-03-1327";
+  const BUILD_ID = "2026-05-03-1402";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -17,7 +17,7 @@
   const REPLY_AI_TEACHER_REVIEW_SCORE_THRESHOLD = 2;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_SESSION_CACHE_LIMIT = 600;
-  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v3";
+  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v4";
   const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
   const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
   const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
@@ -125,6 +125,9 @@
     "领我",
     "养我",
     "真人",
+    "dd",
+    "滴滴",
+    "会疼人",
     "找下",
     "找我",
     "私聊",
@@ -3163,6 +3166,13 @@
       && typeof window.Web25Rules.handleLooksSuspicious === "function"
       && window.Web25Rules.handleLooksSuspicious(authorMeta.handle || "")
     );
+    const weakDisposableHandle = Boolean(
+      authorMeta
+      && (
+        /^[a-z]{4,}[0-9]{2,}$/i.test(String(authorMeta.handle || "").replace(/^@/, ""))
+        || /^[a-z]{6,}$/i.test(String(authorMeta.handle || "").replace(/^@/, ""))
+      )
+    );
 
     if (analysis && analysis.hasGeoMeetupBait) {
       return "pattern:geo-meetup-bait";
@@ -3224,6 +3234,10 @@
 
     if (analysis && analysis.hasEmojiNoiseBait && suspiciousHandle) {
       return "pattern:emoji-noise-lure-account";
+    }
+
+    if (analysis && analysis.hasGenericShortSloganBait && (suspiciousHandle || weakDisposableHandle)) {
+      return "pattern:generic-short-slogan-lure-account";
     }
 
     const matchedTerms = Array.from(new Set(SIMILARITY_TERMS.filter(function (term) {
@@ -4859,6 +4873,7 @@
       || analysis.hasFragmentedSymbolicReply
       || analysis.hasThinSymbolOrNumberPayload
       || analysis.hasLowInformationBadge
+      || analysis.hasGenericShortSloganBait
       || analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
       || analysis.hasEmojiNoiseBait
@@ -4889,6 +4904,9 @@
     }
     if (analysis && analysis.hasEmojiNoiseBait) {
       tags.push("emoji_noise_reply");
+    }
+    if (analysis && analysis.hasGenericShortSloganBait) {
+      tags.push("generic_short_slogan_reply");
     }
     if (analysis && analysis.hasGeoRelationshipBait) {
       tags.push("geo_relationship_bait");
@@ -5107,10 +5125,10 @@
   }
 
   function shouldConsiderReplyAiModeration(replyText, authorMeta, analysis, protectedAccount) {
-    return buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount).shouldQueue;
+    return buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, "").shouldQueue;
   }
 
-  function buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount) {
+  function buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, mainText) {
     const emptyCandidate = {
       shouldQueue: false,
       score: 0,
@@ -5141,6 +5159,15 @@
       && window.Web25Rules.handleLooksSuspicious(authorMeta && authorMeta.handle ? authorMeta.handle : "")
     );
     const hasLongDigitHandle = /\d{6,}/.test(String(authorMeta && authorMeta.handle ? authorMeta.handle : "").toLowerCase());
+    const weakDisposableHandle = /^[a-z]{4,}[0-9]{2,}$/i.test(String(authorMeta && authorMeta.handle ? authorMeta.handle : "").replace(/^@/, ""))
+      || /^[a-z]{6,}$/i.test(String(authorMeta && authorMeta.handle ? authorMeta.handle : "").replace(/^@/, ""));
+    const disposableHandle = suspiciousHandle || weakDisposableHandle;
+    const contextDetachedBait = Boolean(
+      mainText
+      && window.Web25Rules
+      && typeof window.Web25Rules.looksLikeContextDetachedBait === "function"
+      && window.Web25Rules.looksLikeContextDetachedBait(replyText, mainText, analysis)
+    );
     const accountMetadataSignals = highRiskDisplayName
       || (lureDisplayName && suspiciousHandle)
       || (lureDisplayName && hasLongDigitHandle)
@@ -5156,6 +5183,7 @@
         || analysis.hasLowInformationBadge
         || analysis.hasLureEmoji
         || analysis.hasEmojiNoiseBait
+        || analysis.hasGenericShortSloganBait
         || analysis.hasShareLinkScam
         || analysis.hasAccountMention
         || analysis.hasExternalContactPayload
@@ -5179,6 +5207,7 @@
         || analysis.hasFragmentedSymbolicReply
         || analysis.hasLowInformationBadge
         || analysis.hasEmojiNoiseBait
+        || analysis.hasGenericShortSloganBait
       ));
     let score = 0;
 
@@ -5230,10 +5259,16 @@
     if (!protectedAccount && analysis && analysis.hasEmojiNoiseBait) {
       score += 2;
     }
+    if (!protectedAccount && analysis && analysis.hasGenericShortSloganBait) {
+      score += contextDetachedBait ? 3 : 1;
+    }
     if (analysis && analysis.hasEroticMentionRedirect) {
       score += 3;
     }
     if (suspiciousHandle) {
+      score += 1;
+    }
+    if (!suspiciousHandle && weakDisposableHandle && shortOrThinReply) {
       score += 1;
     }
     if (hasLongDigitHandle) {
@@ -5258,7 +5293,11 @@
       analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
       || analysis.hasEmojiNoiseBait
+      || (analysis.hasGenericShortSloganBait && contextDetachedBait)
     )) {
+      score += 1;
+    }
+    if (!protectedAccount && weakDisposableHandle && analysis && analysis.hasGenericShortSloganBait && contextDetachedBait) {
       score += 1;
     }
     if (matchedSlots.includes("relationship_or_erotic")) {
@@ -5286,6 +5325,7 @@
       analysis.hasDecorativeSloganBait
       || analysis.hasPoeticSpamSloganBait
       || analysis.hasEmojiNoiseBait
+      || (analysis.hasGenericShortSloganBait && contextDetachedBait)
     ));
     const highValueContentSignal = strongContentSignal || softLowSubstanceSignal;
     const suspiciousHandleWithContext = Boolean(
@@ -5311,6 +5351,7 @@
         || analysis.hasPoeticSpamSloganBait
         || analysis.hasEmojiNoiseBait
       )))
+      || (!protectedAccount && disposableHandle && contextDetachedBait && Boolean(analysis && analysis.hasGenericShortSloganBait))
       || (accountMetadataSignals && shortOrThinReply);
     const hasWeakTriggerCombo = score >= REPLY_AI_BASE_SUSPICION_THRESHOLD && (
       lureDisplayName
@@ -5324,6 +5365,7 @@
         || (strongContentSignal && compactReplyLength <= 24)
         || matchedSlots.length >= 1
       ))
+      || (!protectedAccount && disposableHandle && contextDetachedBait && Boolean(analysis && analysis.hasGenericShortSloganBait))
       || matchedSlots.length >= 2
     );
 
@@ -5343,6 +5385,7 @@
           analysis.hasDecorativeSloganBait
           || analysis.hasPoeticSpamSloganBait
           || analysis.hasEmojiNoiseBait
+          || (analysis.hasGenericShortSloganBait && contextDetachedBait)
         )))
       )
     };
@@ -5770,7 +5813,7 @@
           && state.repeatSuspiciousHandles.has(manualKeys.accountKey)
         );
         const aiCacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
-        const aiCandidate = buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount);
+        const aiCandidate = buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, mainText);
         const cachedAiEntry = aiCacheKey ? state.replyAiDecisionCache.get(aiCacheKey) : null;
         const cachedAiDecision = cachedAiEntry && cachedAiEntry.decision && cachedAiEntry.decision.isFinal
           ? cachedAiEntry.decision
