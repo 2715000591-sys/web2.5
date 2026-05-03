@@ -44,6 +44,7 @@
 - 2026-05-01 已修复扩展侧 AI 排队保护：本地规则必须先判定为可疑候选，回复才会送入 AI 队列，避免无脑调用模型。
 - 2026-05-01 已继续收紧扩展侧 AI 排队：如果本地/数据库规则已经能直接隐藏，例如 `找个同城的哥哥` 这类 `pattern:geo-relationship-bait`，原来不再送 AI，避免为模板垃圾浪费 API 额度。
 - 2026-05-03 已按用户新要求把 AI 老师强度开大：数据库已命中的高风险候选现在可以带 `teacher_review_requested`，云端每批最多 4 条追加调用已保存的 DeepSeek 复核。普通回复仍不进 AI，已有数据库规则仍先挡住明显垃圾。
+- 2026-05-03 10:05 已把新一批短口号漏网样本补进基础层和 AI 提示词例子：`浅交不如深知己`、`高质量交友贵在合拍`、`品行相近方同行`、`拒绝无效的寒暄` 走 `pattern:poetic-slogan-lure-account`；`有没有单身哥哥` 走 `pattern:geo-relationship-bait`。公网探针确认命中数据库规则，不调用外接 AI，不写数据库。
 - 2026-05-01 已收紧基础审核口径：正常成人话题、色情讨论、性教育/平台治理讨论不应仅因色情词被隐藏；基础层要保护正常表达，只隐藏诈骗、约见引流、联系方式、木马/安装包、主页诱导、空洞钓鱼，以及由名字、handle、主页简介、主页外链等账号证据支撑的低信息垃圾。头像/图片只有在未来真的采集并提供给 AI 时才能作为辅助证据，不能让模型凭空脑补。
 - 官网控制台“最近 AI 隐藏记录”已新增“恢复误判”。恢复会写入 `manual_allow`，并把对应 AI 结果改成 `manual_allow/allow`，用于纠正单条误判。
 - `/api/ai-settings/test` 已支持传入临时 `sample` 做一次性识别测试；样本不会写入 `reply_ai_items`。
@@ -59,8 +60,8 @@
 
 - 站点：`https://colorful-toilet.colorful-toilet.workers.dev/`
 - 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
-- Worker Version ID：`57c6e71e-3c8b-44a8-afb9-aa16e9cecf76`
-- 当前线上版本包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护、保存 AI 设置时不再误清空已有 Key 的修复，以及 2026-05-03 上线的 AI 老师抽查数据库命中机制。
+- Worker Version ID：`06142ddf-4b68-4a47-8ac0-7d9c9086d803`
+- 当前线上版本包含“测试一次 AI 接入”入口、DeepSeek JSON 标签提示补强、扩展侧 AI 排队保护、保存 AI 设置时不再误清空已有 Key 的修复、2026-05-03 上线的 AI 老师抽查数据库命中机制，以及 2026-05-03 10:05 补入的短口号低信息诱饵模板。
 
 ## 3. 还没完成
 
@@ -77,6 +78,8 @@
 2026-05-02 15:24 已进一步上线数据库接管层：线上 `moderation_rule_candidates active=222`、`candidate=64`。现在云端收到可疑回复后，会先查 `reply_ai_memory`，再查 `moderation_rule_candidates`；命中时返回 `db_rule_*` 并直接隐藏，不再调用外部 AI。已验证 `找个同城弟弟` 命中 `db_rule_pattern`，测试 item `1097/1098` 的新外部 AI 调用数为 `0`。后续看真实页面时，重点区分 `decisionLayer=ai`（真实模型调用）、`ai_memory_*`（AI 记忆复用）、`db_rule_*`（数据库候选规则接管）。
 
 2026-05-03 09:39 已调整为“数据库先挡住，AI 老师再抽查”。数据库命中不再绝对代表外接 AI 不运行；如果插件给候选打上 `teacher_review_requested`，Worker 会在每批最多 4 条的上限内追加调用 DeepSeek。线上样本 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 命中 `pattern:geo-relationship-bait`，同时真实调用 DeepSeek，最终 `Final layer: ai / ready / hide / high`。开发者探针默认不写数据库。
+
+2026-05-03 10:05 已补用户新截图短口号：`高质量交友贵在合拍 🌟✂️🌟🎁` 命中 `pattern:poetic-slogan-lure-account`，`有没有单身哥哥✨🤤🫶Oa` 命中 `pattern:geo-relationship-bait`，两条公网探针均为 `db_rule_pattern / ready / hide / high`、`External AI: not needed`、`Database writes: no`。这类已知模板由数据库接住即可，不需要每次交给外接 AI。
 
 2026-05-02 17:11 已追加验证用户指出的风险昵称场景：`孟轩🌸无常线下🌸 @MullerChri42258 / 2🙃😍🧡` 命中 `db_rule_pattern`，`model=moderation-rule-candidates-2026-05-02-v1`，不是 `deepseek-v4-flash`。这说明它走数据库候选规则接管，没有进入外部 AI 调用。测试 item 为 `1099`。
 
@@ -142,6 +145,8 @@
 2026-05-02 19:12 已补 `月固定` 和 `找个温柔的哥哥` 漏网。外接 AI prompt 里也应理解：`月固定/周固定/长期固定` 是强风险昵称；`找/求/蹲 + 温柔/固定/长期/月固定/帅/乖/可爱/宠人/有钱 + 哥哥/姐姐/弟弟/妹妹` 是关系诱导模板，不能只当普通“找人聊天”。
 
 2026-05-02 21:24 已补本地插件发给云端的数据库候选键：`geo-relationship-bait` 和 `poetic-slogan-lure-account` 现在本地、Worker 两边同名。后续调试“为什么数据库没有挡住”时，先确认样本的 `patternTextKey` / Worker `patternKey` 是否同构，再判断是不是需要外接 AI 或提示词调整。
+
+2026-05-03 10:05 后续遇到“全国安排头像 + 随机英文数字号 + 短口号/emoji”新变体时，先看正文是否属于已知短口号模板，或是否应扩充 `pattern:poetic-slogan-lure-account`。这次漏网的直接原因是旧模板不认识 `浅交不如深知己`、`高质量交友贵在合拍`、`品行相近方同行`、`拒绝无效的寒暄`，且 X 没给原帖正文时上下文脱节加分不可用。
 
 2026-05-02 21:51 用户截图里的 `是不是这个? + pan.quark.cn/s/...` 漏网不是外接 AI 看不懂中文，而是基础层 `share-link-scam` 缺少“短引诱句 + 网盘链接”这一类提示词。已同步补本地插件和 Worker：`是不是这个 / 是这个吗 / 就是这个 / 这个链接 + 网盘链接` 会优先被基础层挡住，普通没有网盘链接的“是不是这个问题”仍放过。后续遇到同类问题，先看基础层和 `pattern:share-link-scam` 是否命中，再决定是否需要外接 AI。
 

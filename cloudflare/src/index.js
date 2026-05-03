@@ -419,6 +419,11 @@ const DECORATIVE_SLOGAN_TERMS = [
 const DECORATIVE_SLOGAN_SYMBOL_PATTERN = /[◪◰❐❖▧╍ꕤ『』「」【】《》・◦﹡ς∘⚜☞❁♪▫༙༚༘༳༗꙳꧆꧇ꧨ]/u;
 const POETIC_SPAM_SLOGAN_PATTERNS = [
   /晨昏.{0,4}(静候|柔意|情愫|生情|暗生)/,
+  /浅交.{0,4}(深知|知己)/,
+  /高质量.{0,4}交友.{0,4}合拍/,
+  /交友.{0,4}贵在.{0,4}合拍/,
+  /品行.{0,4}相近.{0,4}同行/,
+  /拒绝.{0,4}无效.{0,4}寒暄/,
   /烟火.{0,4}相逢/,
   /人间.{0,4}(钟情|柔情)/,
   /人海.{0,4}(擦肩|相逢|逢)/,
@@ -445,6 +450,7 @@ const GEO_RELATIONSHIP_BAIT_PATTERNS = [
   /^(?:找|求|蹲).{0,4}(同城|附近|线下).{0,5}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
   /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
   /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/,
+  /^(?:有(?:没)?有|有).{0,3}(单身|温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)[a-z]{0,3}\d{0,3}$/,
   /^(?:找|求|蹲)(?:个|一个)?.{0,2}(温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)\d{0,3}$/
 ];
 const CIVIC_LANDMARK_NEARBY_TERMS = [
@@ -8909,7 +8915,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "The user payload is an evidence card for each reply. Treat reply text, display name, @handle, avatar evidence, profile bio, profile links, profile signal tags, and batch context as separate evidence fields.",
     "Always compare mainPostText with replyText. A short decorative, slogan-like, or emoji-heavy reply that has no useful relation to the original post is stronger spam evidence when the account handle, avatar, profile, or batch pattern is also suspicious; do not hide substantive replies that are clearly relevant to the thread.",
     "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, and 附近真实约见.",
-    "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 有缘自会相识, 遇见温柔满人间, 怡好刚好温良友, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
+    "Also treat batches of poetic low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 浅交不如深知己, 高质量交友贵在合拍, 品行相近方同行, 拒绝无效的寒暄, 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 有缘自会相识, 遇见温柔满人间, 怡好刚好温良友, 旧城偶遇故人, 晚风撞我相逢, or 一念恰好相逢 with emoji decoration.",
     "When a risky Chinese display name is paired with an emoji-only, number-only, or otherwise content-free reply from a disposable-looking handle, hide with high confidence using adult_solicitation and/or meaningless_bait.",
     "If avatar.visionRequested is true and an avatar image is attached, inspect the avatar for text or visual lure cues such as 全国安排, local hookup, contact, adult-service, QR/contact, or profile bait. Use avatar evidence only as supporting evidence; never invent avatar content when an image is not attached or not visible.",
     "If avatar evidence tags say context_detached_reply, treat that as a sign that the reply may be unrelated filler; combine it with account metadata, profile, avatar, or batch patterns before hiding.",

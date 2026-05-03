@@ -130,9 +130,10 @@
 截至这次稳定备份，以下两层已经对齐：
 
 - 本地 Safari 扩展构建：
-  - `BUILD_ID = 2026-05-03-0037`
-  - 扩展版本 `0.1.55`
-  - App / Extension 版本 `1.0.55 (56)`
+  - `BUILD_ID = 2026-05-03-1001`
+  - 扩展版本 `0.1.56`
+  - App / Extension 版本 `1.0.56 (57)`
+  - 2026-05-03 10:05 已补用户截图里新一批“全国安排头像 + 随机英文数字号 + 短口号/emoji”漏网。根因不是云端没同步，而是 X 没稳定暴露原帖正文时，旧规则只按 `emoji-noise + suspicious-handle` 打到 2 分；`浅交不如深知己`、`高质量交友贵在合拍`、`品行相近方同行`、`拒绝无效的寒暄` 也不在既有诗句模板里。新版把这些短口号纳入 `poetic-slogan-from-suspicious-handle`，并把 `有没有单身哥哥` 纳入 `geo-relationship-bait`。本地回归 5 条截图同款全部隐藏；`高质量交友贵在合拍，关键是共同爱好和边界感。`、`有没有单身哥哥一起打游戏？`、`附近有家面馆不错`、`生日快乐🎂🎉🥳` 放过。真实 Safari 详情页验证 `build=2026-05-03-1001`、`stage=scan:done`、`articles=22`、可见 `冲走` 按钮 12 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 09:39 已按用户“AI 是老师、辅助强度可以开大”的要求上线老师复核层。本地候选更积极：批量上限从 6 到 8，发送等待从 1200ms 到 900ms，最小批量间隔从 4000ms 到 1500ms，AI 候选基础分从 3 到 2；高风险候选会带 `teacher_review_requested`。云端仍先查静态规则、AI 记忆、数据库候选规则；如果数据库已命中且带老师复核标记，每批最多 4 条追加调用 DeepSeek。公网探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 在命中 `pattern:geo-relationship-bait` 的同时真实调用外接 AI，返回 `Final layer: ai / ready / hide / high`，不写数据库。真实 Safari 详情页验证 `build=2026-05-03-0037`、`stage=scan:done`、`articles=25`、可见 `冲走` 按钮 4 个、右栏关闭按钮 3 个。本轮没有改数据库结构，没有删除 D1 数据。
   - 2026-05-03 00:22 已补用户复查后剩下的一条 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊`。这不是删除某个账号或某条历史，而是把 `人间.{0,4}(钟情|柔情)` 加入现有诗句式低信息引流模板；仍需要随机数字 handle、emoji 噪音、上下文脱节等组合信号支撑。真实 X 页头像图片本身在 DOM 里没有可读 `全国安排` 文字，Safari 本地不能直接读图识字；头像仍会作为云端 AI 辅助证据，但即时隐藏要靠可见正文、账号形态和上下文信号。真实 Safari 详情页 `https://x.com/bandagemiao/status/2050238861318754634` 已验证：`build=2026-05-03-0022`、`stage=scan:done`、`articles=27`，该 cell 为 `data-web25-hidden=1` 且 `display:none`。
   - 2026-05-03 00:11 已修复用户复查仍能看到同款垃圾的真正原因：真实 X 页面里这些回复不是 emoji 版本，而是 `༙༚ 晨昏静候柔意 ༚༙`、`༘꙳ 温柔漫染眉眼 ꙳༘`、`༳ 晨昏暗生情愫 ༳`、`ꧨ 时光赠予柔情 ꧨ`、`꧆ 晚风裹着温柔 ꧇`、`༗ 俗世偏爱温存 ༗`，以及纯 `缘起眉眼温柔`。旧规则要求诗句模板至少带 emoji，所以只标记了按钮，没有自动收掉这些真实版本。新版把这些装饰符号和纯短句模板也纳入 `poetic-slogan-from-suspicious-handle`；本地回归 7 条真实文本全部隐藏，普通账号发 `缘起眉眼温柔`、`有缘自会相识。`、`晚风裹着温柔，今晚散步的时候空气很好。` 放过。
@@ -158,7 +159,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `57c6e71e-3c8b-44a8-afb9-aa16e9cecf76`
+  - Version ID: `06142ddf-4b68-4a47-8ac0-7d9c9086d803`
+  - 2026-05-03 10:05 已部署 `BUILD_ID=2026-05-03-1001` 到公网。线上探针 `Vgfsrtjw @vgfsrtjw28371 / 高质量交友贵在合拍 🌟✂️🌟🎁` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`；`亦琪🌸🌸 @TaylorChar13948 / 有没有单身哥哥✨🤤🫶Oa` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:geo-relationship-bait`。两条均未调用外接 AI、未写数据库。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-1001`、`extensionVersion=0.1.56`。`npm run cloud:audit-data-layer` 通过，本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 09:39 已部署 `BUILD_ID=2026-05-03-0037` 到公网。新版将高风险数据库命中项纳入有上限的 AI 老师复核：带 `teacher_review_requested` 的数据库命中候选，每批最多 4 条追加调用 DeepSeek；普通回复仍不全量进 AI。线上探针 `孟轩🌸无常线下🌸 @MullerChri42258 / 找个同城弟弟` 命中 `pattern:geo-relationship-bait`，同时真实调用外接 AI，返回 `Final layer: ai / ready / hide / high`。公网首页、控制台、`/downloads/latest.json` 均 200，`latest.json` 返回 `buildId=2026-05-03-0037`、`extensionVersion=0.1.55`。本轮没有 schema 变更、没有 D1 清理或删除。
   - 2026-05-03 00:22 已部署 `BUILD_ID=2026-05-03-0022` 到公网。线上探针 `Minsqw @minsqw49924 / ✩ 人间钟情柔情 ✩ 👍 🎊` 返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，外接 AI 不运行、数据库不写入；公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0022`、`extensionVersion=0.1.54`。本轮没有改数据库结构、没有删除 D1 数据，复用 2026-05-02 23:57 已登记的活跃数据库规则。`npm run cloud:audit-data-layer` 通过，仍确认单用户重复冲走不会自动进入公共规则。
   - 2026-05-03 00:11 已部署 `BUILD_ID=2026-05-03-0011` 到公网。线上探针用 7 条真实页面文字全部返回 `db_rule_pattern / ready / hide / high`，匹配 `pattern:poetic-slogan-lure-account`，不调用外接 AI。公网 `/downloads/latest.json` 返回 `buildId=2026-05-03-0011`、`extensionVersion=0.1.53`。本轮没有改数据库结构、没有删除 D1 数据；复用 2026-05-02 23:57 已登记的活跃数据库规则。
