@@ -5342,12 +5342,12 @@ function shouldActivateModerationRuleCandidate(stats) {
 
 function buildModerationRuleCandidateDescription(stats) {
   if (stats.ruleType === "template") {
-    return "AI 学习库模板候选";
+    return "后台学习库模板候选";
   }
   if (stats.ruleType === "pattern") {
-    return "AI 学习库模式候选";
+    return "后台学习库模式候选";
   }
-  return "AI 学习库精确候选";
+  return "后台学习库精确候选";
 }
 
 async function buildModerationRuleCandidateUpsertStatement(env, stats) {
@@ -7185,7 +7185,7 @@ async function classifyTimelinePost(env, postId) {
       )
       : null;
     await upsertTimelineAiResult(env, postId, buildDefaultAiDecision({
-      reasonShort: retryableProviderFailure ? "AI 限流，稍后自动重试" : "AI 判读失败",
+      reasonShort: retryableProviderFailure ? "后台暂时繁忙，稍后自动重试" : "后台判读失败",
       status: "failed",
       model: settings && settings.model ? settings.model : DEFAULT_AI_FEED_MODEL,
       rawResponseJson: retryableProviderFailure
@@ -7550,7 +7550,7 @@ function isFinalReplyAiDecisionStatus(status) {
 function buildReplyAiPendingDecision() {
   return buildDefaultReplyAiDecision({
     decisionLayer: "pending",
-    reasonShort: "等待 AI 判断",
+    reasonShort: "等待后台判断",
     status: "pending",
     model: ""
   });
@@ -8755,7 +8755,7 @@ function buildReplyAiMemoryDecision(row) {
     matchedSafetyLabels: normalizeReplyAiStringList(parseJsonArray(row && row.matched_safety_labels_json), REPLY_AI_SAFETY_LABELS, 8),
     matchedProfileSignals: normalizeReplyAiStringList(parseJsonArray(row && row.matched_profile_signals_json), REPLY_AI_PROFILE_SIGNAL_LABELS, 8),
     confidence: row && row.confidence ? String(row.confidence || "high") : "high",
-    reasonShort: row && row.reason_short ? row.reason_short : "命中 AI 学习库",
+    reasonShort: row && row.reason_short ? row.reason_short : "命中后台学习库",
     status: "ready",
     model: row && row.prompt_version ? row.prompt_version : REPLY_AI_MEMORY_POLICY_VERSION
   });
@@ -8872,7 +8872,7 @@ async function upsertReplyAiMemoryFromDecision(env, itemRow, decision) {
       keyEntry.memoryKeyType,
       JSON.stringify(normalizeReplyAiStringList(decision.matchedSafetyLabels, REPLY_AI_SAFETY_LABELS, 8)),
       JSON.stringify(normalizeReplyAiStringList(decision.matchedProfileSignals, REPLY_AI_PROFILE_SIGNAL_LABELS, 8)),
-      normalizeAiFeedText(decision.reasonShort || "AI 已判定为垃圾回复", 120),
+      normalizeAiFeedText(decision.reasonShort || "后台已判定为垃圾回复", 120),
       REPLY_AI_MEMORY_POLICY_VERSION,
       itemRow && itemRow.id ? Number(itemRow.id || 0) : null,
       now,
@@ -9664,10 +9664,10 @@ async function classifyReplyAiItemEntries(env, entries, options) {
           env,
           entry.itemRow,
           retryableProviderFailure
-            ? buildReplyAiCooldownFailedDecision(group.settings, cooldownState, "AI 限流，稍后自动重试")
+            ? buildReplyAiCooldownFailedDecision(group.settings, cooldownState, "后台暂时繁忙，稍后自动重试")
             : buildDefaultReplyAiDecision({
               decisionLayer: "failed",
-              reasonShort: "AI 判读失败",
+              reasonShort: "后台判读失败",
               status: "failed",
               model: group.settings.model,
               rawResponseJson: {

@@ -125,7 +125,9 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`b2c39461-7023-4c38-a252-a1d0ee84a816`
+  - Version ID：`434034c3-3aa3-4e90-a64e-542942519f9e`
+  - 2026-05-04 09:38 已发布 `BUILD_ID=2026-05-04-0938` / `extensionVersion=0.1.70`。继续按用户“AI 后台就是数据库插件后台”的口径统一官网控制台、底部整理卡片和后台原因短句：用户可见来源改为“后台直接下沉 / 后台学习库下沉 / 后台已判断”，不再让用户区分 AI 后台和数据库后台；历史/本机手动记录继续显示“手动记录下沉”，不冒充刚刚点击。没有改筛选阈值、schema、D1 数据或付费 AI 能力。
+  - 2026-05-04 09:18 已发布 `BUILD_ID=2026-05-04-0918` / `extensionVersion=0.1.68`。用户截图指出底部卡片显示“AI 已复审 3 条、AI 自动下沉 1 条、你刚标记下沉 1 条”，但自己没有刚点标记，并强调数据库不能造假、AI 后台和数据库后台不要分裂成两套说法。只读 D1 核验：最新 `moderation_events` 没有新的 `manual_hide`；截图里的 `欣伊 @KarenColem24174 / 找个长期搭子` 是 `reply_ai_items id=1373`，DeepSeek 在 2026-05-04 01:09:48Z 高置信 hide；同批另有两条 allow，所以“复审 3 条”是“后台判断总数”，不是“下沉条数”。新版把底部文案统一为“后台已判断 X 条（下沉 Y 条）/ 本机自动下沉 / 手动记录下沉”，不再显示“你刚标记下沉”、`AI 自动下沉` 或 `AI 学习库屏蔽`；历史手动命中用 `history` 来源，不再冒充本次点击。没有改 schema、没有删除或清理 D1 数据。
   - 2026-05-04 01:59 已发布 `BUILD_ID=2026-05-04-0159` / `extensionVersion=0.1.67`。本轮重点解决用户指出的“未知可疑回复等待 AI 太久、pending 卡住、低风险内容被先藏”的体验问题，不是继续堆固定规则。新版把页面 AI 队列发送等待压到 180ms，给作者资料补充取证加 1.2 秒上限，避免资料请求拖住整批 AI；AI 批量返回缺项、失败或部分超时时会自动短延迟重试，减少 `pending / 等待 AI 判断` 长期挂住。临时隐藏阈值从 3 提到 6，只有极高风险内容才先藏，低风险和边界内容等待 AI 时保持可见。Worker 侧数据库 / 记忆 / 已知规则命中会先立刻返回给页面处理，AI 老师复核改为后台继续补课；DeepSeek 不能看图时，带头像证据但纯文本的候选保持批量文本判断，不再拆成多次慢调用。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，`latest.json` 返回 `buildId=2026-05-04-0159`、`extensionVersion=0.1.67`；线上探针显示未知可疑样本约 7 秒走 AI 隐藏，已知数据库样本约 2 秒直接隐藏且不等外接 AI。本轮没有改 schema、没有清理或删除 D1 数据，也没有新增付费 AI 能力。
   - 2026-05-04 01:24 已发布 `BUILD_ID=2026-05-04-0124` / `extensionVersion=0.1.66`。用户恢复多条“角度/光线/JK/长裙”正常回复后追问“为什么 AI 等待后才判断、不是实时判断”：只读 D1 确认其中两条仍停在 `pending / 等待 AI 判断`，根因是旧版前端把所有“等待 AI”的候选都先隐藏，同时浏览器只等云端 8 秒；DeepSeek 批量判断稍慢时，普通内容会先被藏住并留在等待状态。新版把“送 AI 老师看”和“等待时先隐藏”分开：低风险候选继续送 AI，但页面先显示；只有强风险或分数达到 3 的候选才临时隐藏。AI 批量请求等待时间从 8 秒放宽到 30 秒，后台转发也支持对应超时取消，缓存号换到 `web25-reply-ai-cache-v8`。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，`latest.json` 返回 `buildId=2026-05-04-0124`、`extensionVersion=0.1.66`。本轮没有改 schema、没有清理或删除 D1 数据，也没有新增付费 AI 能力。
   - 2026-05-04 00:42 已发布 `BUILD_ID=2026-05-04-0037` / `extensionVersion=0.1.65`。用户截图 `Pxrids @pxrids78304 / ᴰᵉˡᵘˢⁱᵒⁿ 甘愿沉溺在有你的梦境 ᴰᵉˡᵘˢⁱᵒⁿ`、`Xgoasmby @xgoasmby17820 / ᴴᵘˢʰ 世界安静唯独思念喧嚣 ᴴᵘˢʰ`、`Xducqo @xducqo27774 / 𓇜𓇝 情深似海甘愿被情缚 𓇜𓇝` 仍露出的根因不是 AI 语义看不懂，而是没有进入审核：真实 DOM 里英文标签是上标/花体 Unicode，旧重复英文标签识别从原始文本找普通 `[a-z]`，所以没命中；埃及符号壳被算进短口号长度，导致泛化短空话超限。新版同步本地和 Worker：重复英文标签先正规化再匹配，泛化短空话长度只看实际文字内容；截图同类会隐藏或先临时下沉进入 AI 老师复核。公网首页、控制台和 `/downloads/latest.json` 已确认可访问，`latest.json` 返回 `buildId=2026-05-04-0037`、`extensionVersion=0.1.65`；只读路线探针显示 `Pxrids`、`Xducqo` 同类样本会进入外接 AI 路线且不写数据库。没有改 schema、没有清理或删除 D1 数据。
@@ -168,7 +170,7 @@
   - 2026-05-02 12:35 通过公网开发者审计接口核对：真实事件 `totalEvents=702`、`auto_hide=397`、`manual_hide=143`、`manual_allow=13`、`ad_home_hide=133`、`ad_reply_hide=16`；分层检查全部 PASS。Cloudflare 直接 D1 读取同样因账号登录失效失败。
   - 2026-05-02 已完成 `AI 首判、云端记忆复用`：新增并应用线上 `reply_ai_memory` 表；只把 AI 直接高置信隐藏结果写入记忆；记忆命中、旧复用、`global_blocklist` 等在控制台归入 `AI 学习库屏蔽`；用户恢复误判会停用对应记忆。发布前已备份 D1 到 `backups/d1/web25-2026-05-02-ai-memory-before-schema.sql`。
   - 2026-05-02 `/api/state` 已改为不再把公共精确规则合并进插件本地手动隐藏列表；公共规则和高共识模板只作为云端 AI 判断参考信号。公网烟测显示新测试身份返回 `manualHideKeys: []`，随后已删除该临时测试 sync key。
-  - 2026-05-02 控制台累计方格已固定为 5 块：`累计跳过无用内容`、`AI 直接屏蔽`、`AI 学习库屏蔽`、`你手动冲走`、`跳过官方广告`。详情入口为 `all_skipped`、`ai_direct`、`ai_memory`、`manual`、`ads`。
+  - 2026-05-02 控制台累计方格已固定为 5 块：`累计跳过无用内容`、`后台直接下沉`、`后台学习库下沉`、`你手动冲走`、`跳过官方广告`。详情入口为 `all_skipped`、`ai_direct`、`ai_memory`、`manual`、`ads`。
   - 2026-05-02 验证通过：`node --check cloudflare/src/index.js`、`node --check extension/content/rules.js`、`node --check extension/content/content.js`、`node --check site/app.js`、`git diff --check`、`npm run cloud:check`、`npm run cloud:audit-data-layer`、`npm run cloud:deploy`。公网首页、控制台、`/console/?detail=ai_memory`、`/downloads/latest.json` 均返回 200。
   - 2026-05-02 15:24 数据库接管层上线后再次验证：`node --check cloudflare/src/index.js`、`node --check scripts/rebuild-rule-candidates.mjs`、`git diff --check`、`npm run cloud:check`、`npm run cloud:deploy`、`npm run cloud:rebuild-rule-candidates`、`npm run cloud:audit-data-layer` 均通过；公网首页、控制台、`/downloads/latest.json` 均返回 200。2026-05-02 15:45 为发布新版 Safari 下载包再次部署，当前 Worker Version ID 为 `8b9891cf-236d-4b89-a547-2e68f1c45697`。
   - 2026-05-02 `npm run cloud:deploy` 已成功部署控制台前端方格直达详情页改动。
@@ -204,11 +206,13 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-04-0159`
-  - extension manifest version：`0.1.67`
-  - App / Extension version：`1.0.67 (68)`
+  - `BUILD_ID = 2026-05-04-0938`
+  - extension manifest version：`0.1.70`
+  - App / Extension version：`1.0.70 (71)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-04 09:38 已替换本机 App 到 `BUILD_ID=2026-05-04-0938`。本轮只统一用户文案：官网控制台用“后台直接下沉 / 后台学习库下沉”，底部整理卡片和原因短句也统一叫后台；历史手动记录不叫“你刚标记”。
+  - 2026-05-04 09:18 已替换本机 App 到 `BUILD_ID=2026-05-04-0918`。底部整理卡片统一“后台/本机/手动记录”口径：AI 和数据库学习库对用户统一叫后台；历史手动记录不再叫“你刚标记”。本轮只改 UI 文案和历史手动来源分类，不改筛选阈值、数据库结构或真实数据。
   - 2026-05-04 02:11 已替换本机 App 到 `BUILD_ID=2026-05-04-0159`、缓存号 `web25-reply-ai-cache-v9`。签名验证通过，App / Extension 版本为 `1.0.67 (68)`，manifest 为 `0.1.67`；`pluginkit` 已重新启用扩展；`npm run safari:verify-live` 对真实 X 首页和详情页通过：首页 `build=2026-05-04-0159`、`sidebar=1`、`sideButtons=5`、`marking=1`；详情页 `https://x.com/YLDLZN/status/2050723821460853237` 返回 `build=2026-05-04-0159`、`detail=1`、`sidebar=1`、`flushes=12`、`sideButtons=4`、`manualButtons=12`、`marking=1`、`articles=28`、`stage=scan:done`。本轮没有改右栏 UI，只修回复 AI 审核速度、重试、等待显示和已知命中不被老师复核阻塞。
   - 2026-05-04 01:29 已替换本机 App 到 `BUILD_ID=2026-05-04-0124`、缓存号 `web25-reply-ai-cache-v8`。签名验证通过，App / Extension 版本为 `1.0.66 (67)`，manifest 为 `0.1.66`；`npm run safari:verify-live` 对真实 X 首页和详情页通过：首页 `build=2026-05-04-0124`、`sidebar=1`、`sideButtons=5`、`marking=1`、`articles=4`、`stage=ads:done`；详情页 `https://x.com/ronronzi/status/2050591230275539384` 返回 `build=2026-05-04-0124`、`detail=1`、`sidebar=1`、`flushes=3`、`sideButtons=4`、`manualButtons=3`、`marking=1`、`articles=54`、`stage=scan:done`。本轮没有改右栏 UI，只修 AI 等待时的误藏和批量请求等待时间。
   - 2026-05-04 00:59 已替换本机 App 到 `BUILD_ID=2026-05-04-0037`、缓存号 `web25-reply-ai-cache-v7`。签名验证通过，App / Extension 版本为 `1.0.65 (66)`，manifest 为 `0.1.65`；`npm run safari:verify-live` 对真实 X 详情页通过：`build=2026-05-04-0037`、`detail=1`、`sidebar=1`、`flushes=1`、`sideButtons=4`、`manualButtons=1`、`marking=1`、`articles=12`、`stage=scan:done`。本轮修花体/上标英文标签和装饰壳短口号证据。
@@ -459,7 +463,7 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 第一优先级：把 AI 审核链路跑清楚
 
 - 先确认插件不是每条回复都调用 AI：本地 `buildReplyAiModerationCandidate` 必须只把强风险或弱风险组合送进队列。
-- 再确认云端优先查 `reply_ai_memory`：命中记忆时归入 `AI 学习库屏蔽`，不再花 API 钱。
+- 再确认云端优先查 `reply_ai_memory`：命中记忆时归入 `后台学习库下沉`，不再花 API 钱。
 - 记忆没命中时再查 `moderation_rule_candidates`：命中 `db_rule_*` 时由数据库学习库直接挡住，不再花 API 钱。
 - 只有记忆和数据库候选都没命中、又是可疑候选时，才进入真实模型调用。
 - AI 直接高置信隐藏写入 `reply_ai_results`，再写入 `moderation_sample_labels`，沉淀到 `reply_ai_memory`，并刷新 `moderation_rule_candidates`。
@@ -470,7 +474,7 @@ osascript -e 'tell application "Safari" to do JavaScript "document.querySelector
 
 - 先用控制台“测试一次 AI 接入”确认 Key、接口地址、模型名可用；这一步只测 API，不写真实回复审核表。
 - 真实 X 页面调试时，只拿少量自然遇到的边界样本跑，不要大批量乱刷 API。
-- 观察每条样本最后落到哪一层：本地规则直接下沉、AI 直接屏蔽、AI 学习库复用、用户手动冲走、用户恢复。
+- 观察每条样本最后落到哪一层：本地规则直接下沉、后台直接下沉、后台学习库复用、用户手动冲走、用户恢复。
 - 如果调用量异常，先查扩展队列和云端记忆命中，不要先改提示词。
 - 如果误判异常，先查 AI 输入证据和提示词边界，不要把 `manual_allow` 当成公共放行规则。
 - 用户已经明确：前期学习阶段不要为了省 token 让用户本人反复手动训练数据库；高风险、边界模糊、头像/图片有证据、数据库已命中但值得复核的候选，应在有上限的预算内让 AI 老师多看一点。
@@ -543,7 +547,7 @@ Safari App：
 
 可以直接把下面这段发给新对话：
 
-> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`，再快速读 `docs/next-thread-handoff.md` 的第 0、1、2、9、10、11、12 节；第 3 节旧发布记录只按关键词查，不要逐条复述。再读 `docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md` 的顶部结论；只有改 AI 设置、接口、模型或 Key 时再细读 `docs/ai-api-provider-handoff.md`。然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前应以 `BUILD_ID=2026-05-04-0159` / `extensionVersion=0.1.67` 为最新目标；这版重点修回复审核速度和等待体验：AI 队列更快发出，作者资料取证不会拖住整批，缺失/失败的 AI 批量结果会自动重试，低风险候选等待时保持可见，只有极高风险或分数达到 6 的候选才临时隐藏；数据库 / 记忆 / 已知规则命中会先立刻返回给页面处理，AI 老师复核改为后台补课，缓存号为 `web25-reply-ai-cache-v9`。最终主路线必须朝用户说的方向收敛：数据库 / AI 记忆先扫，已知垃圾立刻撤掉；数据库不知道但可疑时，尽快交给 AI；AI 判定垃圾就撤掉并沉淀回标注、记忆和数据库候选；AI 判定没问题就留在页面上；临时隐藏只能是极高风险安全桥，不是默认体验。上一版 1402 用户确认“屏蔽挺好，没有明显漏过”，下一阶段重点仍是减少少量误杀，尤其保护和原帖强相关的尖锐、粗口、反驳、吐槽。冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、AI 学习库和数据库候选规则都不能改坏。用户发漏网内容时，先当作诊断和 AI 训练素材，不要无脑把截图文字写进数据库或本地规则；先解释为什么没挡住，再优先补证据输入、AI 老师复核、AI 标注/记忆/候选写回。只有 AI/数据库证据充分或用户明确确认后，才把可复用模式写成本地和 Worker 同构规则。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，高风险候选可以让 AI 老师补课，只是不能让这个补课阻塞已知垃圾的快速处理。必须区分“开发者探针调用过模型”和“真实 Safari 页面写入了 AI 学习记录”；探针默认不写数据库，真实页面 `reply_ai_items` 是已写入，`reply_ai_results.status=pending` 是待判断，`ready` 才是最终 AI 结论。用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
+> 你现在在 `/Users/boriszhang/Documents/Codex/project 1` 继续接手。先读 `AGENTS.md`，再快速读 `docs/next-thread-handoff.md` 的第 0、1、2、9、10、11、12 节；第 3 节旧发布记录只按关键词查，不要逐条复述。再读 `docs/current-stable-filter-state.md`、`docs/current-stable-ui-state.md`、`docs/moderation-database-training-plan.md` 的顶部结论；只有改 AI 设置、接口、模型或 Key 时再细读 `docs/ai-api-provider-handoff.md`。然后跑 `git status --branch --short`。用户没有计算机基础，只听人话，默认要自己完成检查、修改、测试、提交、推送、部署、本机 App 更新和验证。当前应以 `BUILD_ID=2026-05-04-0938` / `extensionVersion=0.1.70` 为最新目标；这版修数据真实性和统一后台口径：后台判断、后台学习库和数据库学习都统一显示为“后台”，官网控制台使用“后台直接下沉 / 后台学习库下沉”，历史/本机手动记录不再说成“你刚标记”，避免暗示用户刚刚点过按钮；筛选速度和等待体验沿用上一版 `web25-reply-ai-cache-v9`。最终主路线必须朝用户说的方向收敛：数据库 / AI 记忆先扫，已知垃圾立刻撤掉；数据库不知道但可疑时，尽快交给 AI；AI 判定垃圾就撤掉并沉淀回标注、记忆和数据库候选；AI 判定没问题就留在页面上；临时隐藏只能是极高风险安全桥，不是默认体验。上一版 1402 用户确认“屏蔽挺好，没有明显漏过”，下一阶段重点仍是减少少量误杀，尤其保护和原帖强相关的尖锐、粗口、反驳、吐槽。冲走、自动下沉、恢复、蓝框、广告跳过、右栏关闭、名字屏蔽、头像证据卡、后台学习库和数据库候选规则都不能改坏。用户发漏网内容时，先当作诊断和 AI 训练素材，不要无脑把截图文字写进数据库或本地规则；先解释为什么没挡住，再优先补证据输入、AI 老师复核、AI 标注/记忆/候选写回。只有 AI/数据库证据充分或用户明确确认后，才把可复用模式写成本地和 Worker 同构规则。核心目标是继续优化“AI 当老师，数据库当记忆本”：不要让每条回复都调用 AI；但用户已经明确 token 不是主要问题，高风险候选可以让 AI 老师补课，只是不能让这个补课阻塞已知垃圾的快速处理。必须区分“开发者探针调用过模型”和“真实 Safari 页面写入了 AI 学习记录”；探针默认不写数据库，真实页面 `reply_ai_items` 是已写入，`reply_ai_results.status=pending` 是待判断，`ready` 才是最终 AI 结论。用户 `冲走` / `恢复` 要写入样本和标注并刷新候选，但单用户反馈不能直接变公共规则；`manual_allow` 是纠错和抑制，不能当成用户喜欢这类内容。Cloudflare D1 是生产数据，动 schema、清理、迁移或批量写入前必须备份。
 
 2026-05-03 用户明确补充：他们发来的任何漏网内容都是为了优化 AI 配置和 AI 老师学习链路，不是让 Codex 自己在本地硬写截图短语。后续应优先让 AI 老师判断并写入标签、记忆和候选规则，再由 AI/数据库证据或用户明确确认把可复用模式写回本地和 Worker。不要把单张截图直接变成本地规则。
 

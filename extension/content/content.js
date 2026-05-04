@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-0159";
+  const BUILD_ID = "2026-05-04-0938";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -783,7 +783,7 @@
 
     if (totalCount === 0) {
       if (normalizedAiReviewedCount > 0) {
-        parts.push("AI 已复审 " + normalizedAiReviewedCount + " 条");
+        parts.push("后台已判断 " + normalizedAiReviewedCount + " 条");
       }
       if (scannedCount > 0) {
         parts.push("刚刚看了 " + scannedCount + " 条回复");
@@ -796,23 +796,19 @@
     }
 
     if (normalizedAiReviewedCount > 0) {
-      parts.push("AI 已复审 " + normalizedAiReviewedCount + " 条");
+      parts.push(
+        "后台已判断 " + normalizedAiReviewedCount + " 条"
+        + (normalizedAiCount > 0 ? "（下沉 " + normalizedAiCount + " 条）" : "")
+      );
     }
 
     if (localAutoCount > 0) {
-      parts.push("Colorful Toilet 自动下沉 " + localAutoCount + " 条");
+      parts.push("本机自动下沉 " + localAutoCount + " 条");
     }
 
-    if (normalizedAiCount > 0) {
-      parts.push("AI 自动下沉 " + normalizedAiCount + " 条");
-    }
-
-    if (historyCount > 0) {
-      parts.push("你手动冲走 " + historyCount + " 条");
-    }
-
-    if (manualCount > 0) {
-      parts.push("你刚标记下沉 " + manualCount + " 条");
+    const manualRecordCount = Math.max(0, Number(historyCount || 0)) + Math.max(0, Number(manualCount || 0));
+    if (manualRecordCount > 0) {
+      parts.push("手动记录下沉 " + manualRecordCount + " 条");
     }
 
     return parts.join("，");
@@ -823,41 +819,41 @@
     if (source === "manual") {
       return {
         className: "web25-hidden-badge-manual",
-        label: "你刚标记下沉"
+        label: "手动记录下沉"
       };
     }
 
     if (source === "history") {
       return {
         className: "web25-hidden-badge-history",
-        label: "你手动冲走"
+        label: "手动记录下沉"
       };
     }
 
     if (source === "ai-global" || source === "ai-memory") {
       return {
         className: "web25-hidden-badge-ai-global",
-        label: "AI 学习库屏蔽"
+        label: "后台学习库下沉"
       };
     }
 
     if (source === "ai") {
       return {
         className: "web25-hidden-badge-ai",
-        label: "AI 自动下沉"
+        label: "后台自动下沉"
       };
     }
 
     if (source === "ai-pending") {
       return {
         className: "web25-hidden-badge-ai",
-        label: "AI 复审中"
+        label: "后台复审中"
       };
     }
 
     return {
       className: "web25-hidden-badge-auto",
-      label: "Colorful Toilet 自动下沉"
+      label: "本机自动下沉"
     };
   }
 
@@ -6016,7 +6012,7 @@
             score: 100,
             reasons: ["manual-hide"]
           };
-          hiddenSource = "manual";
+          hiddenSource = "history";
         } else if (isGloballyBlocked) {
           decision = {
             hide: true,
@@ -6081,8 +6077,8 @@
             ? String(readyAiDecision.reasonShort || "")
             : (
               hiddenSource === "ai-memory"
-                ? "命中 AI 学习库。"
-                : (hiddenSource === "ai-pending" ? "等待 AI 复审，放过后会自动显示。" : "")
+                ? "命中后台学习库。"
+                : (hiddenSource === "ai-pending" ? "等待后台复审，放过后会自动显示。" : "")
             )
         };
       });
@@ -6110,6 +6106,8 @@
           hiddenCount += 1;
           if (hiddenSource === "manual") {
             manualHiddenCount += 1;
+          } else if (hiddenSource === "history") {
+            historyHiddenCount += 1;
           } else {
             autoHiddenCount += 1;
             if (hiddenSource === "ai" || hiddenSource === "ai-global" || hiddenSource === "ai-memory") {

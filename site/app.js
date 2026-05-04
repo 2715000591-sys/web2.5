@@ -666,15 +666,15 @@ const SOURCE_BUCKETS = [
   },
   {
     id: "ai_direct",
-    title: "AI 直接屏蔽",
-    note: "第一次交给 AI 判定",
-    empty: "当前没有真正由 AI 新判断隐藏的回复。"
+    title: "后台直接下沉",
+    note: "后台第一次判断",
+    empty: "当前没有由后台新判断下沉的回复。"
   },
   {
     id: "ai_memory",
-    title: "AI 学习库屏蔽",
-    note: "没有再次调用 AI",
-    empty: "当前没有命中 AI 学习库的记录。"
+    title: "后台学习库下沉",
+    note: "后台已经学过",
+    empty: "当前没有命中后台学习库的记录。"
   },
   {
     id: "manual",
@@ -960,7 +960,7 @@ function getBucketReason(item) {
     return item.bucketReason;
   }
   if (bucketId === "ai_memory") {
-    return "命中 AI 已经学过的内容，没有重新调用 AI。";
+    return "命中后台已经学过的内容。";
   }
   if (bucketId === "manual") {
     return "你手动点过冲走。";
@@ -968,7 +968,7 @@ function getBucketReason(item) {
   if (bucketId === "ads") {
     return "跳过 X 官方广告。";
   }
-  return "AI 已判定为需要隐藏。";
+  return "后台已判断为需要下沉。";
 }
 
 function makeSourceItem(item, bucketId, overrides) {
