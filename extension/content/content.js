@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-0938";
+  const BUILD_ID = "2026-05-04-0951";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -297,6 +297,8 @@
     revealedListInteractionUntil: 0,
     revealedListInteractionTimer: null,
     pendingRevealedListPayload: null,
+    revealedTrayThreadKey: "",
+    revealedTrayEntries: new Map(),
     manualTrayThreadKey: "",
     manualTrayEntries: new Map(),
     dockEl: null,
@@ -3364,6 +3366,21 @@
     return normalizedReply ? "text:" + normalizedReply : "";
   }
 
+  function normalizeBottomHiddenSource(source) {
+    const normalized = String(source || "").trim();
+    if (normalized === "manual"
+      || normalized === "history"
+      || normalized === "ai"
+      || normalized === "ai-global"
+      || normalized === "ai-memory"
+      || normalized === "ai-pending"
+      || normalized === "auto") {
+      return normalized;
+    }
+
+    return "auto";
+  }
+
   function cloneBottomEntry(entry) {
     if (!entry) {
       return null;
@@ -3372,11 +3389,95 @@
     return {
       stableId: entry.stableId || "",
       replyText: entry.replyText || "",
-      hiddenSource: entry.hiddenSource === "history" ? "history" : "manual",
+      hiddenSource: normalizeBottomHiddenSource(entry.hiddenSource),
       manualKeys: cloneManualKeys(entry.manualKeys),
       replyDisplayName: entry.replyDisplayName || "X 用户",
-      replyHandle: entry.replyHandle || ""
+      replyHandle: entry.replyHandle || "",
+      aiReasonShort: entry.aiReasonShort || "",
+      aiCacheKey: entry.aiCacheKey || ""
     };
+  }
+
+  function resetRevealedTrayEntries() {
+    state.revealedTrayEntries = new Map();
+    state.revealedTrayThreadKey = getCurrentThreadCacheKey();
+  }
+
+  function syncRevealedTrayThreadKey() {
+    const nextThreadKey = getCurrentThreadCacheKey();
+    if (!nextThreadKey) {
+      return;
+    }
+
+    if (state.revealedTrayThreadKey && state.revealedTrayThreadKey !== nextThreadKey) {
+      state.revealedTrayEntries = new Map();
+    }
+
+    state.revealedTrayThreadKey = nextThreadKey;
+  }
+
+  function rememberRevealedTrayEntry(entry) {
+    if (!entry || !entry.manualKeys) {
+      return;
+    }
+
+    syncRevealedTrayThreadKey();
+    const cacheKey = getManualTrayEntryKey(entry.manualKeys, entry.replyText);
+    if (!cacheKey) {
+      return;
+    }
+
+    const nextEntry = cloneBottomEntry(entry);
+    if (!nextEntry) {
+      return;
+    }
+
+    if (!nextEntry.stableId) {
+      nextEntry.stableId = cacheKey;
+    }
+
+    state.revealedTrayEntries.set(cacheKey, nextEntry);
+  }
+
+  function forgetRevealedTrayEntry(keys, replyText) {
+    syncRevealedTrayThreadKey();
+    const cacheKey = getManualTrayEntryKey(keys, replyText);
+    if (!cacheKey) {
+      return;
+    }
+
+    state.revealedTrayEntries.delete(cacheKey);
+  }
+
+  function pruneRevealedTrayEntries() {
+    if (!state.revealedTrayEntries.size) {
+      return;
+    }
+
+    syncRevealedTrayThreadKey();
+    Array.from(state.revealedTrayEntries.entries()).forEach(function (pair) {
+      const cacheKey = pair[0];
+      const entry = pair[1];
+      if (!entry || !entry.manualKeys) {
+        state.revealedTrayEntries.delete(cacheKey);
+        return;
+      }
+
+      if (hasAllowDecisionKey(state.manualAllowTexts, entry.manualKeys)) {
+        state.revealedTrayEntries.delete(cacheKey);
+        return;
+      }
+
+      if (entry.aiCacheKey) {
+        const cachedAiEntry = state.replyAiDecisionCache.get(entry.aiCacheKey);
+        const cachedAiDecision = cachedAiEntry && cachedAiEntry.decision && cachedAiEntry.decision.isFinal
+          ? cachedAiEntry.decision
+          : null;
+        if (cachedAiDecision && cachedAiDecision.status === "ready" && cachedAiDecision.shouldHide !== true) {
+          state.revealedTrayEntries.delete(cacheKey);
+        }
+      }
+    });
   }
 
   function resetManualTrayEntries() {
@@ -3406,6 +3507,7 @@
       return;
     }
 
+    syncRevealedTrayThreadKey();
     syncManualTrayThreadKey();
     const cacheKey = getManualTrayEntryKey(entry.manualKeys, entry.replyText);
     if (!cacheKey) {
@@ -4563,6 +4665,7 @@
     if (kind === "hide") {
       addDecisionKeys(state.manualHideTexts, storedKeys);
       removeDecisionKeys(state.manualAllowTexts, storedKeys);
+      rememberRevealedTrayEntry(manualTrayEntry);
       rememberManualTrayEntry(manualTrayEntry);
       suppressObserverBriefly();
       applyReplyCellVisibility(replyArticle, true, true);
@@ -4576,6 +4679,7 @@
 
     addAllowDecisionKeys(state.manualAllowTexts, storedKeys);
     removeHideDecisionKeysForAllow(state.manualHideTexts, storedKeys);
+    forgetRevealedTrayEntry(keys, replyText);
     forgetManualTrayEntry(keys, replyText);
     suppressObserverBriefly();
     applyReplyCellVisibility(replyArticle, false, false);
@@ -4596,6 +4700,7 @@
     state.manualHideTexts = new Set();
     state.manualAllowTexts = new Set();
     state.bottomTrayOpen = false;
+    resetRevealedTrayEntries();
     resetManualTrayEntries();
     state.skipNextStorageSyncScan = true;
     persistManualState(function () {
@@ -5847,6 +5952,7 @@
       return;
     }
 
+    syncRevealedTrayThreadKey();
     syncManualTrayThreadKey();
     syncBrowserThemeDataset();
     root.dataset.web25LastScan = String(Date.now());
@@ -5868,6 +5974,7 @@
     }
 
     if (isHomeTimelinePage()) {
+      resetRevealedTrayEntries();
       removeAllHiding();
       scanSidebarModules();
       queueSidebarStabilizationScans([120, 420, 1200]);
@@ -5879,6 +5986,7 @@
 
     if (!isDetailPage()) {
       root.dataset.web25Stage = "scan:inactive";
+      resetRevealedTrayEntries();
       removeAllHiding();
       scanSidebarModules();
       queueSidebarStabilizationScans([120, 420, 1200]);
@@ -5894,6 +6002,58 @@
     if (articles.length < 2) {
       root.dataset.web25Stage = "scan:not-enough-articles";
       queueStabilizationScans([700, 1600, 3200]);
+      pruneRevealedTrayEntries();
+      if (state.revealedTrayEntries.size > 0) {
+        const cachedReplies = [];
+        let cachedHiddenCount = 0;
+        let cachedAutoCount = 0;
+        let cachedAiCount = 0;
+        let cachedAiReviewedCount = 0;
+        let cachedHistoryCount = 0;
+        let cachedManualCount = 0;
+
+        state.revealedTrayEntries.forEach(function (entry) {
+          const clonedEntry = cloneBottomEntry(entry);
+          if (!clonedEntry) {
+            return;
+          }
+
+          cachedReplies.push(clonedEntry);
+          cachedHiddenCount += 1;
+
+          if (clonedEntry.hiddenSource === "manual") {
+            cachedManualCount += 1;
+          } else if (clonedEntry.hiddenSource === "history") {
+            cachedHistoryCount += 1;
+          } else {
+            cachedAutoCount += 1;
+            if (clonedEntry.hiddenSource === "ai" || clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
+              cachedAiCount += 1;
+              cachedAiReviewedCount += 1;
+            }
+          }
+        });
+
+        if (cachedHiddenCount > 0) {
+          const cachedCounts = {
+            auto: cachedAutoCount,
+            ai: cachedAiCount,
+            aiReviewed: cachedAiReviewedCount,
+            history: cachedHistoryCount,
+            manual: cachedManualCount,
+            scanned: 0
+          };
+          ensureBottomHost(null);
+          ensureSummary(cachedCounts);
+          ensureRevealedList(cachedCounts);
+          updateBottomCards(cachedReplies);
+          syncBottomHostVisibility(cachedHiddenCount);
+          dedupeBottomUi();
+          scheduleBottomUiDedupe();
+          root.dataset.web25Stage = "scan:done";
+          return;
+        }
+      }
       removeAllHiding({ keepSidebarUi: true });
       return;
     }
@@ -6122,9 +6282,11 @@
             manualKeys: cloneManualKeys(manualKeys),
             replyDisplayName: authorMeta.displayName,
             replyHandle: authorMeta.handle,
-            aiReasonShort: entry.aiReasonShort || ""
+            aiReasonShort: entry.aiReasonShort || "",
+            aiCacheKey: entry.aiCacheKey || ""
           };
           revealedReplies.push(revealedEntry);
+          rememberRevealedTrayEntry(revealedEntry);
 
           if (hiddenSource === "manual" || hiddenSource === "history") {
             rememberManualTrayEntry(revealedEntry);
@@ -6138,6 +6300,7 @@
             }
           }
         } else {
+          forgetRevealedTrayEntry(manualKeys, replyText);
           replyCell.style.display = "";
           replyCell.removeAttribute("data-web25-pending");
           replyCell.removeAttribute("data-web25-hidden");
@@ -6173,31 +6336,37 @@
         });
       root.dataset.web25Stage = "scan:actions-ready";
 
-      if (PERSISTENT_MANUAL_TRAY_SUPPORTED) {
-        const visibleManualTrayKeys = new Set(revealedReplies.map(function (entry) {
-          return getManualTrayEntryKey(entry.manualKeys, entry.replyText);
-        }).filter(Boolean));
+      const visibleRevealedTrayKeys = new Set(revealedReplies.map(function (entry) {
+        return getManualTrayEntryKey(entry.manualKeys, entry.replyText);
+      }).filter(Boolean));
 
-        pruneManualTrayEntries();
-        state.manualTrayEntries.forEach(function (entry, cacheKey) {
-          if (!entry || !entry.manualKeys || visibleManualTrayKeys.has(cacheKey)) {
-            return;
-          }
+      pruneRevealedTrayEntries();
+      state.revealedTrayEntries.forEach(function (entry, cacheKey) {
+        if (!entry || !entry.manualKeys || visibleRevealedTrayKeys.has(cacheKey)) {
+          return;
+        }
 
-          const clonedEntry = cloneBottomEntry(entry);
-          if (!clonedEntry) {
-            return;
-          }
+        const clonedEntry = cloneBottomEntry(entry);
+        if (!clonedEntry) {
+          return;
+        }
 
-          revealedReplies.push(clonedEntry);
-          hiddenCount += 1;
-          if (clonedEntry.hiddenSource === "history") {
-            historyHiddenCount += 1;
-          } else {
-            manualHiddenCount += 1;
+        revealedReplies.push(clonedEntry);
+        visibleRevealedTrayKeys.add(cacheKey);
+        hiddenCount += 1;
+
+        if (clonedEntry.hiddenSource === "manual") {
+          manualHiddenCount += 1;
+        } else if (clonedEntry.hiddenSource === "history") {
+          historyHiddenCount += 1;
+        } else {
+          autoHiddenCount += 1;
+          if (clonedEntry.hiddenSource === "ai" || clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
+            aiHiddenCount += 1;
+            aiReviewedCount += 1;
           }
-        });
-      }
+        }
+      });
 
       const counts = {
         auto: autoHiddenCount,
