@@ -4,15 +4,14 @@ This file is the first thing future Codex sessions should read. The user does no
 
 ## Default Behavior
 
-- Default to doing the full maintenance loop yourself: inspect, edit, test, commit, push, deploy, update the local Safari app, and verify the installed result.
-- Do not only explain what should happen when the user clearly wants the project updated.
+- Default to doing the full maintenance loop yourself: inspect, edit, test, update the local Safari app when needed, deploy public Cloudflare changes when needed, and verify the installed or public result. Do not only explain what should happen when the user clearly wants the project updated.
+- When the next useful step is clear, low-risk, and directly improves the user's stated goal, keep going instead of stopping to ask for permission. Ask only when the step changes product behavior, touches production data, costs money, needs account access, changes identity/auth/security, publishes publicly, uploads to GitHub, or could plausibly surprise the user.
 - For official website / console frontend changes, deploy to the public Cloudflare site immediately after verification and confirm the public URL works. Local preview alone does not count as done because the user checks from other devices.
-- Continue until there is no reasonable next engineering step left. If blocked by account login, CAPTCHA, payment, or another action only the user can complete, record the exact blocker and the last successful verification.
-- If a public Cloudflare deploy fails because the Cloudflare login/token is expired or invalid, stop immediately and ask the user to log in. Do not keep retrying, probing, or making the user wait while speculating whether deployment can work; one clear failure is enough to pause for user login.
-- Keep user-facing explanations simple and concrete. Avoid developer jargon unless it is explained in plain language. For AI/API/deployment topics, first answer in plain Chinese whether it is ready, what is still missing, and what Codex will do next; do not make the user interpret API names, model parameters, command output, or engineering details.
-- The user explicitly says they “only understand human language.” Do not report status with unexplained terms like stash, worktree, upstream, unstaged, untracked, commit, push, deploy, Wrangler, Worker, or D1. Translate them first, for example: “代码没有没保存的改动，也没有没上传到 GitHub 的改动” or “代码已上传，但网站还没更新到公网，因为 Cloudflare 登录失效.”
+- GitHub upload is a boss-approved archive step, not a routine step after every small change. Upload only when the user gives strong praise for a high-completion checkpoint, explicitly asks to upload to GitHub, asks for handoff/backup, or confirms after Codex recommends a stable checkpoint. The user's newest instruction wins over older broad "always push" notes.
+- Keep owner-facing explanations in plain Chinese: first say whether it is usable, what is still missing, and what Codex will do next; translate technical terms such as commit, push, deploy, Worker, Wrangler, D1, schema, stash, worktree, upstream, unstaged, and untracked instead of making the user decode them. If required verification fails, or the task is blocked by account login, CAPTCHA, payment, permissions, or another action only the user can complete, stop and report the last successful verification, the exact failed step, and what the user needs to do. Do not skip verification, lower the standard, pretend the work is done, keep retrying blindly, or search for a bypass. For Cloudflare login/token/public deploy failure, one clear failure is enough to pause for user login.
 - If a change affects the extension filtering behavior, update both local extension code and Cloudflare Worker code in the same pass.
 - If a change affects the stable product state, update the relevant docs before finishing.
+- For documentation-only process cleanup, do not rebuild the Safari app or deploy Cloudflare unless the changed file is part of the public website and the user wants that public page updated now.
 - For the existing reply-moderation AI, the user prefers a stronger “AI as teacher” posture. Do not avoid bounded extra AI checks merely to save tokens; it is acceptable to send high-risk or database-caught candidates for sampled AI review so the database learns better. Still keep normal replies out of AI, keep batching/cooldowns, and do not introduce a new paid provider or broad full-page AI calling without explaining the cost/risk.
 - The user now explicitly says the AI participation is still too low if they personally have to train the database by repeated manual hides. In the early learning phase, bias toward more AI teacher review for high-risk, ambiguous, image/avatar-supported, database-caught, or repeated-pattern candidates so AI judgments create labels and memory. Do not make manual user feedback the primary training path.
 - If the user says the AI “is not working / did not move / is not doing work,” do not only edit prompts, examples, or this assistant’s wording. Inspect and change the product’s actual AI routing path: extension candidate selection, queue timing, cached decisions, Worker memory/database short-circuits, provider-call budget, and whether AI judgments are written to labels/memory.
@@ -49,9 +48,12 @@ This file is the first thing future Codex sessions should read. The user does no
 
 Before saying a change is done, run the smallest useful verification set for the touched area. For filter or deployment changes, usually verify:
 
+If a required verification step fails and cannot be fixed by Codex inside the current task, stop and tell the user in plain Chinese. Do not skip that check, weaken the acceptance standard, or mark the task complete.
+
 - `node --check cloudflare/src/index.js`
 - `node --check extension/content/rules.js`
 - `node --check extension/content/content.js`
+- `npm run doctor`
 - `npm run cloud:check`
 - Build/deploy when the change is intended to reach users.
 - Confirm `/Applications/web2.5.app` contains the latest `BUILD_ID` after local Safari app updates.
@@ -77,6 +79,9 @@ Read these before touching core behavior:
 - When a deployment, local Safari app build, database migration, or stable behavior changes, update the handoff and the relevant stable-state doc in the same change.
 - Prefer dated version anchors, exact paths, and verification commands over vague reminders.
 - If the handoff grows too long, compress old release logs or move them into a history/archive document, and keep the direct new-thread prompt aligned with the latest current version.
+- Write handoff and rule documents like a human handoff, not a machine dump: start with the current conclusion, explain why it matters in plain Chinese, keep old history searchable but out of the main path, and translate technical words instead of making the user or next assistant decode them.
+- Merge similar instructions instead of repeating them across many places. When old notes conflict with newer user preferences, keep the newest user instruction as the source of truth and move old wording to history only if it is still useful for search.
+- When a conversation gets long, has already been compacted, includes many large file reads or long command outputs, finishes a major work segment, or is about to start another large segment, update the handoff first and warn the user that the context may be getting fragile. Treat this as an early warning system, not an exact percentage meter.
 
 ## High-Risk Actions
 

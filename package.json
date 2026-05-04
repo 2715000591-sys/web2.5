@@ -14,6 +14,8 @@
     "cloud:rebuild-rule-candidates": "node scripts/rebuild-rule-candidates.mjs",
     "cloud:probe-reply-ai": "node scripts/probe-reply-ai-routing.mjs",
     "cloud:d1:apply:local": "npx wrangler@latest d1 execute web25 --local --file=cloudflare/schema.sql",
+    "doctor": "node scripts/doctor.mjs",
+    "doctor:full": "node scripts/doctor.mjs --full",
     "safari:build": "bash scripts/build-safari-app.sh",
     "safari:verify-live": "bash scripts/verify-safari-extension-live.sh",
     "console:open": "bash scripts/open-console.sh",
