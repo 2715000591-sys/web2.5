@@ -212,17 +212,20 @@ npm run cloud:probe-reply-ai -- --text "样本文字" --display-name "昵称" --
 - 本地扩展页面逻辑：`extension/content/content.js`
 - 云端 Worker 和 API：`cloudflare/src/index.js`
 - 数据库结构：`cloudflare/schema.sql`
-- 官网和控制台：`site/index.html`、`site/console/index.html`、`site/app.js`、`site/styles.css`
+- 官网和控制台：`site/index.html`、`site/console.html`、`site/app.js`、`site/styles.css`
 - Safari App 工程：`web2.5/`
 - 构建脚本：`scripts/build-safari-app.sh`
 - 真实页面验收脚本：`scripts/verify-safari-extension-live.sh`
 
-容易误改的历史或辅助目录：
+已经从主线清掉的旧入口：
 
-- `home-feed-extension/` 是旧的主页信息采集实验线，不是当前 X / Safari 主插件。除非用户明确要求恢复这条线，否则不要改它来修当前插件。
-- `legacy-pages-redirect/` 是旧 Pages 重定向，不是当前 Cloudflare Worker 主站。
-- `backend/server.mjs` 是早期本地后台，不是当前公网主后台。
-- `site/stable-state.html` 是公开稳定状态页面源码，若要改并让用户看到，需要走公网发布。
+- 旧本地后台 `backend/server.mjs` 和本地自启动脚本。
+- 旧主页信息采集实验扩展 `home-feed-extension/`。
+- 旧 Pages 重定向项目 `legacy-pages-redirect/`。
+- 旧 MVP / 临时 Safari 文档。
+- 重复控制台页面 `site/console/index.html` 和旧 Pages Worker `site/_worker.js`。
+
+这些旧线如果以后真要追溯，从 Git 历史查，不要恢复到主线误导新人。`site/stable-state.html` 仍是公开稳定状态页面源码，若要改并让用户看到，需要走公网发布。
 
 ## 10. 下一步优先级
 

@@ -3,8 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node backend/server.mjs",
-    "backend": "node backend/server.mjs",
+    "dev": "npm run cloud:dev",
     "cloud:dev": "npx wrangler@latest dev",
     "browser:artifacts": "bash scripts/prepare-download-bundles.sh",
     "cloud:deploy": "npm run browser:artifacts && npx wrangler@latest deploy",
@@ -18,9 +17,6 @@
     "doctor:full": "node scripts/doctor.mjs --full",
     "safari:build": "bash scripts/build-safari-app.sh",
     "safari:verify-live": "bash scripts/verify-safari-extension-live.sh",
-    "console:open": "bash scripts/open-console.sh",
-    "console:status": "bash scripts/backend-status.sh",
-    "console:install-autostart": "bash scripts/install-autostart.sh",
-    "console:remove-autostart": "bash scripts/uninstall-autostart.sh"
+    "console:open": "open https://colorful-toilet.colorful-toilet.workers.dev/console/"
   }
 }

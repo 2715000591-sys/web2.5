@@ -232,6 +232,43 @@ function checkAgentRules() {
   }
 }
 
+function checkLegacyEntryPointsRemoved() {
+  const legacyPaths = [
+    "backend/server.mjs",
+    "home-feed-extension/manifest.json",
+    "legacy-pages-redirect/index.html",
+    "docs/mvp.md",
+    "docs/run-in-safari.md",
+    "site/_worker.js",
+    "site/console/index.html",
+    "open-web25-console.command",
+    "install-web25-autostart.command",
+    "remove-web25-autostart.command",
+    "scripts/open-console.sh",
+    "scripts/backend-run.sh",
+    "scripts/backend-status.sh",
+    "scripts/install-autostart.sh",
+    "scripts/uninstall-autostart.sh"
+  ];
+  const stillPresent = legacyPaths.filter((filePath) => fs.existsSync(rootPath(filePath)));
+  if (stillPresent.length) {
+    fail("旧入口清理检查", `这些旧入口仍存在：${stillPresent.join("、")}`);
+  } else {
+    ok("旧入口清理检查", "旧本地后台、旧实验扩展、旧重定向和旧文档入口已移出主线");
+  }
+
+  const packageJson = readJson("package.json");
+  const scripts = packageJson.scripts || {};
+  const staleScripts = Object.entries(scripts).filter(([, command]) => {
+    return /backend\/server\.mjs|scripts\/open-console\.sh|scripts\/backend-run\.sh|scripts\/backend-status\.sh|scripts\/install-autostart\.sh|scripts\/uninstall-autostart\.sh/.test(String(command || ""));
+  });
+  if (staleScripts.length) {
+    fail("旧 npm 命令检查", staleScripts.map(([name]) => name).join("、"));
+  } else {
+    ok("旧 npm 命令检查", "没有命令再指向旧本地后台");
+  }
+}
+
 function checkPatternKeyAlignment() {
   const localSource = [
     readText("extension/content/content.js"),
@@ -431,6 +468,7 @@ async function main() {
   checkDocsContainCurrentAnchor(buildId, extensionVersion);
   checkStaleText();
   checkAgentRules();
+  checkLegacyEntryPointsRemoved();
   checkPatternKeyAlignment();
   checkHandoffLength();
 

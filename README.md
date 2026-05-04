@@ -48,11 +48,14 @@ AI 判断结果写回标注、记忆和候选规则
 - `web2.5/`：Safari App 工程
 - `scripts/`：构建、发布、审计、真实页面验证脚本
 
-容易误改的历史线：
+已经从主线清掉的旧入口：
 
-- `home-feed-extension/`：旧的主页信息采集实验线，不是当前主插件。
-- `backend/server.mjs`：早期本地后台，不是当前公网主后台。
-- `legacy-pages-redirect/`：旧 Pages 重定向，不是当前主站。
+- 旧本地后台 `backend/server.mjs`
+- 旧主页信息采集实验扩展 `home-feed-extension/`
+- 旧 Pages 重定向项目 `legacy-pages-redirect/`
+- 旧 MVP / 临时 Safari 文档
+
+如果以后需要查这些历史，用 Git 历史搜，不要把它们恢复到主线误导新人。
 
 ## 常用命令
 
