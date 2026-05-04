@@ -22,8 +22,9 @@ This file is the first thing future Codex sessions should read. The user does no
 ## Data Safety
 
 - Treat the Cloudflare D1 database as important production data.
-- Before schema changes, data cleanup, migrations, or risky writes, create a D1 backup first.
-- Never delete production/user history unless the user explicitly asks for that exact cleanup and the target rows are verified.
+- The user's moderation statistics are protected product memory: 累计屏蔽总数, ad/spam/lead-generation counts, manual hide/restore history, AI/database labels, reply AI items/results, AI memory, rule candidates, account/device bindings, and per-user preferences must not be deleted, reset, recomputed, downsampled, or "cleaned up" during code or documentation cleanup.
+- Before schema changes, data cleanup, migrations, or risky writes, create a D1 备份 first.
+- Never delete production/user history unless the user explicitly asks for that exact cleanup, the target tables/rows are verified, the impact on visible totals is explained in plain Chinese, and a D1 backup has already been created.
 - Developer/account-global data and per-user data must stay layered:
   - Global/shared rules and samples may be used by every account.
   - Each user's personal hidden count, restored count, preferences, and history must remain account-specific.

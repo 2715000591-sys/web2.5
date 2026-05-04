@@ -269,6 +269,26 @@ function checkLegacyEntryPointsRemoved() {
   }
 }
 
+function checkDatabaseSafetyRules() {
+  const agents = readText("AGENTS.md");
+  const handoff = readText("docs/next-thread-handoff.md");
+  const trainingPlan = readText("docs/moderation-database-training-plan.md");
+  const required = [
+    ["累计屏蔽总数", agents, handoff, trainingPlan],
+    ["广告", handoff, trainingPlan],
+    ["招嫖引流", handoff, trainingPlan],
+    ["manual_hide", agents, trainingPlan],
+    ["manual_allow", agents, trainingPlan],
+    ["D1 备份", handoff, trainingPlan]
+  ];
+  const missing = required.filter(([term, ...texts]) => !texts.every((text) => text.includes(term))).map(([term]) => term);
+  if (missing.length) {
+    fail("数据库统计保护规则", `缺少：${missing.join("、")}`);
+  } else {
+    ok("数据库统计保护规则", "累计统计、历史记录和 AI/数据库学习库已写成保护规则");
+  }
+}
+
 function checkPatternKeyAlignment() {
   const localSource = [
     readText("extension/content/content.js"),
@@ -469,6 +489,7 @@ async function main() {
   checkStaleText();
   checkAgentRules();
   checkLegacyEntryPointsRemoved();
+  checkDatabaseSafetyRules();
   checkPatternKeyAlignment();
   checkHandoffLength();
 
