@@ -126,7 +126,8 @@
 - 当前分支：`codex/cloudflare-public-foundation`
 - Cloudflare Worker：
   - URL：`https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID：`e74435d5-b7cd-498b-b76f-c7d83c90adef`
+  - Version ID：`febe67c9-e44a-4f28-a563-f71c0f25e4f2`
+  - 2026-05-04 11:59 已发布 `BUILD_ID=2026-05-04-1159` / `extensionVersion=0.1.76` 到公网。用户指出 `🔥全网唯一真实社区🥹线下直接对接 @belanich34344 / ⚡🤩💨🥳` 明显漏网，并追问是不是 AI 没工作；只读查到真实记录已进入后台但停在 `pending / 等待后台判断 / model 空`，说明不是 AI 已看错，而是等待状态没有可靠收尾。新版没有把截图词硬写进数据库：本地和 Worker 同步补通用风险昵称证据，覆盖 `线下/同城/附近 + 对接/牵线/安排/资源/接待/社区`、`真实/真人/唯一 + 社区/资源/对接/牵线/约见` 等组合；前端和 Worker 的回复 AI 单批从 8 条缩到 4 条，前端等待后台结果从 30 秒放宽到 55 秒；Worker 写入 pending 后会安排 12 秒后台补判，避免浏览器请求中途断开或 AI 批量慢时长期空挂；页面收到 `failed / AI 批量结果不完整` 也会重新排队再试，后台补判也会捞这类失败项。公网 `/downloads/latest.json` 返回 `buildId=2026-05-04-1159`、`extensionVersion=0.1.76`，首页和控制台均返回 200；线上路线探针带真实 DeepSeek 调用返回 `Final layer: ai / ready / hide / high`、理由为诱导昵称、可疑 handle、emoji 空回复且与主帖无关，`Database writes: no`。`node --check` 三个核心文件、`git diff --check`、`npm run cloud:check`、`npm run cloud:audit-data-layer` 通过；审计仍确认单用户重复冲走不会自动进入公共规则。本轮没有 schema 变更、没有清理或删除 D1 数据、没有新增付费 AI/API 能力。
   - 2026-05-04 10:34 已发布 `BUILD_ID=2026-05-04-1034` / `extensionVersion=0.1.74` 到公网。用户完成 Cloudflare 登录验证后已补跑发布；后续同版本重发一次，最终公网 Version ID 为上一行。公网 `/downloads/latest.json` 返回 `buildId=2026-05-04-1034`、`extensionVersion=0.1.74`，首页和控制台均返回 200。本轮按用户补充口径，把旧手动教学 / 历史命中合并显示为“后台学习库下沉”，不再单独显示“手动记录下沉”；AI 等待态单独计为“后台复审中”，避免把 pending 误算进“本机自动下沉”；后台返回英文原因短句时，底部卡片会展示中文概括。真实 Safari 页 `https://x.com/fadai202202/status/2051011398134911475` 曾验证：页面读到 `build=2026-05-04-1034`，底部显示 `Colorful Toilet 已整理 4 条回复`、`后台已判断 6 条，后台自动下沉 1 条，后台学习库下沉 3 条`，展开 / 收起 / 等待 4 秒后 4 张底部卡片都保留且按钮不变灰。发布后已重新替换本机 App、签名验证通过；最终 `npm run safari:verify-live` 对真实页读到 `build=2026-05-04-1034`、`stage=scan:done`、`articles=10`、`flushes=7`、`manualButtons=7`、`sideButtons=3`。`npm run cloud:audit-data-layer` 通过，本轮没有改筛选阈值、Worker 审核逻辑、schema、D1 数据或付费 AI 能力。
   - 2026-05-04 09:57 已发布 `BUILD_ID=2026-05-04-0951` / `extensionVersion=0.1.71`。修复用户反馈的底部“查看列表”反复变成“无下沉”的问题：X 在展开底部或页面重排时可能临时卸载隐藏回复 DOM，旧版把“当前 DOM 里没看到隐藏回复”误当成“没有下沉”，导致按钮变灰、底部列表清空，等用户滚动后又重新隐藏。新版按当前详情页缓存已下沉条目，X 短暂拿走 DOM 时仍保留底部列表；恢复或后台明确放过时会清理缓存。本轮没有改筛选阈值、Worker 审核逻辑、schema、D1 数据或付费 AI 能力。
   - 2026-05-04 09:38 已发布 `BUILD_ID=2026-05-04-0938` / `extensionVersion=0.1.70`。继续按用户“AI 后台就是数据库插件后台”的口径统一官网控制台、底部整理卡片和后台原因短句：用户可见来源改为“后台直接下沉 / 后台学习库下沉 / 后台已判断”，不再让用户区分 AI 后台和数据库后台；历史/本机手动记录继续显示“手动记录下沉”，不冒充刚刚点击。没有改筛选阈值、schema、D1 数据或付费 AI 能力。
@@ -209,11 +210,12 @@
   - 数据库名：`web25`
   - 绑定名：`DB`
 - Safari / Web Extension：
-  - `BUILD_ID = 2026-05-04-1034`
-  - extension manifest version：`0.1.74`
-  - App / Extension version：`1.0.74 (75)`
+  - `BUILD_ID = 2026-05-04-1159`
+  - extension manifest version：`0.1.76`
+  - App / Extension version：`1.0.76 (77)`
   - 本机安装路径：`/Applications/web2.5.app`
   - Bundle：`com.yourCompany.web25.extension`
+  - 2026-05-04 11:59 已替换本机 App 到 `BUILD_ID=2026-05-04-1159`。签名验证通过，App / Extension 版本为 `1.0.76 (77)`，manifest 为 `0.1.76`；`pluginkit` 已重新启用扩展。`npm run safari:verify-live` 确认真实 Safari X 页读到新版：首页 `build=2026-05-04-1159`、`sidebar=1`、`sideButtons=4`、`marking=1`、`articles=6`；详情页 `https://x.com/YLDLZN/status/2050723821460853237` 返回 `build=2026-05-04-1159`、`detail=1`、`sidebar=1`、`flushes=14`、`sideButtons=3`、`manualButtons=14`、`marking=1`、`articles=30`、`stage=scan:done`。另一个详情页 `https://x.com/fadai202202/status/2051011398134911475` 当时未加载出回复列表，停在 `articles=0` / `stage=scan:not-enough-articles`。
   - 2026-05-04 10:34 已替换本机 App 到 `BUILD_ID=2026-05-04-1034`。签名验证通过，App / Extension 版本为 `1.0.74 (75)`，manifest 为 `0.1.74`；`pluginkit` 已重新启用扩展。`npm run safari:verify-live` 确认真实 Safari 页 `https://x.com/fadai202202/status/2051011398134911475` 为 `build=2026-05-04-1034`、`stage=scan:done`、`articles=13`、有可见 `冲走` 按钮和右栏关闭按钮；底部文案不再出现“手动记录下沉”。手动点击底部展开、等待 4 秒、收起，4 张卡片均稳定存在，未复现“无下沉”或按钮变灰。
   - 2026-05-04 09:57 已替换本机 App 到 `BUILD_ID=2026-05-04-0951`。签名验证通过，App / Extension 版本为 `1.0.71 (72)`，manifest 为 `0.1.71`；`pluginkit` 已重新启用扩展；`npm run safari:verify-live` 确认真实 Safari X 标签页读到新版 `build=2026-05-04-0951`。当时 X 两个详情页都没有加载出回复列表（`articles=0` / `stage=boot` 或 `scan:not-enough-articles`），所以本轮已验证新版注入、签名和安装，尚无可见回复按钮样本；后续遇到正常加载回复的详情页应再补验底部列表展开是否稳定。
   - 2026-05-04 09:38 已替换本机 App 到 `BUILD_ID=2026-05-04-0938`。本轮只统一用户文案：官网控制台用“后台直接下沉 / 后台学习库下沉”，底部整理卡片和原因短句也统一叫后台；历史手动记录不叫“你刚标记”。

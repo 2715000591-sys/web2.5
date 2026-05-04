@@ -174,8 +174,11 @@
 - Safari 扩展 `BUILD_ID = 2026-05-04-0938`
 - Safari 扩展 `BUILD_ID = 2026-05-04-0951`
 - Safari 扩展 `BUILD_ID = 2026-05-04-1034`
-- 扩展版本 `0.1.74`
-- App / Extension 版本 `1.0.74 (75)`
+- Safari 扩展 `BUILD_ID = 2026-05-04-1159`
+- 扩展版本 `0.1.76`
+- App / Extension 版本 `1.0.76 (77)`
+
+2026-05-04 11:59 已替换本机 App 到 `BUILD_ID=2026-05-04-1159`，签名验证通过，App / Extension 版本为 `1.0.76 (77)`，manifest 为 `0.1.76`。本轮没有改右栏 UI，也没有重设计控制台；只修回复 AI pending 补判、失败重试、单批大小和线下对接类风险昵称证据。`npm run safari:verify-live` 确认真实 Safari X 页读到新版：首页 `build=2026-05-04-1159`、`sidebar=1`、`sideButtons=4`、`marking=1`、`articles=6`；详情页 `https://x.com/YLDLZN/status/2050723821460853237` 返回 `build=2026-05-04-1159`、`detail=1`、`sidebar=1`、`flushes=14`、`sideButtons=3`、`manualButtons=14`、`marking=1`、`articles=30`、`stage=scan:done`。公网已发布，Worker Version ID `febe67c9-e44a-4f28-a563-f71c0f25e4f2`，`/downloads/latest.json` 返回 `buildId=2026-05-04-1159`、`extensionVersion=0.1.76`，官网和控制台均返回 200。
 
 2026-05-04 10:34 已替换本机 App 到 `BUILD_ID=2026-05-04-1034`，签名验证通过，App / Extension 版本为 `1.0.74 (75)`，manifest 为 `0.1.74`。本轮只修底部整理卡片的数据真实性文案：旧手动教学 / 历史命中统一显示为“后台学习库下沉”，`ai-pending` 单独计为“后台复审中”，不再把 pending 算进本机自动下沉；后台返回英文原因短句时，底部卡片会展示中文概括。真实 Safari 页 `https://x.com/fadai202202/status/2051011398134911475` 已验证 `build=2026-05-04-1034`、`stage=scan:done`、`articles=13`，底部显示 `后台已判断 6 条，后台自动下沉 1 条，后台学习库下沉 3 条`，不再出现“手动记录下沉”；展开、等待 4 秒、收起后 4 张底部卡片仍稳定存在，按钮未变灰。用户完成 Cloudflare 登录验证后，公网已发布；同版本重发后的最终 Worker Version ID 为 `e74435d5-b7cd-498b-b76f-c7d83c90adef`；`/downloads/latest.json` 返回 `buildId=2026-05-04-1034`、`extensionVersion=0.1.74`，官网和控制台均返回 200。发布后已重新替换本机 App，最终 `npm run safari:verify-live` 对真实页读到 `build=2026-05-04-1034`、`stage=scan:done`、`articles=10`、`flushes=7`、`manualButtons=7`、`sideButtons=3`。
 

@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-1034";
+  const BUILD_ID = "2026-05-04-1159";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -10,7 +10,7 @@
   const NORMAL_SCAN_DELAY_MS = 180;
   const MIN_SCAN_INTERVAL_MS = 140;
   const SCROLL_IDLE_SCAN_DELAY_MS = 260;
-  const REPLY_AI_BATCH_MAX_ITEMS = 8;
+  const REPLY_AI_BATCH_MAX_ITEMS = 4;
   const REPLY_AI_BATCH_FLUSH_DELAY_MS = 180;
   const REPLY_AI_MIN_BATCH_INTERVAL_MS = 180;
   const REPLY_AI_BASE_SUSPICION_THRESHOLD = 1;
@@ -20,7 +20,7 @@
   const REPLY_AI_REQUEST_RETRY_DELAY_MS = 1200;
   const REPLY_AI_REQUEST_MAX_RETRIES = 2;
   const BACKEND_JSON_REQUEST_TIMEOUT_MS = 8000;
-  const REPLY_AI_REQUEST_TIMEOUT_MS = 30000;
+  const REPLY_AI_REQUEST_TIMEOUT_MS = 55000;
   const PROFILE_SIGNAL_FETCH_TIMEOUT_MS = 1200;
   const REPLY_AI_SESSION_CACHE_LIMIT = 600;
   const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v9";
@@ -5830,12 +5830,16 @@
 
         if (payload && Array.isArray(payload.items)) {
           const returnedClientIds = new Set();
+          const failedClientIds = new Set();
           payload.items.forEach(function (item) {
             const clientItemId = item && item.clientItemId ? String(item.clientItemId || "") : "";
             if (!clientItemId || !item.decision) {
               return;
             }
             returnedClientIds.add(clientItemId);
+            if (String(item.decision.status || "").trim().toLowerCase() === "failed") {
+              failedClientIds.add(clientItemId);
+            }
 
             state.replyAiDecisionCache.set(clientItemId, {
               itemId: Number(item.itemId || 0),
@@ -5845,7 +5849,7 @@
           });
           persistReplyAiDecisionCacheToSession();
           requeueReplyAiDecisionTasks(tasks.filter(function (task) {
-            return task && task.cacheKey && !returnedClientIds.has(task.cacheKey);
+            return task && task.cacheKey && (!returnedClientIds.has(task.cacheKey) || failedClientIds.has(task.cacheKey));
           }), REPLY_AI_REQUEST_RETRY_DELAY_MS);
           scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
         } else {

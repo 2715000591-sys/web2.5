@@ -65,7 +65,8 @@ const REPLY_AI_RECLASSIFY_LIMIT = 12;
 const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
 const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
 const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
-const REPLY_AI_BATCH_MAX_ITEMS = 8;
+const REPLY_AI_BATCH_MAX_ITEMS = 4;
+const REPLY_AI_PENDING_RESCUE_DELAY_MS = 12000;
 const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 8;
 const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
 const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
@@ -349,6 +350,9 @@ const DISPLAY_NAME_LURE_PATTERNS = [
   /(附近|同城|线下).{0,4}(dd|滴滴|哥哥|弟弟|姐姐|妹妹)/i,
   /(dd|滴滴|哥哥|弟弟|姐姐|妹妹).{0,4}(附近|同城|线下)/i,
   /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
+  /(线下|同城|附近).{0,6}(直接)?(对接|牵线|安排|资源|接待|社区)/,
+  /(真实|真人|唯一).{0,4}(社区|资源|对接|牵线|约见)/,
+  /(社区|资源).{0,4}(线下|对接|安排|约见|牵线)/,
   /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
   /日泡/,
   /(破处|约炮|单男|固炮|固泡|泡友|炮友|性友|寻男|寻女|调教|主人|小狗|搭子)/,
@@ -1408,7 +1412,17 @@ async function handlePostAiReplyPost(request, env, ctx) {
   if (saved.itemId && !existingDecision) {
     await upsertReplyAiResult(env, saved.itemId, buildReplyAiPendingDecision());
   }
-  const decision = saved.itemId && (!saved.deduped || !existingDecision || !isFinalReplyAiDecisionStatus(existingDecision.status) || shouldRetryReplyAiDecision(existingDecision))
+  const shouldClassify = Boolean(
+    saved.itemId
+    && (!saved.deduped || !existingDecision || !isFinalReplyAiDecisionStatus(existingDecision.status) || shouldRetryReplyAiDecision(existingDecision))
+  );
+  if (shouldClassify) {
+    scheduleReplyAiPendingRescue(ctx, env, [{
+      clientItemId: `reply-ai-rescue-${Number(saved.itemId || 0)}`,
+      itemId: Number(saved.itemId || 0)
+    }]);
+  }
+  const decision = shouldClassify
     ? await classifyReplyAiItem(env, saved.itemId, { ctx, deferTeacherReview: true })
     : existingDecision;
 
@@ -1479,6 +1493,8 @@ async function handlePostAiReplyBatch(request, env, ctx) {
       deduped: Boolean(saved.deduped)
     });
   }
+
+  scheduleReplyAiPendingRescue(ctx, env, pendingEntries);
 
   const classified = pendingEntries.length
     ? await classifyReplyAiItemEntries(env, pendingEntries, { ctx, deferTeacherReview: true })
@@ -7567,6 +7583,51 @@ function shouldRetryReplyAiDecision(decision) {
   }
 
   return Date.now() - updatedAtMs >= REPLY_AI_FAILURE_RETRY_DELAY_MS;
+}
+
+function shouldRescueReplyAiDecision(decision) {
+  if (!decision || !isFinalReplyAiDecisionStatus(decision.status)) {
+    return true;
+  }
+  if (shouldRetryReplyAiDecision(decision)) {
+    return true;
+  }
+  return String(decision.status || "").trim().toLowerCase() === "failed"
+    && /批量结果不完整/.test(String(decision.reasonShort || ""));
+}
+
+function waitForReplyAiPendingRescue(delayMs) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(delayMs || 0)));
+  });
+}
+
+async function rescuePendingReplyAiEntries(env, entries) {
+  await waitForReplyAiPendingRescue(REPLY_AI_PENDING_RESCUE_DELAY_MS);
+  const retryEntries = [];
+  for (const entry of Array.isArray(entries) ? entries : []) {
+    const itemId = Number(entry && entry.itemId ? entry.itemId : 0);
+    if (!itemId) {
+      continue;
+    }
+    const decision = await getReplyAiResultByItemId(env, itemId);
+    if (shouldRescueReplyAiDecision(decision)) {
+      retryEntries.push({
+        clientItemId: normalizeReplyAiClientItemId(entry.clientItemId, `reply-ai-rescue-${itemId}`),
+        itemId
+      });
+    }
+  }
+  if (retryEntries.length) {
+    await classifyReplyAiItemEntries(env, retryEntries, { deferTeacherReview: false });
+  }
+}
+
+function scheduleReplyAiPendingRescue(ctx, env, entries) {
+  if (!ctx || typeof ctx.waitUntil !== "function" || !Array.isArray(entries) || !entries.length) {
+    return;
+  }
+  ctx.waitUntil(rescuePendingReplyAiEntries(env, entries).catch(() => null));
 }
 
 function buildReplyAiDecisionPayload(itemId, decision) {
