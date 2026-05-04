@@ -580,15 +580,6 @@ function renderAdList(items) {
   });
 }
 
-function buildAiPostUrl(item) {
-  const statusId = String(item && item.statusId ? item.statusId : "").trim();
-  const handle = String(item && item.authorHandle ? item.authorHandle : "").trim().replace(/^@/, "");
-  if (!statusId || !handle) {
-    return "";
-  }
-  return `https://x.com/${handle}/status/${statusId}`;
-}
-
 function buildReplyAiOpenUrl(item) {
   const explicitUrl = String(item && item.threadUrl ? item.threadUrl : "").trim();
   if (/^https?:\/\//i.test(explicitUrl)) {
@@ -1263,54 +1254,6 @@ function renderMetricDetailPage(payload) {
   }
   if (sourceDetailBackButton) {
     sourceDetailBackButton.href = buildConsoleHomeUrl();
-  }
-
-  aiFeedList.innerHTML = "";
-  if (!list.length) {
-    clearAiFeedPager();
-    renderEmpty(aiFeedList, meta.empty);
-    return;
-  }
-
-  pageItems.forEach((item) => {
-    aiFeedList.appendChild(renderSourceDetailRow(item));
-  });
-  renderSourcePager(list.length, currentPage, totalPages);
-}
-
-function renderSourceDetail(buckets) {
-  if (!aiFeedList) {
-    return;
-  }
-
-  if (!SOURCE_BUCKET_META[appState.sourceBucket]) {
-    setHidden(sourceDetailPanel, true);
-    clearAiFeedPager();
-    aiFeedList.innerHTML = "";
-    updateSourceMetricCards(buckets);
-    return;
-  }
-
-  const bucketId = appState.sourceBucket;
-  const meta = getBucketMeta(bucketId);
-  const list = buckets && Array.isArray(buckets[bucketId]) ? buckets[bucketId] : [];
-  const totalPages = Math.max(1, Math.ceil(list.length / SOURCE_DETAIL_PAGE_SIZE));
-  const currentPage = Math.min(totalPages, Math.max(1, Number(appState.aiFeedPage || 1) || 1));
-  const pageStartIndex = (currentPage - 1) * SOURCE_DETAIL_PAGE_SIZE;
-  const pageItems = list.slice(pageStartIndex, pageStartIndex + SOURCE_DETAIL_PAGE_SIZE);
-  appState.sourceBucket = bucketId;
-  appState.aiFeedPage = currentPage;
-  setHidden(sourceDetailPanel, false);
-  updateSourceMetricCards(buckets);
-
-  if (sourceDetailEyebrow) {
-    sourceDetailEyebrow.textContent = "当前分类";
-  }
-  if (sourceDetailTitle) {
-    sourceDetailTitle.textContent = meta.title;
-  }
-  if (sourceDetailCountPill) {
-    sourceDetailCountPill.textContent = `${list.length} 条`;
   }
 
   aiFeedList.innerHTML = "";

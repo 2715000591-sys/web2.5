@@ -14,8 +14,8 @@ AI 已经接入，不要让用户重复购买或重复提供 Key。
 - 接口地址：`https://api.deepseek.com`
 - 模型：`deepseek-v4-flash`
 - API Key：已加密保存，只能显示后四位 `a6db`
-- 当前产品版本：`BUILD_ID=2026-05-04-1159` / `extensionVersion=0.1.76`
-- 当前 Worker Version ID：`febe67c9-e44a-4f28-a563-f71c0f25e4f2`
+- 当前产品版本：`BUILD_ID=2026-05-04-1742` / `extensionVersion=0.1.77`
+- 当前 Worker Version ID：`1ba9b2db-60bc-482d-b549-c760b6b0e40f`
 
 不要把完整 Key 写进代码、文档、命令、日志或 GitHub。
 

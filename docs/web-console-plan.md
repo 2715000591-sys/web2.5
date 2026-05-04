@@ -18,15 +18,16 @@
   - 未来配置 API
   - 未来管理账号与同步
 
-## 要让它变成“任何设备都能访问”，还差什么
+## 当前公网状态
 
-网页代码本身现在已经可以做成公开站点，但要真正让别人也能访问，还需要部署到公共托管平台。
+网页控制台已经跑在 Cloudflare 公网上，不再是“还没部署”的计划稿。
 
-可选路线：
+当前入口：
 
-- GitHub Pages
-- Vercel
-- Cloudflare Pages
+- 官网：`https://colorful-toilet.colorful-toilet.workers.dev/`
+- 控制台：`https://colorful-toilet.colorful-toilet.workers.dev/console/`
+
+后续如果继续改官网、控制台或下载包，验证后要发布到 Cloudflare，不能只停在本地预览。
 
 ## 后续最适合的架构
 

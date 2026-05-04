@@ -7554,10 +7554,6 @@ function buildDefaultReplyAiDecision(overrides) {
   }, overrides || {});
 }
 
-function cloneReplyAiDecision(decision, overrides) {
-  return buildDefaultReplyAiDecision(Object.assign({}, decision || {}, overrides || {}));
-}
-
 function isFinalReplyAiDecisionStatus(status) {
   const normalized = String(status || "").trim().toLowerCase();
   return normalized === "ready" || normalized === "failed" || normalized === "skipped";
@@ -11156,18 +11152,6 @@ function shouldBypassProtectedLearning(row) {
 
   return displayNameLooksLure(row.reply_display_name || row.replyDisplayName || "")
     || looksLikeShareLinkScam(row.reply_text || row.replyText || "");
-}
-
-function collectKeyCandidates(keys) {
-  return [
-    keys.primaryKey,
-    keys.statusKey,
-    keys.accountKey,
-    keys.displayNameKey,
-    keys.textKey,
-    keys.compactKey,
-    keys.patternKey
-  ].filter(Boolean);
 }
 
 function buildRowKeys(row) {

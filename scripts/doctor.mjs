@@ -181,11 +181,14 @@ function checkStaleText() {
     "docs/current-stable-ui-state.md",
     "docs/ai-api-provider-handoff.md",
     "docs/moderation-database-training-plan.md",
+    "docs/web-console-plan.md",
     "site/stable-state.html"
   ];
   const stalePatterns = [
     "先不使用 AI",
     "当前这台机器还没有安装 Xcode",
+    "还需要部署到公共托管平台",
+    "2026-04-23 归档",
     "2026-04-23-1415",
     "0.1.23",
     "1.0.23",
@@ -290,6 +293,40 @@ function checkDatabaseSafetyRules() {
     fail("数据库统计保护规则", `缺少：${missing.join("、")}`);
   } else {
     ok("数据库统计保护规则", "累计统计、历史记录和 AI/数据库学习库已写成保护规则");
+  }
+}
+
+function checkSecondPassCleanupRules() {
+  const contentSource = readText("extension/content/content.js");
+  const siteSource = readText("site/app.js");
+  const workerSource = readText("cloudflare/src/index.js");
+  const failures = [];
+
+  if (contentSource.includes("const isGloballyBlocked = false")) {
+    failures.push("本地全局屏蔽账号仍写死为不生效");
+  }
+  if (!contentSource.includes("const isGloballyBlocked = isReplyHandleGloballyBlocked(authorMeta);")) {
+    failures.push("本地扫描没有接上全局屏蔽账号名单");
+  }
+
+  [
+    ["extension/content/content.js", contentSource, "function isTransparentColor("],
+    ["extension/content/content.js", contentSource, "function sameStringArray("],
+    ["extension/content/content.js", contentSource, "function shouldConsiderReplyAiModeration("],
+    ["site/app.js", siteSource, "function buildAiPostUrl("],
+    ["site/app.js", siteSource, "function renderSourceDetail("],
+    ["cloudflare/src/index.js", workerSource, "function cloneReplyAiDecision("],
+    ["cloudflare/src/index.js", workerSource, "function collectKeyCandidates("]
+  ].forEach(([filePath, source, marker]) => {
+    if (source.includes(marker)) {
+      failures.push(`${filePath} 仍有已确认无调用残留：${marker}`);
+    }
+  });
+
+  if (failures.length) {
+    fail("第二轮瘦身检查", failures.join("；"));
+  } else {
+    ok("第二轮瘦身检查", "全局账号名单已接上，已确认无调用的小残留已移出");
   }
 }
 
@@ -494,6 +531,7 @@ async function main() {
   checkAgentRules();
   checkLegacyEntryPointsRemoved();
   checkDatabaseSafetyRules();
+  checkSecondPassCleanupRules();
   checkPatternKeyAlignment();
   checkHandoffLength();
 

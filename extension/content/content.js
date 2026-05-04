@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-1159";
+  const BUILD_ID = "2026-05-04-1742";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -411,11 +411,6 @@
     return 0.2126 * toLinear(color.r)
       + 0.7152 * toLinear(color.g)
       + 0.0722 * toLinear(color.b);
-  }
-
-  function isTransparentColor(value) {
-    const color = parseRgbColor(value);
-    return !color || color.a <= 0.04;
   }
 
   function getOpaqueStyleColor(node, propertyName) {
@@ -1100,20 +1095,6 @@
     setStorageLocal(patch, function () {
       callback(Object.assign({}, result, patch));
     });
-  }
-
-  function sameStringArray(left, right) {
-    if (left.length !== right.length) {
-      return false;
-    }
-
-    for (let index = 0; index < left.length; index += 1) {
-      if (left[index] !== right[index]) {
-        return false;
-      }
-    }
-
-    return true;
   }
 
   function isDetailPage() {
@@ -5328,10 +5309,6 @@
     }, PROFILE_SIGNAL_FETCH_TIMEOUT_MS);
   }
 
-  function shouldConsiderReplyAiModeration(replyText, authorMeta, analysis, protectedAccount) {
-    return buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, "").shouldQueue;
-  }
-
   function buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, mainText) {
     const emptyCandidate = {
       shouldQueue: false,
@@ -5620,7 +5597,14 @@
 
   function isReplyHandleGloballyBlocked(authorMeta) {
     const handle = authorMeta && authorMeta.handle ? String(authorMeta.handle || "").trim().toLowerCase() : "";
-    return Boolean(handle) && state.globalReplyBlockedHandles.has(handle);
+    if (!handle || !state.globalReplyBlockedHandles || state.globalReplyBlockedHandles.size === 0) {
+      return false;
+    }
+
+    const withoutAt = handle.replace(/^@/, "");
+    return state.globalReplyBlockedHandles.has(handle)
+      || state.globalReplyBlockedHandles.has(withoutAt)
+      || state.globalReplyBlockedHandles.has("@" + withoutAt);
   }
 
   function requestReplyAiDecisionBatch(snapshot, callback) {
@@ -6189,7 +6173,7 @@
         const hasPinnedHide = replyCell.getAttribute("data-web25-manual-pinned") === "1";
         const hasHistoryHide = hasDecisionKey(state.manualHideTexts, storedManualKeys);
         const isManuallyHidden = !isAllowed && (hasPinnedHide || hasHistoryHide);
-        const isGloballyBlocked = false;
+        const isGloballyBlocked = isReplyHandleGloballyBlocked(authorMeta);
         const shouldQueueAi = !isAllowed
           && !hasPinnedHide
           && !hasHistoryHide
