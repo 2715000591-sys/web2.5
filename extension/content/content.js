@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-0951";
+  const BUILD_ID = "2026-05-04-1034";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -776,12 +776,18 @@
     setScrollAnchoringDisabled(true);
   }
 
-  function buildSummaryText(autoCount, historyCount, manualCount, scannedCount, aiCount, aiReviewedCount) {
+  function buildSummaryText(autoCount, historyCount, manualCount, scannedCount, aiCount, aiReviewedCount, aiPendingCount, aiLearningCount) {
     const parts = [];
     const totalCount = autoCount + historyCount + manualCount;
     const normalizedAiCount = Math.max(0, Number(aiCount || 0));
     const normalizedAiReviewedCount = Math.max(0, Number(aiReviewedCount || 0));
-    const localAutoCount = Math.max(0, autoCount - normalizedAiCount);
+    const normalizedAiPendingCount = Math.max(0, Number(aiPendingCount || 0));
+    const normalizedAiLearningCount = Math.max(0, Number(aiLearningCount || 0));
+    const backendDirectCount = Math.max(0, normalizedAiCount - normalizedAiLearningCount);
+    const learningCount = Math.max(0, Number(historyCount || 0))
+      + Math.max(0, Number(manualCount || 0))
+      + normalizedAiLearningCount;
+    const localAutoCount = Math.max(0, autoCount - normalizedAiCount - normalizedAiPendingCount);
 
     if (totalCount === 0) {
       if (normalizedAiReviewedCount > 0) {
@@ -798,19 +804,23 @@
     }
 
     if (normalizedAiReviewedCount > 0) {
-      parts.push(
-        "后台已判断 " + normalizedAiReviewedCount + " 条"
-        + (normalizedAiCount > 0 ? "（下沉 " + normalizedAiCount + " 条）" : "")
-      );
+      parts.push("后台已判断 " + normalizedAiReviewedCount + " 条");
+    }
+
+    if (backendDirectCount > 0) {
+      parts.push("后台自动下沉 " + backendDirectCount + " 条");
+    }
+
+    if (learningCount > 0) {
+      parts.push("后台学习库下沉 " + learningCount + " 条");
     }
 
     if (localAutoCount > 0) {
       parts.push("本机自动下沉 " + localAutoCount + " 条");
     }
 
-    const manualRecordCount = Math.max(0, Number(historyCount || 0)) + Math.max(0, Number(manualCount || 0));
-    if (manualRecordCount > 0) {
-      parts.push("手动记录下沉 " + manualRecordCount + " 条");
+    if (normalizedAiPendingCount > 0) {
+      parts.push("后台复审中 " + normalizedAiPendingCount + " 条");
     }
 
     return parts.join("，");
@@ -820,15 +830,15 @@
     const source = entry && entry.hiddenSource ? String(entry.hiddenSource || "") : "auto";
     if (source === "manual") {
       return {
-        className: "web25-hidden-badge-manual",
-        label: "手动记录下沉"
+        className: "web25-hidden-badge-ai-global",
+        label: "后台学习库下沉"
       };
     }
 
     if (source === "history") {
       return {
-        className: "web25-hidden-badge-history",
-        label: "手动记录下沉"
+        className: "web25-hidden-badge-ai-global",
+        label: "后台学习库下沉"
       };
     }
 
@@ -857,6 +867,50 @@
       className: "web25-hidden-badge-auto",
       label: "本机自动下沉"
     };
+  }
+
+  function formatAiReasonShort(reasonShort) {
+    const value = String(reasonShort || "").trim();
+    if (!value) {
+      return "";
+    }
+
+    if (/[\u3400-\u9fff]/.test(value)) {
+      return value;
+    }
+
+    const lower = value.toLowerCase();
+    const hints = [];
+    function addHint(label) {
+      if (hints.indexOf(label) < 0) {
+        hints.push(label);
+      }
+    }
+
+    if (/(emoji|emoticon|low[-\s]?information|low[-\s]?substance|meaningless)/.test(lower)) {
+      addHint("低信息表情或空洞回复");
+    }
+    if (/(disposable|random|suspicious handle|numeric handle|risky account)/.test(lower)) {
+      addHint("账号特征可疑");
+    }
+    if (/(thread relevance|unrelated|context|detached|off[-\s]?topic)/.test(lower)) {
+      addHint("和主帖关联弱");
+    }
+    if (/(bait|spam|solicitation|leadgen|lead generation|redirect)/.test(lower)) {
+      addHint("疑似引流垃圾");
+    }
+    if (/(contact|profile|bio|external|link|url)/.test(lower)) {
+      addHint("疑似引导到主页或站外");
+    }
+    if (/(adult|sexual|hookup|escort|dating)/.test(lower)) {
+      addHint("疑似成人约见引流");
+    }
+
+    if (hints.length > 0) {
+      return "后台判断：" + hints.join("，") + "。";
+    }
+
+    return "后台已判断为需要下沉。";
   }
 
   function captureRevealedListScrollPosition() {
@@ -4367,14 +4421,14 @@
 
     if (totalCount === 0) {
       title.textContent = "无下沉";
-      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0, counts.ai || 0, counts.aiReviewed || 0);
+      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0, counts.ai || 0, counts.aiReviewed || 0, counts.aiPending || 0, counts.aiLearning || 0);
       toggleButton.textContent = "查看列表";
       toggleButton.disabled = true;
       toggleButton.classList.add("web25-hidden-summary-toggle-disabled");
       toggleButton.setAttribute("aria-disabled", "true");
     } else {
       title.textContent = "Colorful Toilet 已整理 " + totalCount + " 条回复";
-      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0, counts.ai || 0, counts.aiReviewed || 0);
+      meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, counts.scanned || 0, counts.ai || 0, counts.aiReviewed || 0, counts.aiPending || 0, counts.aiLearning || 0);
       toggleButton.textContent = state.bottomTrayOpen ? "收起列表" : "查看列表";
       toggleButton.disabled = false;
       toggleButton.classList.remove("web25-hidden-summary-toggle-disabled");
@@ -4419,7 +4473,7 @@
     const title = state.revealedListEl.querySelector(".web25-revealed-list-title");
     const meta = state.revealedListEl.querySelector(".web25-revealed-list-meta");
     title.textContent = "已整理的回复";
-    meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, 0, counts.ai || 0, counts.aiReviewed || 0);
+    meta.textContent = buildSummaryText(counts.auto, counts.history, counts.manual, 0, counts.ai || 0, counts.aiReviewed || 0, counts.aiPending || 0, counts.aiLearning || 0);
 
     const host = state.bottomHostEl;
     if (!host) {
@@ -5911,9 +5965,10 @@
       || entry.hiddenSource === "ai-memory"
       || entry.hiddenSource === "ai-pending"
     )) {
+      const reasonNoteText = formatAiReasonShort(entry.aiReasonShort);
       note = document.createElement("div");
       note.className = "web25-bottom-card-note";
-      note.textContent = entry.aiReasonShort;
+      note.textContent = reasonNoteText;
     }
 
     const footer = document.createElement("div");
@@ -6009,6 +6064,8 @@
         let cachedAutoCount = 0;
         let cachedAiCount = 0;
         let cachedAiReviewedCount = 0;
+        let cachedAiPendingCount = 0;
+        let cachedAiLearningCount = 0;
         let cachedHistoryCount = 0;
         let cachedManualCount = 0;
 
@@ -6027,9 +6084,14 @@
             cachedHistoryCount += 1;
           } else {
             cachedAutoCount += 1;
-            if (clonedEntry.hiddenSource === "ai" || clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
+            if (clonedEntry.hiddenSource === "ai-pending") {
+              cachedAiPendingCount += 1;
+            } else if (clonedEntry.hiddenSource === "ai" || clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
               cachedAiCount += 1;
               cachedAiReviewedCount += 1;
+              if (clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
+                cachedAiLearningCount += 1;
+              }
             }
           }
         });
@@ -6039,6 +6101,8 @@
             auto: cachedAutoCount,
             ai: cachedAiCount,
             aiReviewed: cachedAiReviewedCount,
+            aiPending: cachedAiPendingCount,
+            aiLearning: cachedAiLearningCount,
             history: cachedHistoryCount,
             manual: cachedManualCount,
             scanned: 0
@@ -6073,6 +6137,8 @@
       let autoHiddenCount = 0;
       let aiHiddenCount = 0;
       let aiReviewedCount = 0;
+      let aiPendingCount = 0;
+      let aiLearningCount = 0;
       let historyHiddenCount = 0;
       let manualHiddenCount = 0;
       const revealedReplies = [];
@@ -6270,8 +6336,13 @@
             historyHiddenCount += 1;
           } else {
             autoHiddenCount += 1;
-            if (hiddenSource === "ai" || hiddenSource === "ai-global" || hiddenSource === "ai-memory") {
+            if (hiddenSource === "ai-pending") {
+              aiPendingCount += 1;
+            } else if (hiddenSource === "ai" || hiddenSource === "ai-global" || hiddenSource === "ai-memory") {
               aiHiddenCount += 1;
+              if (hiddenSource === "ai-global" || hiddenSource === "ai-memory") {
+                aiLearningCount += 1;
+              }
             }
           }
 
@@ -6361,9 +6432,14 @@
           historyHiddenCount += 1;
         } else {
           autoHiddenCount += 1;
-          if (clonedEntry.hiddenSource === "ai" || clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
+          if (clonedEntry.hiddenSource === "ai-pending") {
+            aiPendingCount += 1;
+          } else if (clonedEntry.hiddenSource === "ai" || clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
             aiHiddenCount += 1;
             aiReviewedCount += 1;
+            if (clonedEntry.hiddenSource === "ai-global" || clonedEntry.hiddenSource === "ai-memory") {
+              aiLearningCount += 1;
+            }
           }
         }
       });
@@ -6372,6 +6448,8 @@
         auto: autoHiddenCount,
         ai: aiHiddenCount,
         aiReviewed: aiReviewedCount,
+        aiPending: aiPendingCount,
+        aiLearning: aiLearningCount,
         history: historyHiddenCount,
         manual: manualHiddenCount,
         scanned: replies.length
