@@ -186,8 +186,8 @@
 - 云端 Cloudflare Worker：
   - 已正式部署
   - URL: `https://colorful-toilet.colorful-toilet.workers.dev`
-  - Version ID: `7d573527-6054-4c19-935c-3fbafce92c01`
-  - 2026-05-04 10:34 已准备 `BUILD_ID=2026-05-04-1034` / `extensionVersion=0.1.74` 的本地下载包，但公网发布失败：Cloudflare 返回登录失效 / invalid access token。线上 Worker 和公网下载清单仍停在 `BUILD_ID=2026-05-04-0951` / `extensionVersion=0.1.71`。用户重新登录 Cloudflare 后，需要补跑 `npm run cloud:deploy`；本轮没有改 Worker 审核逻辑、schema、D1 数据或付费 AI 能力。
+  - Version ID: `e74435d5-b7cd-498b-b76f-c7d83c90adef`
+  - 2026-05-04 10:34 已发布 `BUILD_ID=2026-05-04-1034` / `extensionVersion=0.1.74`。本轮只同步底部整理卡片的数据真实性口径和新版下载包；用户完成 Cloudflare 登录验证后已补发成功，后续同版本重发一次，最终公网 Version ID 为上一行。公网 `/downloads/latest.json` 返回 `buildId=2026-05-04-1034`、`extensionVersion=0.1.74`，首页和控制台均返回 200。`npm run cloud:check` 和 `npm run cloud:audit-data-layer` 通过；本轮没有改 Worker 审核逻辑、schema、D1 数据或付费 AI 能力。
   - 2026-05-04 09:57 已部署 `BUILD_ID=2026-05-04-0951` / `extensionVersion=0.1.71`。底部查看列表按当前详情页缓存已下沉条目，避免 X 临时卸载隐藏回复 DOM 时误显示“无下沉”或清空恢复列表。本轮没有改筛选阈值、Worker 判断逻辑、数据库结构或 D1 数据。
   - 2026-05-04 09:38 已部署 `BUILD_ID=2026-05-04-0938` / `extensionVersion=0.1.70`。本轮继续统一官网控制台和后台原因短句的文案，用户可见来源显示为“后台直接下沉 / 后台学习库下沉”，不再拆成“AI 后台”和“数据库后台”。没有改筛选阈值、Worker 判断逻辑、数据库结构或 D1 数据。
   - 2026-05-04 09:28 已部署 `BUILD_ID=2026-05-04-0918` / `extensionVersion=0.1.68`。本轮只更新底部整理卡片和下载包口径：后台判断、后台学习库和数据库学习对用户统一叫“后台”；历史/本机手动记录不再叫“你刚标记”；当前历史手动记录会计入“手动记录下沉”，不再混到“本机自动下沉”。没有改筛选阈值、Worker 判断逻辑、数据库结构或 D1 数据。
