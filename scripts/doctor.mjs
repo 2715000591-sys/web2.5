@@ -273,13 +273,17 @@ function checkDatabaseSafetyRules() {
   const agents = readText("AGENTS.md");
   const handoff = readText("docs/next-thread-handoff.md");
   const trainingPlan = readText("docs/moderation-database-training-plan.md");
+  const backfillScript = readText("scripts/backfill-training-samples.mjs");
+  const rebuildScript = readText("scripts/rebuild-rule-candidates.mjs");
   const required = [
     ["累计屏蔽总数", agents, handoff, trainingPlan],
     ["广告", handoff, trainingPlan],
     ["招嫖引流", handoff, trainingPlan],
     ["manual_hide", agents, trainingPlan],
     ["manual_allow", agents, trainingPlan],
-    ["D1 备份", handoff, trainingPlan]
+    ["D1 备份", handoff, trainingPlan],
+    ["WEB25_ALLOW_D1_WRITE", handoff, trainingPlan, backfillScript, rebuildScript],
+    ["I_UNDERSTAND_PROTECTED_STATS", handoff, trainingPlan, backfillScript, rebuildScript]
   ];
   const missing = required.filter(([term, ...texts]) => !texts.every((text) => text.includes(term))).map(([term]) => term);
   if (missing.length) {
@@ -498,6 +502,8 @@ async function main() {
     "extension/content/rules.js",
     "extension/content/content.js",
     "site/app.js",
+    "scripts/backfill-training-samples.mjs",
+    "scripts/rebuild-rule-candidates.mjs",
     "scripts/doctor.mjs"
   ].forEach(checkSyntax);
 

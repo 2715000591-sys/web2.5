@@ -54,6 +54,8 @@ AI 高置信隐藏写入 reply_ai_memory
 
 任何会改变这些统计、历史明细或用户偏好的操作，都必须先做 D1 备份，再说明会影响哪些表、哪些数量、哪些用户可见结果，并等用户明确确认。没有明确确认时，只允许只读检查。
 
+维护脚本也要守这条线。`cloud:backfill-training` 和 `cloud:rebuild-rule-candidates` 默认只建议先跑 `--dry-run`。如果真的要写线上 D1，脚本必须先看到明确解锁环境变量 `WEB25_ALLOW_D1_WRITE=I_UNDERSTAND_PROTECTED_STATS`，否则直接失败；脚本写入前还会先导出 D1 备份。
+
 ## 4. 数据分层
 
 公共基础层：
@@ -196,6 +198,8 @@ AI 高置信隐藏写入 reply_ai_memory
 
 ```bash
 node --check cloudflare/src/index.js
+node --check scripts/backfill-training-samples.mjs
+node --check scripts/rebuild-rule-candidates.mjs
 npm run cloud:check
 npm run cloud:audit-data-layer
 ```

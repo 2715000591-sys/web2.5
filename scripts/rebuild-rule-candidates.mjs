@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 
 const DEFAULT_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
 const DEFAULT_DEVELOPER_EMAIL = "2715000591@qq.com";
+const D1_WRITE_UNLOCK_VALUE = "I_UNDERSTAND_PROTECTED_STATS";
 
 function detectMacHttpsProxy() {
   if (process.platform !== "darwin") {
@@ -149,6 +150,13 @@ function createD1Backup() {
   return backupPath;
 }
 
+function assertD1WriteUnlocked(actionLabel) {
+  if (process.env.WEB25_ALLOW_D1_WRITE === D1_WRITE_UNLOCK_VALUE) {
+    return;
+  }
+  throw new Error(`${actionLabel} 会写入线上 D1 数据库。先向用户说明会影响哪些统计/历史，确认需要写入，再用 WEB25_ALLOW_D1_WRITE=${D1_WRITE_UNLOCK_VALUE} 重新运行。只检查请加 --dry-run。`);
+}
+
 async function login(baseUrl, email, providedCode) {
   let cookieJar = new Map();
   let code = providedCode;
@@ -186,6 +194,10 @@ async function main() {
   const email = readArg("email", process.env.WEB25_DEVELOPER_EMAIL || DEFAULT_DEVELOPER_EMAIL);
   const providedCode = readArg("code", process.env.WEB25_LOGIN_CODE || "");
   const dryRun = hasFlag("dry-run");
+
+  if (!dryRun) {
+    assertD1WriteUnlocked("重建候选规则");
+  }
 
   const backupPath = dryRun ? "" : createD1Backup();
   if (backupPath) {
