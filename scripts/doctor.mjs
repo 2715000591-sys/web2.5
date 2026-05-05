@@ -223,7 +223,8 @@ function checkAgentRules() {
     ["老板认可后上传 GitHub", agents.includes("boss-approved archive step") && handoff.includes("大幅度赞美")],
     ["验证失败必须停下", agents.includes("Do not skip verification") && handoff.includes("不要跳过验证")],
     ["相似规则要合并", agents.includes("Merge similar instructions") && handoff.includes("相似规则合并")],
-    ["上下文快满提醒", agents.includes("context may be getting fragile") && handoff.includes("上下文快满提醒")]
+    ["上下文快满提醒", agents.includes("context may be getting fragile") && handoff.includes("上下文快满提醒")],
+    ["不要自己绊住自己", agents.includes("Do not let the system trip over itself") && handoff.includes("不要让系统自己绊住自己")]
   ];
 
   for (const [title, passed] of required) {
@@ -305,7 +306,10 @@ function checkSecondPassCleanupRules() {
   if (contentSource.includes("const isGloballyBlocked = false")) {
     failures.push("本地全局屏蔽账号仍写死为不生效");
   }
-  if (!contentSource.includes("const isGloballyBlocked = isReplyHandleGloballyBlocked(authorMeta);")) {
+  if (
+    !contentSource.includes("const isGloballyBlocked = isReplyHandleGloballyBlocked(authorMeta);")
+    && !contentSource.includes("const isGloballyBlocked = !threadAuthorAutoProtected && isReplyHandleGloballyBlocked(authorMeta);")
+  ) {
     failures.push("本地扫描没有接上全局屏蔽账号名单");
   }
 
@@ -327,6 +331,48 @@ function checkSecondPassCleanupRules() {
     fail("第二轮瘦身检查", failures.join("；"));
   } else {
     ok("第二轮瘦身检查", "全局账号名单已接上，已确认无调用的小残留已移出");
+  }
+}
+
+function checkReplyAiPromptPackWiring() {
+  const workerSource = readText("cloudflare/src/index.js");
+  const packageJson = readJson("package.json");
+  const promptPackReadme = readText("docs/ai-prompt-packs/sexual-leadgen-foundation/README.md");
+  const promptPackPrompt = readText("docs/ai-prompt-packs/sexual-leadgen-foundation/prompt.md");
+  const promptPackSamples = readJson("docs/ai-prompt-packs/sexual-leadgen-foundation/samples.json");
+  const failures = [];
+
+  if (!fs.existsSync(rootPath("cloudflare/src/reply-ai-prompt-pack.generated.js"))) {
+    failures.push("缺少云端可读取的提示词包生成文件");
+  }
+  if (!workerSource.includes("reply-ai-prompt-pack.generated.js") || !workerSource.includes("buildReplyAiPromptPackGuidance()")) {
+    failures.push("云端 AI 审核没有接入提示词包");
+  }
+  if (!packageJson.scripts || !packageJson.scripts["prompt-pack:sync"] || !packageJson.scripts["prompt-pack:check"]) {
+    failures.push("缺少提示词包同步/检查命令");
+  }
+  if (!String(packageJson.scripts["cloud:deploy"] || "").includes("prompt-pack:sync")) {
+    failures.push("公网发布前不会自动同步提示词包");
+  }
+  if (!String(packageJson.scripts["cloud:check"] || "").includes("prompt-pack:check")) {
+    failures.push("公网检查前不会确认提示词包同步");
+  }
+  if (!promptPackReadme.includes("不处理个人喜好") || !promptPackPrompt.includes("色情不是问题，色情引流和垃圾诱饵才是问题")) {
+    failures.push("提示词包缺少言论自由和反一刀切边界");
+  }
+  if (!promptPackSamples.some((sample) => sample.expectedAction === "hide") || !promptPackSamples.some((sample) => sample.expectedAction === "allow")) {
+    failures.push("提示词包样本没有同时覆盖隐藏和放过");
+  }
+
+  const syncCheck = runCommand(process.execPath, ["scripts/sync-reply-ai-prompt-pack.mjs", "--check"], { timeout: 30000 });
+  if (syncCheck.status !== 0) {
+    failures.push(firstLine(syncCheck.output) || "提示词包生成文件和文档不同步");
+  }
+
+  if (failures.length) {
+    fail("AI 老师提示词包接线", failures.join("；"));
+  } else {
+    ok("AI 老师提示词包接线", "文档教材已同步进云端 AI 审核提示词，且保留隐藏/放过边界");
   }
 }
 
@@ -532,6 +578,7 @@ async function main() {
   checkLegacyEntryPointsRemoved();
   checkDatabaseSafetyRules();
   checkSecondPassCleanupRules();
+  checkReplyAiPromptPackWiring();
   checkPatternKeyAlignment();
   checkHandoffLength();
 
@@ -542,6 +589,11 @@ async function main() {
     "site/app.js",
     "scripts/backfill-training-samples.mjs",
     "scripts/rebuild-rule-candidates.mjs",
+    "scripts/audit-data-layer.mjs",
+    "scripts/probe-reply-ai-routing.mjs",
+    "scripts/lib/developer-session.mjs",
+    "scripts/sync-reply-ai-prompt-pack.mjs",
+    "cloudflare/src/reply-ai-prompt-pack.generated.js",
     "scripts/doctor.mjs"
   ].forEach(checkSyntax);
 

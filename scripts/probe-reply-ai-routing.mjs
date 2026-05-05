@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { requestDeveloperJson } from "./lib/developer-session.mjs";
 
 const DEFAULT_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
 const DEFAULT_DEVELOPER_EMAIL = "2715000591@qq.com";
@@ -224,14 +225,17 @@ async function main() {
   const email = readArg("email", process.env.WEB25_DEVELOPER_EMAIL || DEFAULT_DEVELOPER_EMAIL);
   const providedCode = readArg("code", process.env.WEB25_LOGIN_CODE || "");
   const callProvider = hasFlag("call-provider");
-  const cookieJar = await login(baseUrl, email, providedCode);
-  const result = await requestJson(baseUrl, "/api/developer/reply-ai-routing-probe", {
+  const result = await requestDeveloperJson(baseUrl, "/api/developer/reply-ai-routing-probe", {
     method: "POST",
     body: JSON.stringify({
       callProvider,
       sample: buildSample()
     })
-  }, cookieJar);
+  }, {
+    email,
+    providedCode,
+    description: "routing probe endpoint"
+  });
   if (!result.ok || !result.data || !result.data.ok) {
     throw new Error(`probe failed: ${result.status} ${JSON.stringify(result.data)}`);
   }

@@ -17,6 +17,18 @@
 - `prompt.md`：给 AI 的基础审核口径。
 - `samples.json`：用于人工回归和以后扩充的样本集合。
 
+## 当前接入方式
+
+这套材料已经接入云端回复 AI 审核。`cloudflare/src/reply-ai-prompt-pack.generated.js` 由本目录自动生成，`cloudflare/src/index.js` 会读取这个生成文件，把教材和样本放进 AI 老师的判断提示词里。
+
+改本目录后运行：
+
+```bash
+npm run prompt-pack:sync
+```
+
+`npm run doctor` 和 `npm run cloud:check` 会检查生成文件是否和本目录一致，避免教材改了但程序没读到。
+
 ## 更新规则
 
 - 新增样本时，必须写清楚 `expectedAction` 是 `hide` 还是 `allow`。

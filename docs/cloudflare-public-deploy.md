@@ -1,6 +1,8 @@
-# Colorful Toilet Cloudflare 公网部署
+# Colorful Toilet Cloudflare 公网部署和维护
 
-这版把 `Colorful Toilet` 拆成了：
+当前 `Colorful Toilet` 已经跑在 Cloudflare 公网上。这份文件不是首次上线计划稿，而是以后重新部署、迁移、排查公网问题时看的维护说明。
+
+当前公网结构：
 
 - 官网首页：公开访问
 - 控制台：登录后访问
@@ -13,12 +15,12 @@
 - D1 初始化：`cloudflare/schema.sql`
 - Wrangler 配置：`wrangler.jsonc`
 
-## 第一次部署前需要准备
+## 重建或迁移前需要准备
 
 1. Cloudflare 账号
-2. 一个 D1 数据库
-3. 一个邮件发送服务
-4. 一个正式域名，或者先接受 Cloudflare 默认域名
+2. 当前 D1 数据库，或明确要迁移到的新 D1 数据库
+3. 邮件发送服务，或者保留开发者调试登录作为维护入口
+4. 当前 Cloudflare 默认域名，或以后确认的新正式域名
 
 ## 本地开发
 
@@ -53,17 +55,16 @@ cp .dev.vars.example .dev.vars
 - `GLOBAL_RULE_MIN_CONTRIBUTORS`
 - `GLOBAL_RULE_MIN_SCORE`
 
-## 推荐上线顺序
+## 重新部署或迁移顺序
 
-1. 在 Cloudflare 创建 D1 数据库
-2. 把 `wrangler.jsonc` 里的 `database_id` 改成真实值
-3. 执行 D1 初始化 SQL
-4. 配好邮件发送环境变量
-  5. `npm run cloud:check`
-  6. `npm run cloud:deploy`
-  7. 把 Safari 插件里的同步服务地址改成正式网址
+1. 确认 `wrangler.jsonc` 里的 `database_id` 指向正确 D1
+2. 如果是新数据库，先备份旧 D1，再执行初始化 SQL
+3. 确认邮件发送或开发者调试登录仍可用
+4. `npm run cloud:check`，这会顺便确认回复 AI 教材生成文件没有落后
+5. `npm run cloud:deploy`，发布前会自动同步回复 AI 教材
+6. 如果公网地址变了，再同步更新 Safari 插件里的服务地址
 
-上线后建议跑一次只读数据分层审计：
+重新部署后建议跑一次只读数据分层审计：
 
 ```bash
 npm run cloud:audit-data-layer
@@ -73,10 +74,10 @@ npm run cloud:audit-data-layer
 
 如果本机直连 `workers.dev` 超时，脚本会在 macOS 上自动读取系统 HTTPS 代理并用 `NODE_USE_ENV_PROXY=1` 重启自己。当前常见代理地址是 `127.0.0.1:7897`。
 
-## 当前这版上线前还必须确认的三件事
+## 重新部署前必须确认的三件事
 
 1. Cloudflare 的发布权限已经真正可用
-2. D1 数据库已经创建，`database_id` 不再是占位符
+2. D1 数据库指向正确，不要误连到空库或测试库
 3. 要么邮件发送服务已经接通，要么开发者邮箱白名单已经配好，不然生产环境里验证码登录会卡住
 
 ## 当前推荐的发信方式

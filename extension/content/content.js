@@ -1,5 +1,5 @@
 (function () {
-  const BUILD_ID = "2026-05-04-1742";
+  const BUILD_ID = "2026-05-05-1023";
   const MANUAL_RESET_VERSION = "2026-04-19-cleanup2";
   const MARKING_DEFAULT_VERSION = "2026-05-02-default-on";
   const AUTO_HIDE_ENABLED = true;
@@ -11,6 +11,7 @@
   const MIN_SCAN_INTERVAL_MS = 140;
   const SCROLL_IDLE_SCAN_DELAY_MS = 260;
   const REPLY_AI_BATCH_MAX_ITEMS = 4;
+  const NOTIFICATION_REPLY_AI_MAX_ITEMS = 12;
   const REPLY_AI_BATCH_FLUSH_DELAY_MS = 180;
   const REPLY_AI_MIN_BATCH_INTERVAL_MS = 180;
   const REPLY_AI_BASE_SUSPICION_THRESHOLD = 1;
@@ -18,12 +19,13 @@
   const REPLY_AI_PENDING_HIDE_SCORE_THRESHOLD = 6;
   const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
   const REPLY_AI_REQUEST_RETRY_DELAY_MS = 1200;
-  const REPLY_AI_REQUEST_MAX_RETRIES = 2;
+  const REPLY_AI_PENDING_RETRY_DELAY_MS = 2600;
+  const REPLY_AI_REQUEST_MAX_RETRIES = 4;
   const BACKEND_JSON_REQUEST_TIMEOUT_MS = 8000;
-  const REPLY_AI_REQUEST_TIMEOUT_MS = 55000;
+  const REPLY_AI_REQUEST_TIMEOUT_MS = 12000;
   const PROFILE_SIGNAL_FETCH_TIMEOUT_MS = 1200;
   const REPLY_AI_SESSION_CACHE_LIMIT = 600;
-  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v9";
+  const REPLY_AI_SESSION_CACHE_PREFIX = "web25-reply-ai-cache-v10";
   const EXTENSION_STORAGE_TIMEOUT_MS = 1200;
   const INDEXED_DB_OPEN_TIMEOUT_MS = 1200;
   const ZERO_WIDTH_TEXT_PATTERN = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
@@ -1103,6 +1105,10 @@
 
   function isHomeTimelinePage() {
     return /^\/home\/?$/.test(location.pathname);
+  }
+
+  function isNotificationsPage() {
+    return /^\/notifications(?:\/|$)/.test(location.pathname);
   }
 
   function normalizeSidebarHeadingText(value) {
@@ -2430,6 +2436,7 @@
   function requestBackendJson(method, endpoint, payload, callback, withCredentials, timeoutMs) {
     const requestTimeoutMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : BACKEND_JSON_REQUEST_TIMEOUT_MS;
     let settled = false;
+    let controller = null;
     const finish = function (data) {
       if (settled) {
         return;
@@ -2439,6 +2446,9 @@
       callback(data);
     };
     const timeoutId = setTimeout(function () {
+      if (controller) {
+        controller.abort();
+      }
       finish(null);
     }, requestTimeoutMs);
 
@@ -2466,6 +2476,9 @@
       return;
     }
 
+    controller = typeof AbortController !== "undefined" && requestTimeoutMs > 0
+      ? new AbortController()
+      : null;
     fetch(endpoint, {
       method: method,
       mode: "cors",
@@ -2474,7 +2487,8 @@
         "Content-Type": "application/json"
       },
       body: method === "GET" ? undefined : JSON.stringify(payload || {}),
-      cache: "no-store"
+      cache: "no-store",
+      signal: controller ? controller.signal : undefined
     }).then(function (response) {
       return response.json().then(function (data) {
         return response.ok ? data : null;
@@ -3109,6 +3123,32 @@
       });
     const fallbackStatusId = extractStatusId(fallbackLink);
     return fallbackStatusId ? "status:" + fallbackStatusId : "";
+  }
+
+  function getStatusUrlFromArticle(replyArticle) {
+    if (!replyArticle || !replyArticle.querySelectorAll) {
+      return "";
+    }
+
+    const timeLink = replyArticle.querySelector('a[href*="/status/"] time');
+    const timeHref = timeLink && timeLink.closest("a") ? timeLink.closest("a").getAttribute("href") : "";
+    const fallbackHref = Array.from(replyArticle.querySelectorAll('a[href*="/status/"]'))
+      .map(function (node) {
+        return node.getAttribute("href") || "";
+      })
+      .find(function (href) {
+        return /\/status\/\d+/.test(href);
+      });
+    const rawHref = timeHref || fallbackHref || "";
+    if (!rawHref) {
+      return "";
+    }
+
+    try {
+      return new URL(rawHref, location.origin).href;
+    } catch (error) {
+      return "";
+    }
   }
 
   function getReplyAccountKey(replyArticle) {
@@ -3833,6 +3873,56 @@
     return isVerifiedAccount(replyArticle) || isFollowedAccount(replyArticle);
   }
 
+  function normalizeHandleForCompare(handle) {
+    return String(handle || "").trim().replace(/^@+/, "").toLowerCase();
+  }
+
+  function handlesMatch(left, right) {
+    const normalizedLeft = normalizeHandleForCompare(left);
+    const normalizedRight = normalizeHandleForCompare(right);
+    return Boolean(normalizedLeft && normalizedRight && normalizedLeft === normalizedRight);
+  }
+
+  function isReplyFromThreadAuthor(authorMeta, mainAuthorMeta) {
+    return Boolean(
+      authorMeta
+      && mainAuthorMeta
+      && handlesMatch(authorMeta.handle, mainAuthorMeta.handle)
+    );
+  }
+
+  function hasHardThreadAuthorHideSignal(replyText, authorMeta, analysis) {
+    const displayName = authorMeta && authorMeta.displayName ? authorMeta.displayName : "";
+    const handle = authorMeta && authorMeta.handle ? authorMeta.handle : "";
+    const highRiskDisplayName = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.displayNameLooksHighRisk === "function"
+      && window.Web25Rules.displayNameLooksHighRisk(displayName)
+    );
+    const suspiciousHandle = Boolean(
+      window.Web25Rules
+      && typeof window.Web25Rules.handleLooksSuspicious === "function"
+      && window.Web25Rules.handleLooksSuspicious(handle)
+    );
+
+    return Boolean(
+      highRiskDisplayName
+      || (analysis && analysis.hasShareLinkScam)
+      || (analysis && analysis.hasExternalContactPayload)
+      || (analysis && analysis.hasEroticMentionRedirect)
+      || (analysis && analysis.hasSpamTemplateSignal && suspiciousHandle)
+      || (analysis && analysis.hasGeoRelationshipBait && (highRiskDisplayName || suspiciousHandle))
+      || (analysis && analysis.hasExplicitEroticBait && (highRiskDisplayName || suspiciousHandle))
+    );
+  }
+
+  function shouldProtectThreadAuthorReply(authorMeta, mainAuthorMeta, replyText, analysis) {
+    return Boolean(
+      isReplyFromThreadAuthor(authorMeta, mainAuthorMeta)
+      && !hasHardThreadAuthorHideSignal(replyText, authorMeta, analysis)
+    );
+  }
+
   function accountLooksRisky(authorMeta) {
     if (!authorMeta) {
       return false;
@@ -4084,6 +4174,150 @@
     root.dataset.web25Ads = String(hiddenAds);
     root.dataset.web25HomeAds = String(hiddenAds);
     root.dataset.web25Stage = "ads:done";
+  }
+
+  function applyNotificationReplyAiVisibility(replyArticle, hidden, source) {
+    const replyCell = getReplyCell(replyArticle);
+    if (!replyCell || isManagedNode(replyCell)) {
+      return;
+    }
+
+    if (hidden) {
+      replyCell.setAttribute("data-web25-hidden", "1");
+      replyCell.setAttribute("data-web25-notification-ai", source || "pending");
+      replyCell.removeAttribute("data-web25-pending");
+      replyCell.style.display = "none";
+      return;
+    }
+
+    if (replyCell.getAttribute("data-web25-notification-ai")) {
+      replyCell.style.display = "";
+      replyCell.removeAttribute("data-web25-hidden");
+      replyCell.removeAttribute("data-web25-notification-ai");
+    }
+    replyCell.removeAttribute("data-web25-pending");
+  }
+
+  function scanNotificationReplyAiCandidates() {
+    root.dataset.web25Stage = "notifications:start";
+
+    if (!state.enabled || !isNotificationsPage()) {
+      root.dataset.web25Stage = "notifications:inactive";
+      return;
+    }
+
+    const articles = getArticles().slice(0, NOTIFICATION_REPLY_AI_MAX_ITEMS);
+    root.dataset.web25Articles = String(articles.length);
+
+    let queuedCount = 0;
+    let hiddenCount = 0;
+    let reviewedCount = 0;
+
+    articles.forEach(function (article) {
+      const replyCell = getReplyCell(article);
+      if (!replyCell || isManagedNode(replyCell)) {
+        return;
+      }
+
+      const replyText = getTweetText(article);
+      const authorMeta = getReplyAuthorMeta(article);
+      if (!replyText && !(authorMeta && (authorMeta.displayName || authorMeta.handle))) {
+        applyNotificationReplyAiVisibility(article, false);
+        return;
+      }
+
+      const analysis = window.Web25Rules && typeof window.Web25Rules.analyzeReplyText === "function"
+        ? window.Web25Rules.analyzeReplyText(replyText)
+        : null;
+      const protectedAccount = isProtectedAccount(article, authorMeta);
+      const manualKeys = getReplyManualKeys(article, replyText);
+      const storedManualKeys = getStoredManualKeys(manualKeys, protectedAccount, replyText);
+      const aiCacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
+      const aiCandidate = buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, "");
+      const cachedAiEntry = aiCacheKey ? state.replyAiDecisionCache.get(aiCacheKey) : null;
+      const cachedAiPayload = cachedAiEntry && cachedAiEntry.decision ? cachedAiEntry.decision : null;
+      const cachedAiDecision = cachedAiPayload && cachedAiPayload.isFinal ? cachedAiPayload : null;
+      const failedAiDecision = cachedAiDecision && cachedAiDecision.status === "failed" ? cachedAiDecision : null;
+      const failedAiRetryDue = Boolean(
+        failedAiDecision
+        && cachedAiEntry
+        && (Date.now() - Number(cachedAiEntry.updatedAt || 0) >= REPLY_AI_FAILURE_RETRY_DELAY_MS)
+      );
+      const pendingAiRetryDue = isReplyAiPendingRetryDue(cachedAiEntry);
+      const readyAiDecision = cachedAiDecision && cachedAiDecision.status === "ready" ? cachedAiDecision : null;
+      const isAllowed = hasAllowDecisionKey(state.manualAllowTexts, storedManualKeys);
+      const hasHistoryHide = hasDecisionKey(state.manualHideTexts, storedManualKeys);
+      const isGloballyBlocked = isReplyHandleGloballyBlocked(authorMeta);
+      const hasFreshNonReadyAiFinal = Boolean(cachedAiDecision && cachedAiDecision.status !== "ready" && !failedAiRetryDue);
+      const shouldQueueAi = !isAllowed
+        && !hasHistoryHide
+        && !isGloballyBlocked
+        && Boolean(state.replyAiEnabled && state.backendBaseUrl && state.syncKey && state.deviceId)
+        && Boolean(aiCacheKey)
+        && Boolean(aiCandidate && aiCandidate.shouldQueue)
+        && (!cachedAiPayload || failedAiRetryDue || pendingAiRetryDue);
+      const awaitingAiDecision = !isAllowed
+        && !hasHistoryHide
+        && !isGloballyBlocked
+        && !readyAiDecision
+        && !hasFreshNonReadyAiFinal
+        && Boolean(state.replyAiEnabled && state.backendBaseUrl && state.syncKey && state.deviceId)
+        && Boolean(aiCacheKey)
+        && Boolean(aiCandidate && aiCandidate.shouldQueue);
+      const shouldHideWhileAwaitingAi = Boolean(
+        awaitingAiDecision
+        && aiCandidate
+        && aiCandidate.pendingHideRequested
+      );
+
+      if (isAllowed) {
+        applyNotificationReplyAiVisibility(article, false);
+      } else if (hasHistoryHide || isGloballyBlocked) {
+        hiddenCount += 1;
+        applyNotificationReplyAiVisibility(article, true, isGloballyBlocked ? "ai-global" : "history");
+      } else if (readyAiDecision) {
+        reviewedCount += 1;
+        if (readyAiDecision.shouldHide === true) {
+          hiddenCount += 1;
+          applyNotificationReplyAiVisibility(article, true, readyAiDecision.decisionLayer === "ai" ? "ai" : "ai-memory");
+        } else {
+          applyNotificationReplyAiVisibility(article, false);
+        }
+      } else if (shouldHideWhileAwaitingAi) {
+        hiddenCount += 1;
+        applyNotificationReplyAiVisibility(article, true, "ai-pending");
+      } else {
+        applyNotificationReplyAiVisibility(article, false);
+      }
+
+      if (shouldQueueAi) {
+        const statusUrl = getStatusUrlFromArticle(article);
+        const avatarEvidence = buildReplyAvatarEvidence(article, authorMeta, replyText, "", analysis, protectedAccount);
+        enqueueReplyAiDecision(
+          article,
+          "",
+          replyText,
+          manualKeys,
+          authorMeta,
+          avatarEvidence,
+          protectedAccount,
+          analysis,
+          Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0),
+          Boolean(aiCandidate && aiCandidate.teacherReviewRequested),
+          false,
+          {
+            threadUrl: statusUrl || location.href,
+            threadStatusId: extractStatusId(statusUrl)
+          }
+        );
+        queuedCount += 1;
+      }
+    });
+
+    root.dataset.web25NotificationReplyAiQueued = String(queuedCount);
+    root.dataset.web25NotificationReplyAiHidden = String(hiddenCount);
+    root.dataset.web25NotificationReplyAiReviewed = String(reviewedCount);
+    root.dataset.web25Stage = "notifications:done";
   }
 
   function removeDuplicateOwnedNodes(selector, keepNode) {
@@ -5712,6 +5946,28 @@
     return true;
   }
 
+  function getReplyAiDecisionStatus(decision) {
+    return String(decision && decision.status ? decision.status : "").trim().toLowerCase();
+  }
+
+  function isReplyAiPendingRetryDue(cachedEntry) {
+    const decision = cachedEntry && cachedEntry.decision ? cachedEntry.decision : null;
+    if (!decision || decision.isFinal || getReplyAiDecisionStatus(decision) !== "pending") {
+      return false;
+    }
+    return Date.now() - Number(cachedEntry.updatedAt || 0) >= REPLY_AI_PENDING_RETRY_DELAY_MS;
+  }
+
+  function isReplyAiFreshPending(cachedEntry) {
+    const decision = cachedEntry && cachedEntry.decision ? cachedEntry.decision : null;
+    return Boolean(
+      decision
+      && !decision.isFinal
+      && getReplyAiDecisionStatus(decision) === "pending"
+      && !isReplyAiPendingRetryDue(cachedEntry)
+    );
+  }
+
   function requeueReplyAiDecisionTasks(tasks, delayMs) {
     const retryTasks = (Array.isArray(tasks) ? tasks : []).filter(function (task) {
       if (!task || !task.cacheKey) {
@@ -5735,8 +5991,12 @@
         return;
       }
       retryTasks.forEach(function (task) {
-        const cachedDecision = state.replyAiDecisionCache.get(task.cacheKey);
-        if (cachedDecision && cachedDecision.decision && cachedDecision.decision.isFinal && cachedDecision.decision.status !== "failed") {
+        const cachedEntry = state.replyAiDecisionCache.get(task.cacheKey);
+        const cachedDecision = cachedEntry && cachedEntry.decision ? cachedEntry.decision : null;
+        if (cachedDecision && cachedDecision.isFinal && cachedDecision.status !== "failed") {
+          return;
+        }
+        if (isReplyAiFreshPending(cachedEntry)) {
           return;
         }
         if (state.replyAiInFlightKeys.has(task.cacheKey) || state.replyAiQueuedKeys.has(task.cacheKey)) {
@@ -5767,12 +6027,15 @@
         };
       });
     })).then(function (entries) {
-      const threadStatusId = extractStatusId(location.pathname) || extractStatusId(location.href);
-      const mainText = entries[0] && entries[0].task ? entries[0].task.mainText || "" : "";
+      const firstTask = entries[0] && entries[0].task ? entries[0].task : null;
+      const threadStatusId = firstTask && firstTask.threadStatusId
+        ? firstTask.threadStatusId
+        : (extractStatusId(location.pathname) || extractStatusId(location.href));
+      const mainText = firstTask ? firstTask.mainText || "" : "";
       const snapshot = {
         syncKey: state.syncKey,
         deviceId: state.deviceId,
-        threadUrl: location.href,
+        threadUrl: firstTask && firstTask.threadUrl ? firstTask.threadUrl : location.href,
         threadStatusId: threadStatusId,
         mainPostText: mainText,
         items: entries.map(function (entry) {
@@ -5788,6 +6051,7 @@
             replyDisplayName: task.authorMeta && task.authorMeta.displayName ? task.authorMeta.displayName : "",
             replyText: task.replyText || "",
             accountProtected: task.protectedAccount ? 1 : 0,
+            replyAuthorIsThreadAuthor: task.threadAuthorReply ? 1 : 0,
             avatarImageUrl: task.avatarEvidence && task.avatarEvidence.imageUrl ? task.avatarEvidence.imageUrl : "",
             avatarAltText: task.avatarEvidence && task.avatarEvidence.altText ? task.avatarEvidence.altText : "",
             avatarEvidenceTags: task.avatarEvidence && Array.isArray(task.avatarEvidence.evidenceTags)
@@ -5815,14 +6079,18 @@
         if (payload && Array.isArray(payload.items)) {
           const returnedClientIds = new Set();
           const failedClientIds = new Set();
+          const pendingClientIds = new Set();
           payload.items.forEach(function (item) {
             const clientItemId = item && item.clientItemId ? String(item.clientItemId || "") : "";
             if (!clientItemId || !item.decision) {
               return;
             }
             returnedClientIds.add(clientItemId);
-            if (String(item.decision.status || "").trim().toLowerCase() === "failed") {
+            const decisionStatus = getReplyAiDecisionStatus(item.decision);
+            if (decisionStatus === "failed") {
               failedClientIds.add(clientItemId);
+            } else if (decisionStatus === "pending") {
+              pendingClientIds.add(clientItemId);
             }
 
             state.replyAiDecisionCache.set(clientItemId, {
@@ -5835,6 +6103,9 @@
           requeueReplyAiDecisionTasks(tasks.filter(function (task) {
             return task && task.cacheKey && (!returnedClientIds.has(task.cacheKey) || failedClientIds.has(task.cacheKey));
           }), REPLY_AI_REQUEST_RETRY_DELAY_MS);
+          requeueReplyAiDecisionTasks(tasks.filter(function (task) {
+            return task && task.cacheKey && pendingClientIds.has(task.cacheKey);
+          }), REPLY_AI_PENDING_RETRY_DELAY_MS);
           scheduleScanWithDelay(FAST_SCAN_DELAY_MS);
         } else {
           requeueReplyAiDecisionTasks(tasks, REPLY_AI_REQUEST_RETRY_DELAY_MS);
@@ -5856,35 +6127,44 @@
     return null;
   }
 
-  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, avatarEvidence, protectedAccount, analysis, aiCandidateScore, teacherReviewRequested) {
+  function enqueueReplyAiDecision(replyArticle, mainText, replyText, manualKeys, authorMeta, avatarEvidence, protectedAccount, analysis, aiCandidateScore, teacherReviewRequested, threadAuthorReply, threadContext) {
     const cacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
     if (!cacheKey) {
       return null;
     }
 
-    const cachedDecision = state.replyAiDecisionCache.get(cacheKey);
-    if (cachedDecision && cachedDecision.decision && cachedDecision.decision.isFinal) {
-      return cachedDecision.decision;
+    const cachedEntry = state.replyAiDecisionCache.get(cacheKey);
+    const cachedDecision = cachedEntry && cachedEntry.decision ? cachedEntry.decision : null;
+    if (cachedDecision && cachedDecision.isFinal) {
+      return cachedDecision;
+    }
+
+    if (isReplyAiFreshPending(cachedEntry)) {
+      return null;
     }
 
     if (state.replyAiInFlightKeys.has(cacheKey) || state.replyAiQueuedKeys.has(cacheKey)) {
       return null;
     }
 
+    const context = threadContext && typeof threadContext === "object" ? threadContext : {};
+    const contextThreadUrl = String(context.threadUrl || "").trim();
+    const contextThreadStatusId = String(context.threadStatusId || "").trim();
     const task = {
       cacheKey: cacheKey,
       replyArticle: replyArticle,
-      mainText: mainText,
+      mainText: mainText || "",
       replyText: replyText,
       manualKeys: manualKeys,
       authorMeta: authorMeta,
       avatarEvidence: avatarEvidence || null,
       teacherReviewRequested: Boolean(teacherReviewRequested),
       protectedAccount: protectedAccount,
+      threadAuthorReply: Boolean(threadAuthorReply),
       analysis: analysis,
       aiCandidateScore: Number(aiCandidateScore || 0),
-      threadUrl: location.href,
-      threadStatusId: extractStatusId(location.pathname) || extractStatusId(location.href),
+      threadUrl: contextThreadUrl || location.href,
+      threadStatusId: contextThreadStatusId || extractStatusId(contextThreadUrl) || extractStatusId(location.pathname) || extractStatusId(location.href),
       queuedAt: Date.now()
     };
 
@@ -6027,6 +6307,14 @@
 
     removeAllAdHiding();
 
+    if (isNotificationsPage()) {
+      resetRevealedTrayEntries();
+      scanSidebarModules();
+      queueSidebarStabilizationScans([120, 420, 1200]);
+      scanNotificationReplyAiCandidates();
+      return;
+    }
+
     if (!isDetailPage()) {
       root.dataset.web25Stage = "scan:inactive";
       resetRevealedTrayEntries();
@@ -6121,6 +6409,8 @@
       root.dataset.web25Replies = String(replies.length);
       root.dataset.web25Stage = "scan:replies-ready";
       const mainText = getTweetText(mainArticle);
+      const mainAuthorMeta = getReplyAuthorMeta(mainArticle);
+      root.dataset.web25ThreadAuthor = normalizeHandleForCompare(mainAuthorMeta.handle || "");
       let hiddenCount = 0;
       let autoHiddenCount = 0;
       let aiHiddenCount = 0;
@@ -6140,7 +6430,10 @@
           ? window.Web25Rules.analyzeReplyText(replyText)
           : null;
         const authorMeta = getReplyAuthorMeta(replyArticle);
-        const protectedAccount = isProtectedAccount(replyArticle, authorMeta);
+        const baseProtectedAccount = isProtectedAccount(replyArticle, authorMeta);
+        const threadAuthorReply = isReplyFromThreadAuthor(authorMeta, mainAuthorMeta);
+        const threadAuthorAutoProtected = shouldProtectThreadAuthorReply(authorMeta, mainAuthorMeta, replyText, analysis);
+        const protectedAccount = baseProtectedAccount || threadAuthorAutoProtected;
         const avatarEvidence = buildReplyAvatarEvidence(replyArticle, authorMeta, replyText, mainText, analysis, protectedAccount);
         const storedManualKeys = getStoredManualKeys(manualKeys, protectedAccount, replyText);
         const templateRuleMatched = hasTemplateRuleMatch(state.globalTemplateRules, manualKeys);
@@ -6151,9 +6444,8 @@
         const aiCacheKey = buildReplyAiCacheKey(manualKeys, authorMeta, replyText);
         const aiCandidate = buildReplyAiModerationCandidate(replyText, authorMeta, analysis, protectedAccount, mainText);
         const cachedAiEntry = aiCacheKey ? state.replyAiDecisionCache.get(aiCacheKey) : null;
-        const cachedAiDecision = cachedAiEntry && cachedAiEntry.decision && cachedAiEntry.decision.isFinal
-          ? cachedAiEntry.decision
-          : null;
+        const cachedAiPayload = cachedAiEntry && cachedAiEntry.decision ? cachedAiEntry.decision : null;
+        const cachedAiDecision = cachedAiPayload && cachedAiPayload.isFinal ? cachedAiPayload : null;
         const failedAiDecision = cachedAiDecision && cachedAiDecision.status === "failed"
           ? cachedAiDecision
           : null;
@@ -6162,9 +6454,13 @@
           && cachedAiEntry
           && (Date.now() - Number(cachedAiEntry.updatedAt || 0) >= REPLY_AI_FAILURE_RETRY_DELAY_MS)
         );
-        const readyAiDecision = cachedAiDecision && cachedAiDecision.status === "ready"
+        const pendingAiRetryDue = isReplyAiPendingRetryDue(cachedAiEntry);
+        const rawReadyAiDecision = cachedAiDecision && cachedAiDecision.status === "ready"
           ? cachedAiDecision
           : null;
+        const readyAiDecision = rawReadyAiDecision && rawReadyAiDecision.shouldHide === true && threadAuthorAutoProtected
+          ? null
+          : rawReadyAiDecision;
         const hasFreshNonReadyAiFinal = Boolean(cachedAiDecision && cachedAiDecision.status !== "ready" && !failedAiRetryDue);
         const aiCandidateScore = Number(aiCandidate && aiCandidate.score ? aiCandidate.score : 0);
         let decision;
@@ -6173,7 +6469,7 @@
         const hasPinnedHide = replyCell.getAttribute("data-web25-manual-pinned") === "1";
         const hasHistoryHide = hasDecisionKey(state.manualHideTexts, storedManualKeys);
         const isManuallyHidden = !isAllowed && (hasPinnedHide || hasHistoryHide);
-        const isGloballyBlocked = isReplyHandleGloballyBlocked(authorMeta);
+        const isGloballyBlocked = !threadAuthorAutoProtected && isReplyHandleGloballyBlocked(authorMeta);
         const shouldQueueAi = !isAllowed
           && !hasPinnedHide
           && !hasHistoryHide
@@ -6181,7 +6477,7 @@
           && Boolean(state.replyAiEnabled && state.backendBaseUrl && state.syncKey && state.deviceId)
           && Boolean(aiCacheKey)
           && Boolean(aiCandidate && aiCandidate.shouldQueue)
-          && (!cachedAiDecision || failedAiRetryDue);
+          && (!cachedAiPayload || failedAiRetryDue || pendingAiRetryDue);
         const awaitingAiDecision = !isAllowed
           && !hasPinnedHide
           && !hasHistoryHide
@@ -6278,6 +6574,7 @@
           avatarEvidence: avatarEvidence,
           analysis: analysis,
           protectedAccount: protectedAccount,
+          threadAuthorReply: threadAuthorReply,
           isAllowed: isAllowed,
           decision: decision,
           hiddenSource: hiddenSource,
@@ -6390,7 +6687,8 @@
             entry.protectedAccount,
             entry.analysis,
             entry.aiCandidateScore,
-            entry.teacherReviewRequested
+            entry.teacherReviewRequested,
+            entry.threadAuthorReply
           );
         });
       root.dataset.web25Stage = "scan:actions-ready";

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync, spawnSync } from "node:child_process";
+import { requestDeveloperJson } from "./lib/developer-session.mjs";
 
 const DEFAULT_BASE_URL = "https://colorful-toilet.colorful-toilet.workers.dev";
 const DEFAULT_DEVELOPER_EMAIL = "2715000591@qq.com";
@@ -141,39 +142,13 @@ async function main() {
   const baseUrl = readArg("base", process.env.WEB25_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/g, "");
   const email = readArg("email", process.env.WEB25_DEVELOPER_EMAIL || DEFAULT_DEVELOPER_EMAIL);
   const providedCode = readArg("code", process.env.WEB25_LOGIN_CODE || "");
-  let cookieJar = new Map();
-
-  let code = providedCode;
-  if (!code) {
-    const codeResult = await requestJson(baseUrl, "/api/auth/request-code", {
-      method: "POST",
-      body: JSON.stringify({ email })
-    }, cookieJar);
-    cookieJar = codeResult.cookieJar;
-    if (!codeResult.ok || !codeResult.data || !codeResult.data.ok) {
-      throw new Error(`request-code failed: ${codeResult.status} ${JSON.stringify(codeResult.data)}`);
-    }
-    code = String(codeResult.data.debugCode || "").trim();
-    if (!code) {
-      throw new Error("No debugCode returned. Set WEB25_LOGIN_CODE or pass --code after receiving the email code.");
-    }
-  }
-
-  const verifyResult = await requestJson(baseUrl, "/api/auth/verify-code", {
-    method: "POST",
-    body: JSON.stringify({ email, code })
-  }, cookieJar);
-  cookieJar = verifyResult.cookieJar;
-  if (!verifyResult.ok || !verifyResult.data || !verifyResult.data.ok) {
-    throw new Error(`verify-code failed: ${verifyResult.status} ${JSON.stringify(verifyResult.data)}`);
-  }
-  if (!verifyResult.data.viewer || !verifyResult.data.viewer.isDeveloper) {
-    throw new Error("Logged in user is not a developer; audit endpoint requires developer access.");
-  }
-
-  const auditResult = await requestJson(baseUrl, "/api/developer/data-layer-audit", {
+  const auditResult = await requestDeveloperJson(baseUrl, "/api/developer/data-layer-audit", {
     method: "GET"
-  }, cookieJar);
+  }, {
+    email,
+    providedCode,
+    description: "audit endpoint"
+  });
   if (!auditResult.ok || !auditResult.data || !auditResult.data.ok) {
     throw new Error(`audit failed: ${auditResult.status} ${JSON.stringify(auditResult.data)}`);
   }

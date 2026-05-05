@@ -1,3 +1,5 @@
+import { REPLY_AI_PROMPT_PACK } from "./reply-ai-prompt-pack.generated.js";
+
 const SESSION_COOKIE = "web25_session";
 const DEVELOPER_PENDING_PAGE_SIZE = 8;
 const DEVELOPER_RULE_PAGE_SIZE = 8;
@@ -66,7 +68,10 @@ const REPLY_AI_STRIKE_WINDOW_DAYS = 7;
 const REPLY_AI_GLOBAL_BLOCK_THRESHOLD = 2;
 const REPLY_AI_FAILURE_RETRY_DELAY_MS = 45000;
 const REPLY_AI_BATCH_MAX_ITEMS = 4;
-const REPLY_AI_PENDING_RESCUE_DELAY_MS = 12000;
+const REPLY_AI_PENDING_RESCUE_DELAY_MS = 9500;
+const REPLY_AI_PROVIDER_REALTIME_TIMEOUT_MS = 8500;
+const REPLY_AI_PROVIDER_BACKGROUND_TIMEOUT_MS = 16000;
+const AI_PROVIDER_DEFAULT_TIMEOUT_MS = 22000;
 const REPLY_AI_TEACHER_REVIEW_MAX_ITEMS = 8;
 const REPLY_AI_BATCH_HISTORY_LIMIT = 12;
 const REPLY_AI_ALLOW_REUSE_WINDOW_HOURS = 12;
@@ -351,6 +356,8 @@ const DISPLAY_NAME_LURE_PATTERNS = [
   /(dd|滴滴|哥哥|弟弟|姐姐|妹妹).{0,4}(附近|同城|线下)/i,
   /(线下|同城).{0,3}(约|泡|搭|找|见|聊|日|上门|到家)/,
   /(线下|同城|附近).{0,6}(直接)?(对接|牵线|安排|资源|接待|社区)/,
+  /(全国|同城|附近|线下|真实|真人).{0,6}(牵线|资源).{0,10}(自取|点我主页|点主页|看主页|看我主页|看简介|简介)/,
+  /(?:1[-~－—]?5线|一至五线).{0,10}(资源|自取|点我主页|点主页|看主页|看我主页|看简介|简介)/,
   /(真实|真人|唯一).{0,4}(社区|资源|对接|牵线|约见)/,
   /(社区|资源).{0,4}(线下|对接|安排|约见|牵线)/,
   /(上门|到家).{0,3}(约|泡|搭|找|见|聊|日)/,
@@ -495,7 +502,8 @@ const GEO_RELATIONSHIP_BAIT_PATTERNS = [
   /^(?:找|求|蹲).{0,4}(同城|附近|线下).{0,5}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
   /^(?:同城|附近|线下).{0,5}(找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大)$/,
   /^(?:找|求|蹲).{0,4}(哥哥|姐姐|弟弟|妹妹|搭子|主人|单男|男大|女大).{0,5}(同城|附近|线下)$/,
-  /^(?:有(?:没)?有|有).{0,3}(单身|温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)[a-z]{0,3}\d{0,3}$/,
+  /^(?:有(?:没)?有|有).{0,3}(单身|温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)[a-z0-9]{0,5}$/i,
+  /^(?:有(?:没)?有|有).{0,3}(哥哥|姐姐|弟弟|妹妹)(?:想|想要|要)?(认识|聊聊|聊天|交友).{0,2}(?:吗|嘛|么|呢)?[a-z0-9]{0,5}$/i,
   /^(?:找|求|蹲)(?:个|一个)?.{0,2}(温柔|固定|长期|月固定|帅|乖|可爱|宠人|有钱).{0,2}(哥哥|姐姐|弟弟|妹妹)\d{0,3}$/,
   /^(?:想|找|求|蹲).{0,4}(dd|滴滴).{0,6}(哥哥|弟弟|姐姐|妹妹|疼人)$/,
   /^(?:想|找|求|蹲).{0,4}(会)?疼人.{0,4}(哥哥|弟弟|姐姐|妹妹)$/
@@ -849,26 +857,29 @@ async function handleRequestCode(request, env) {
     return json({ ok: false, error: "missing-email" }, 400, request, true);
   }
   const developerEmail = isDeveloperEmail(env, email);
+  const bypassResendLimit = developerEmail && isDeveloperLoginEnabled(env);
 
   const resendSeconds = Math.max(30, Number(env.OTP_RESEND_SECONDS || 60) || 60);
   const now = new Date();
   const nowIso = now.toISOString();
   await deleteExpiredAuthCodesForEmail(env, email, nowIso);
-  const recent = await env.DB.prepare(
-    "SELECT created_at FROM auth_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1"
-  ).bind(email).first();
+  if (!bypassResendLimit) {
+    const recent = await env.DB.prepare(
+      "SELECT created_at FROM auth_codes WHERE email = ? ORDER BY created_at DESC LIMIT 1"
+    ).bind(email).first();
 
-  if (recent && Date.now() - new Date(recent.created_at).getTime() < resendSeconds * 1000) {
-    return json(
-      {
-        ok: false,
-        error: "otp-rate-limited",
-        retryAfterSeconds: resendSeconds
-      },
-      429,
-      request,
-      true
-    );
+    if (recent && Date.now() - new Date(recent.created_at).getTime() < resendSeconds * 1000) {
+      return json(
+        {
+          ok: false,
+          error: "otp-rate-limited",
+          retryAfterSeconds: resendSeconds
+        },
+        429,
+        request,
+        true
+      );
+    }
   }
 
   const code = generateOtp();
@@ -1193,7 +1204,7 @@ function buildAiProviderTestItem(sample) {
     replyDisplayName: normalizeAiProviderTestText(source.replyDisplayName, "同城免费约", 120),
     replyText: normalizeAiProviderTestText(source.replyText, "主页置顶看id", 1200),
     mainPostText: normalizeAiProviderTestText(source.mainPostText, "这是一条 AI 接入连通性测试样本，不会写入数据库。", 1800),
-    accountProtected: source.accountProtected === true,
+    accountProtected: source.accountProtected === true || source.replyAuthorIsThreadAuthor === true || Number(source.replyAuthorIsThreadAuthor || 0) === 1,
     avatarImageUrl: normalizeReplyAiAvatarImageUrl(source.avatarImageUrl || ""),
     avatarAltText: normalizeAiProviderTestText(source.avatarAltText, "", 160),
     avatarEvidenceTags: normalizeReplyAiStringList(
@@ -1226,6 +1237,9 @@ function normalizeAiProviderTestError(error) {
   }
   if (/ai-provider-empty-output/i.test(message)) {
     return "ai-provider-empty-output";
+  }
+  if (isAiProviderTimeoutErrorMessage(message)) {
+    return "ai-provider-timeout";
   }
   if (/ai-provider-adapter-not-implemented/i.test(message)) {
     return "ai-provider-adapter-not-implemented";
@@ -1405,6 +1419,7 @@ async function handlePostAiReplyPost(request, env, ctx) {
     return json({ ok: false, error: "missing-reply-identity" }, 400, request, false);
   }
 
+  scheduleReplyAiStaleSyncKeyRescue(ctx, env, payload.syncKey);
   const saved = await upsertReplyAiItem(env, payload);
   const existingDecision = saved.itemId
     ? await getReplyAiResultByItemId(env, saved.itemId)
@@ -1451,6 +1466,7 @@ async function handlePostAiReplyBatch(request, env, ctx) {
     return json({ ok: false, error: "missing-batch-items" }, 400, request, false);
   }
 
+  scheduleReplyAiStaleSyncKeyRescue(ctx, env, payload.syncKey);
   const pendingEntries = [];
   const responseItems = [];
 
@@ -2919,7 +2935,7 @@ async function buildReplyAiRoutingProbe(env, viewer, payload) {
   const ruleProbe = staticDecision || memoryProbe.decision
     ? { accountProtected: Boolean(itemRow.accountProtected), manualAllow: false, entries: [], matches: [], decision: null }
     : await inspectModerationRuleCandidateDecision(env, itemRow);
-  const globalBlockDecision = !staticDecision && !memoryProbe.decision && !ruleProbe.decision && riskRow && Number(riskRow.active_global_block || 0) === 1
+  const globalBlockDecision = !staticDecision && !itemRow.accountProtected && !memoryProbe.decision && !ruleProbe.decision && riskRow && Number(riskRow.active_global_block || 0) === 1
     ? buildReplyAiBlockedDecision()
     : null;
   const reusableDecision = !staticDecision && !memoryProbe.decision && !ruleProbe.decision && !globalBlockDecision
@@ -4030,6 +4046,52 @@ function buildAiModerationTask(input) {
     userPayloadText: String(source.userPayloadText || "").trim(),
     metadata: source.metadata && typeof source.metadata === "object" ? source.metadata : {}
   };
+}
+
+function normalizeAiProviderRequestTimeoutMs(value, fallback) {
+  const raw = Number(value || 0);
+  const normalizedFallback = Math.max(1000, Number(fallback || AI_PROVIDER_DEFAULT_TIMEOUT_MS) || AI_PROVIDER_DEFAULT_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return normalizedFallback;
+  }
+  return Math.max(1000, Math.min(45000, Math.round(raw)));
+}
+
+function getAiModerationTaskTimeoutMs(task) {
+  const metadata = task && task.metadata && typeof task.metadata === "object" ? task.metadata : {};
+  return normalizeAiProviderRequestTimeoutMs(metadata.providerTimeoutMs, AI_PROVIDER_DEFAULT_TIMEOUT_MS);
+}
+
+function isAiProviderTimeoutErrorMessage(message) {
+  return /ai-provider-timeout|aborterror|the operation was aborted/i.test(String(message || ""));
+}
+
+async function fetchAiProviderWithTimeout(endpoint, init, timeoutMs) {
+  const requestTimeoutMs = normalizeAiProviderRequestTimeoutMs(timeoutMs, AI_PROVIDER_DEFAULT_TIMEOUT_MS);
+  const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let timedOut = false;
+  const timeoutId = controller
+    ? setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, requestTimeoutMs)
+    : null;
+
+  try {
+    return await fetch(endpoint, Object.assign({}, init || {}, {
+      signal: controller ? controller.signal : (init && init.signal ? init.signal : undefined)
+    }));
+  } catch (error) {
+    const message = error && error.message ? String(error.message) : String(error || "");
+    if (timedOut || isAiProviderTimeoutErrorMessage(message) || (error && error.name === "AbortError")) {
+      throw new Error("ai-provider-timeout");
+    }
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 function normalizeAiModerationPrompt(value) {
@@ -6820,14 +6882,14 @@ async function requestOpenAiCompatibleViaChatCompletions(moderationTask, reasoni
     };
   }
 
-  const response = await fetch(buildChatCompletionsApiEndpoint(providerConfig.providerBaseUrl), {
+  const response = await fetchAiProviderWithTimeout(buildChatCompletionsApiEndpoint(providerConfig.providerBaseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${providerConfig.apiKey}`
     },
     body: JSON.stringify(requestBody)
-  });
+  }, getAiModerationTaskTimeoutMs(moderationTask));
 
   let responseJson = {};
   try {
@@ -6874,7 +6936,7 @@ async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffo
   const imageUrls = providerSupportsImageInputs(providerConfig)
     ? getAiModerationTaskImageUrls(moderationTask)
     : [];
-  const response = await fetch(buildResponsesApiEndpoint(providerConfig.providerBaseUrl), {
+  const response = await fetchAiProviderWithTimeout(buildResponsesApiEndpoint(providerConfig.providerBaseUrl), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -6910,7 +6972,7 @@ async function requestOpenAiCompatibleViaResponses(moderationTask, reasoningEffo
         }
       }
     })
-  });
+  }, getAiModerationTaskTimeoutMs(moderationTask));
 
   let responseJson = {};
   try {
@@ -7267,7 +7329,7 @@ async function reclassifyRecentTimelinePostsForUser(env, userId) {
   }
 }
 
-async function reclassifyRecentReplyAiItemsForSyncKey(env, syncKey) {
+async function reclassifyRecentReplyAiItemsForSyncKey(env, syncKey, options) {
   await ensureAiFeedSchema(env);
   const normalizedSyncKey = String(syncKey || "").trim();
   if (!normalizedSyncKey) {
@@ -7290,12 +7352,12 @@ async function reclassifyRecentReplyAiItemsForSyncKey(env, syncKey) {
   for (const row of results) {
     const itemId = Number(row && row.id ? row.id : 0);
     if (itemId) {
-      await classifyReplyAiItem(env, itemId);
+      await classifyReplyAiItem(env, itemId, options);
     }
   }
 }
 
-async function reclassifyRecentReplyAiItemsForUser(env, userId) {
+async function reclassifyRecentReplyAiItemsForUser(env, userId, options) {
   await ensureAiFeedSchema(env);
   const normalizedUserId = String(userId || "").trim();
   if (!normalizedUserId) {
@@ -7318,7 +7380,7 @@ async function reclassifyRecentReplyAiItemsForUser(env, userId) {
   for (const row of results) {
     const itemId = Number(row && row.id ? row.id : 0);
     if (itemId) {
-      await classifyReplyAiItem(env, itemId);
+      await classifyReplyAiItem(env, itemId, options);
     }
   }
 }
@@ -7449,6 +7511,7 @@ function normalizeReplyAiPayload(payload) {
   const source = payload || {};
   const replyHandle = normalizeAiHandle(source.replyHandle);
   const replyDisplayName = normalizeAiFeedText(source.replyDisplayName, 200);
+  const replyAuthorIsThreadAuthor = Number(source.replyAuthorIsThreadAuthor || 0) === 1 || source.replyAuthorIsThreadAuthor === true;
   return {
     syncKey: String(source.syncKey || "").trim(),
     deviceId: String(source.deviceId || "").trim(),
@@ -7459,7 +7522,7 @@ function normalizeReplyAiPayload(payload) {
     replyDisplayName,
     replyText: normalizeStoredReplyText(source.replyText, replyDisplayName, replyHandle),
     mainPostText: normalizeAiFeedText(source.mainPostText, 1200),
-    accountProtected: Number(source.accountProtected || 0) === 1,
+    accountProtected: Number(source.accountProtected || 0) === 1 || replyAuthorIsThreadAuthor,
     avatarImageUrl: normalizeReplyAiAvatarImageUrl(source.avatarImageUrl),
     avatarAltText: normalizeAiFeedText(source.avatarAltText, 160),
     avatarEvidenceTags: normalizeReplyAiStringList(source.avatarEvidenceTags, REPLY_AI_AVATAR_EVIDENCE_TAGS, REPLY_AI_AVATAR_EVIDENCE_TAG_LIMIT),
@@ -7559,13 +7622,13 @@ function isFinalReplyAiDecisionStatus(status) {
   return normalized === "ready" || normalized === "failed" || normalized === "skipped";
 }
 
-function buildReplyAiPendingDecision() {
-  return buildDefaultReplyAiDecision({
+function buildReplyAiPendingDecision(overrides) {
+  return buildDefaultReplyAiDecision(Object.assign({
     decisionLayer: "pending",
     reasonShort: "等待后台判断",
     status: "pending",
     model: ""
-  });
+  }, overrides || {}));
 }
 
 function shouldRetryReplyAiDecision(decision) {
@@ -7615,7 +7678,10 @@ async function rescuePendingReplyAiEntries(env, entries) {
     }
   }
   if (retryEntries.length) {
-    await classifyReplyAiItemEntries(env, retryEntries, { deferTeacherReview: false });
+    await classifyReplyAiItemEntries(env, retryEntries, {
+      deferTeacherReview: false,
+      providerTimeoutMs: REPLY_AI_PROVIDER_BACKGROUND_TIMEOUT_MS
+    });
   }
 }
 
@@ -7624,6 +7690,20 @@ function scheduleReplyAiPendingRescue(ctx, env, entries) {
     return;
   }
   ctx.waitUntil(rescuePendingReplyAiEntries(env, entries).catch(() => null));
+}
+
+function scheduleReplyAiStaleSyncKeyRescue(ctx, env, syncKey) {
+  const normalizedSyncKey = String(syncKey || "").trim();
+  if (!ctx || typeof ctx.waitUntil !== "function" || !normalizedSyncKey) {
+    return;
+  }
+
+  ctx.waitUntil((async () => {
+    await waitForReplyAiPendingRescue(REPLY_AI_PENDING_RESCUE_DELAY_MS);
+    await reclassifyRecentReplyAiItemsForSyncKey(env, normalizedSyncKey, {
+      providerTimeoutMs: REPLY_AI_PROVIDER_BACKGROUND_TIMEOUT_MS
+    });
+  })().catch(() => null));
 }
 
 function buildReplyAiDecisionPayload(itemId, decision) {
@@ -9045,6 +9125,38 @@ function buildReplyAiBatchDecisionSchema() {
   };
 }
 
+function buildReplyAiPromptPackSampleLine(sample) {
+  const labels = Array.isArray(sample && sample.expectedLabels) && sample.expectedLabels.length
+    ? sample.expectedLabels.join(",")
+    : "none";
+  return [
+    `id=${sample && sample.id ? sample.id : "sample"}`,
+    `expected=${sample && sample.expectedAction ? sample.expectedAction : "allow"}`,
+    `labels=${labels}`,
+    sample && sample.replyText ? `reply=${sample.replyText}` : "",
+    sample && sample.mainPostText ? `mainPost=${sample.mainPostText}` : "",
+    sample && sample.authorDisplayName ? `displayName=${sample.authorDisplayName}` : "",
+    sample && sample.authorHandle ? `handle=${sample.authorHandle}` : "",
+    sample && sample.profileBioText ? `profileBio=${sample.profileBioText}` : "",
+    sample && sample.notes ? `notes=${sample.notes}` : ""
+  ].filter(Boolean).join("; ");
+}
+
+function buildReplyAiPromptPackGuidance() {
+  const samples = REPLY_AI_PROMPT_PACK && Array.isArray(REPLY_AI_PROMPT_PACK.samples)
+    ? REPLY_AI_PROMPT_PACK.samples
+    : [];
+  const sampleText = samples.map(buildReplyAiPromptPackSampleLine).filter(Boolean).join("\n");
+  return [
+    `Prompt pack ${REPLY_AI_PROMPT_PACK.id} (${REPLY_AI_PROMPT_PACK.sourceDir}, updated ${REPLY_AI_PROMPT_PACK.updatedAt}) is mandatory teacher material for this task.`,
+    "Follow this prompt pack as the source of truth when judging adult lead-generation versus normal adult expression:",
+    REPLY_AI_PROMPT_PACK.prompt,
+    sampleText
+      ? `Reference examples from the prompt pack:\n${sampleText}`
+      : ""
+  ].filter(Boolean).join("\n\n");
+}
+
 function buildReplyAiProviderPrompt(settings, options) {
   const isBatch = Boolean(options && options.isBatch);
   return [
@@ -9065,6 +9177,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "The user payload is an evidence card for each reply. Treat reply text, display name, @handle, avatar evidence, profile bio, profile links, profile signal tags, and batch context as separate evidence fields.",
     "Always compare mainPostText with replyText. A short decorative, slogan-like, or emoji-heavy reply that has no useful relation to the original post is stronger spam evidence when the account handle, avatar, profile, or batch pattern is also suspicious; do not hide substantive replies that are clearly relevant to the thread.",
     "For Chinese X spam, treat lure phrases in replyDisplayName as important evidence even when replyText is only digits or emoji. Examples include 每晚准时大秀, 今晚准时涩播/色播, 找固定泡友/炮友, 寻男大固泡, 蹲一个弟弟/哥哥, 免费破处, 无偿线下, 看我主页, 附近真实约见, 来个真人认识一下, and 附近的DD.",
+    "Treat short decorative Chinese names with repeated flower/flirt emoji, disposable-looking handles, and replies such as 有没有单身哥哥 plus random letters/numbers or 有弟弟想认识吗 plus random letters/numbers as adult/meetup lead-generation, especially when detached from the main post.",
     "Also treat batches of poetic or generic short low-substance Chinese slogan replies from disposable-looking handles as spam when they repeat themes like 浅交不如深知己, 高质量交友贵在合拍, 品行相近方同行, 拒绝无效的寒暄, 烟火暖了相逢, 人海有幸擦肩, 缘分引线人海逢, 有缘自会相识, 遇见温柔满人间, 怡好刚好温良友, 旧城偶遇故人, 晚风撞我相逢, 一念恰好相逢, 独具魅力, or 克服睡眼 with emoji/symbol decoration and no thread relevance.",
     "Also treat a repeated English label wrapping a short Chinese low-substance slogan, followed by emoji decoration, as the same batch-visibility bait when the handle looks disposable and the reply has no useful relation to the thread.",
     "For these generic short slogan cases, hide with confidence high when the account handle looks random/disposable and the reply is detached; use allow only for common greetings/congratulations/thanks, relevant jokes, or substantive comments. A rough but substantive comment such as 你这问题有意思。男的就是会这样犯贱啊 should be allowed.",
@@ -9077,6 +9190,7 @@ function buildReplyAiProviderPrompt(settings, options) {
     "Protected accounts (followed or verified) should be treated more leniently and only hidden when the evidence is very strong.",
     "When the evidence is ambiguous between normal adult speech and adult lead-generation spam, return action allow.",
     "If confidence is not high, return action allow.",
+    buildReplyAiPromptPackGuidance(),
     "Use matchedLabels only from the provided enum.",
     "Use matchedProfileSignals only from the provided enum.",
     "When action is hide, matchedLabels must contain at least one provided safety label that explains the hide decision.",
@@ -9133,7 +9247,8 @@ function buildReplyAiImageEvidenceUrls(itemRow) {
   return avatarImageUrl ? [avatarImageUrl] : [];
 }
 
-async function requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow) {
+async function requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow, options) {
+  const requestOptions = options && typeof options === "object" ? options : {};
   const imageEvidenceUrls = buildReplyAiImageEvidenceUrls(itemRow);
   const response = await requestAiModerationTaskFromProvider(buildAiModerationTask({
     taskType: AI_MODERATION_TASK_TYPES.REPLY_REALTIME_MODERATION,
@@ -9144,14 +9259,19 @@ async function requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRo
     userPayloadText: JSON.stringify(buildReplyAiProviderInputItem("single-item", itemRow, riskRow)),
     metadata: {
       reasoningEffort: "low",
-      imageEvidenceUrls
+      imageEvidenceUrls,
+      providerTimeoutMs: normalizeAiProviderRequestTimeoutMs(
+        requestOptions.providerTimeoutMs,
+        REPLY_AI_PROVIDER_REALTIME_TIMEOUT_MS
+      )
     }
   }));
 
   return normalizeReplyAiDecision(response.parsed, response.model, response.responseMeta);
 }
 
-async function requestReplyAiBatchDecisionsFromProvider(env, settings, batchEntries) {
+async function requestReplyAiBatchDecisionsFromProvider(env, settings, batchEntries, options) {
+  const requestOptions = options && typeof options === "object" ? options : {};
   const expectedClientIds = new Set();
   const items = batchEntries.map((entry) => {
     const clientItemId = normalizeReplyAiClientItemId(
@@ -9170,7 +9290,11 @@ async function requestReplyAiBatchDecisionsFromProvider(env, settings, batchEntr
     userPayloadText: JSON.stringify({ items }),
     metadata: {
       reasoningEffort: "low",
-      imageEvidenceUrls: []
+      imageEvidenceUrls: [],
+      providerTimeoutMs: normalizeAiProviderRequestTimeoutMs(
+        requestOptions.providerTimeoutMs,
+        REPLY_AI_PROVIDER_REALTIME_TIMEOUT_MS
+      )
     }
   }));
   const decisionRows = response && response.parsed && Array.isArray(response.parsed.decisions)
@@ -9470,7 +9594,8 @@ function shouldRequestReplyAiTeacherReview(itemRow, settings) {
   );
 }
 
-async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow) {
+async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow, options) {
+  const requestOptions = options && typeof options === "object" ? options : {};
   if (!shouldRequestReplyAiTeacherReview(itemRow, settings)) {
     return null;
   }
@@ -9482,7 +9607,12 @@ async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskR
   }
 
   try {
-    const decision = await requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow || null);
+    const decision = await requestReplyAiDecisionFromProvider(env, settings, itemRow, riskRow || null, {
+      providerTimeoutMs: normalizeAiProviderRequestTimeoutMs(
+        requestOptions.providerTimeoutMs,
+        REPLY_AI_PROVIDER_REALTIME_TIMEOUT_MS
+      )
+    });
     await clearAiProviderCooldown(env, scopeKey, itemRow, settings);
     if (decision && decision.status === "ready" && decision.decisionLayer === "ai") {
       try {
@@ -9510,13 +9640,13 @@ async function requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskR
   }
 }
 
-function scheduleReplyAiTeacherReview(ctx, env, settings, itemRow, riskRow) {
+function scheduleReplyAiTeacherReview(ctx, env, settings, itemRow, riskRow, options) {
   if (!ctx || typeof ctx.waitUntil !== "function" || !shouldRequestReplyAiTeacherReview(itemRow, settings)) {
     return false;
   }
 
   ctx.waitUntil((async () => {
-    const decision = await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
+    const decision = await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null, options);
     if (decision && !(await hasManualAllowForReplyAiItem(env, itemRow))) {
       await finalizeReplyAiDecision(env, itemRow, decision);
     }
@@ -9528,6 +9658,10 @@ async function classifyReplyAiItemEntries(env, entries, options) {
   await ensureAiFeedSchema(env);
   const classifyOptions = options && typeof options === "object" ? options : {};
   const deferTeacherReview = Boolean(classifyOptions.deferTeacherReview && classifyOptions.ctx && typeof classifyOptions.ctx.waitUntil === "function");
+  const providerTimeoutMs = normalizeAiProviderRequestTimeoutMs(
+    classifyOptions.providerTimeoutMs,
+    REPLY_AI_PROVIDER_REALTIME_TIMEOUT_MS
+  );
   const normalizedEntries = Array.isArray(entries)
     ? entries.map((entry, index) => ({
       clientItemId: normalizeReplyAiClientItemId(entry && entry.clientItemId, `reply-ai-entry-${index + 1}`),
@@ -9544,10 +9678,12 @@ async function classifyReplyAiItemEntries(env, entries, options) {
       return null;
     }
     teacherReviewBudget -= 1;
-    if (deferTeacherReview && scheduleReplyAiTeacherReview(classifyOptions.ctx, env, settings, itemRow, riskRow || null)) {
+    if (deferTeacherReview && scheduleReplyAiTeacherReview(classifyOptions.ctx, env, settings, itemRow, riskRow || null, {
+      providerTimeoutMs: REPLY_AI_PROVIDER_BACKGROUND_TIMEOUT_MS
+    })) {
       return null;
     }
-    return await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null);
+    return await requestReplyAiTeacherReviewDecision(env, settings, itemRow, riskRow || null, { providerTimeoutMs });
   };
 
   for (const entry of normalizedEntries) {
@@ -9600,7 +9736,7 @@ async function classifyReplyAiItemEntries(env, entries, options) {
       continue;
     }
 
-    if (await isReplyHandleGloballyBlocked(env, itemRow.replyHandle)) {
+    if (!itemRow.accountProtected && await isReplyHandleGloballyBlocked(env, itemRow.replyHandle)) {
       const teacherDecision = await maybeRequestTeacherDecision(settings, itemRow, riskRow || null);
       if (teacherDecision) {
         results.set(entry.clientItemId, await finalizeReplyAiDecision(env, itemRow, teacherDecision));
@@ -9669,7 +9805,7 @@ async function classifyReplyAiItemEntries(env, entries, options) {
       for (const entry of visualEntries) {
         decisionMap.set(
           entry.clientItemId,
-          await requestReplyAiDecisionFromProvider(env, group.settings, entry.itemRow, entry.riskRow)
+          await requestReplyAiDecisionFromProvider(env, group.settings, entry.itemRow, entry.riskRow, { providerTimeoutMs })
         );
       }
 
@@ -9677,10 +9813,10 @@ async function classifyReplyAiItemEntries(env, entries, options) {
         const entry = textOnlyEntries[0];
         decisionMap.set(
           entry.clientItemId,
-          await requestReplyAiDecisionFromProvider(env, group.settings, entry.itemRow, entry.riskRow)
+          await requestReplyAiDecisionFromProvider(env, group.settings, entry.itemRow, entry.riskRow, { providerTimeoutMs })
         );
       } else if (textOnlyEntries.length > 1) {
-        const textDecisionMap = await requestReplyAiBatchDecisionsFromProvider(env, group.settings, textOnlyEntries);
+        const textDecisionMap = await requestReplyAiBatchDecisionsFromProvider(env, group.settings, textOnlyEntries, { providerTimeoutMs });
         textDecisionMap.forEach((decision, clientItemId) => {
           decisionMap.set(clientItemId, decision);
         });
@@ -9692,10 +9828,8 @@ async function classifyReplyAiItemEntries(env, entries, options) {
         const providerDecision = decisionMap.get(entry.clientItemId);
         const nextDecision = providerDecision
           ? providerDecision
-          : buildDefaultReplyAiDecision({
-            decisionLayer: "failed",
-            reasonShort: "AI 批量结果不完整",
-            status: "failed",
+          : buildReplyAiPendingDecision({
+            reasonShort: "后台结果不完整，已转入补判",
             model: group.settings.model
           });
         const finalized = await finalizeReplyAiDecision(env, entry.itemRow, nextDecision);
@@ -9703,6 +9837,7 @@ async function classifyReplyAiItemEntries(env, entries, options) {
       }
     } catch (error) {
       const errorMessage = error && error.message ? String(error.message) : String(error);
+      const providerTimedOut = isAiProviderTimeoutErrorMessage(errorMessage);
       const retryableProviderFailure = /ai-provider-status-(429|500|502|503|504|529)/i.test(errorMessage);
       const cooldownState = retryableProviderFailure
         ? await recordAiProviderFailure(
@@ -9720,7 +9855,18 @@ async function classifyReplyAiItemEntries(env, entries, options) {
         const failedDecision = await finalizeReplyAiDecision(
           env,
           entry.itemRow,
-          retryableProviderFailure
+          providerTimedOut
+            ? buildReplyAiPendingDecision({
+              reasonShort: providerTimeoutMs >= REPLY_AI_PROVIDER_BACKGROUND_TIMEOUT_MS
+                ? "后台判断超时，稍后继续补判"
+                : "后台判断未及时返回，已转入补判",
+              model: group.settings.model,
+              rawResponseJson: {
+                error: "ai-provider-timeout",
+                timeoutMs: providerTimeoutMs
+              }
+            })
+            : retryableProviderFailure
             ? buildReplyAiCooldownFailedDecision(group.settings, cooldownState, "后台暂时繁忙，稍后自动重试")
             : buildDefaultReplyAiDecision({
               decisionLayer: "failed",

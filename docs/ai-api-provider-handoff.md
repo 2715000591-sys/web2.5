@@ -14,8 +14,8 @@ AI 已经接入，不要让用户重复购买或重复提供 Key。
 - 接口地址：`https://api.deepseek.com`
 - 模型：`deepseek-v4-flash`
 - API Key：已加密保存，只能显示后四位 `a6db`
-- 当前产品版本：`BUILD_ID=2026-05-04-1742` / `extensionVersion=0.1.77`
-- 当前 Worker Version ID：`1ba9b2db-60bc-482d-b549-c760b6b0e40f`
+- 当前产品版本：`BUILD_ID=2026-05-05-1023` / `extensionVersion=0.1.82`
+- 当前 Worker Version ID：`b6abdeef-a61a-4db0-8b90-001242836c21`
 
 不要把完整 Key 写进代码、文档、命令、日志或 GitHub。
 
@@ -52,10 +52,13 @@ AI 高置信隐藏写入 reply_ai_results、moderation_sample_labels、reply_ai_
 
 关键判断：
 
+- 回复 AI 的基础教材来自 `docs/ai-prompt-packs/sexual-leadgen-foundation/`，通过 `npm run prompt-pack:sync` 生成到 `cloudflare/src/reply-ai-prompt-pack.generated.js`，云端提示词会读取这个生成文件。
+- 教材边界是老板认可的：正常成人话题、色情讨论、性教育、玩笑、观点和上下文内表达应保留；色情引流、联系方式导流、诈骗、主页诱导和空洞诱饵应隐藏。
 - `reply_ai_items`：真实页面已经把样本送到后台。
 - `reply_ai_results.status=pending`：后台收到样本，但还没有最终判断。
 - `reply_ai_results.status=ready`：已经有最终可用判断。
-- 开发者探针默认不写数据库，不要拿探针结果冒充真实页面学习记录。
+- 开发者探针默认不写审核学习库，也不能冒充真实 X 页面学习记录；但登录 / 路线检查可能产生验证码或会话类记录，不能说成“绝对不写数据库”。
+- 通知页高风险候选也会进入同一条回复 AI 路线；查漏网时要区分“通知页还没送审”和“详情页已送审”。
 
 ## 4. 当前能力边界
 

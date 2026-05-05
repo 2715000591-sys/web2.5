@@ -125,6 +125,31 @@
     }
   }
 
+  function setReplyAiLoadingState(message) {
+    if (!replyAiCheckbox) {
+      return;
+    }
+
+    replyAiCheckbox.indeterminate = true;
+    replyAiCheckbox.checked = false;
+    replyAiCheckbox.disabled = true;
+    replyAiCheckbox.dataset.loading = "1";
+    replyAiCheckbox.setAttribute("aria-busy", "true");
+    if (message) {
+      setReplyAiStatus(message);
+    }
+  }
+
+  function clearReplyAiLoadingState() {
+    if (!replyAiCheckbox) {
+      return;
+    }
+
+    replyAiCheckbox.indeterminate = false;
+    delete replyAiCheckbox.dataset.loading;
+    replyAiCheckbox.removeAttribute("aria-busy");
+  }
+
   function applyReplyAiToggleState(value, options) {
     if (!replyAiCheckbox) {
       return;
@@ -132,6 +157,7 @@
 
     const nextOptions = options || {};
     const enabled = value === true;
+    clearReplyAiLoadingState();
     replyAiCheckbox.checked = enabled;
     if (nextOptions.persistRemoteValue) {
       replyAiCheckbox.dataset.remoteValue = enabled ? "1" : "0";
@@ -241,10 +267,7 @@
       return;
     }
 
-    applyReplyAiToggleState(replyAiCheckbox.checked, {
-      disabled: true
-    });
-    setReplyAiStatus("正在读取你云端账号里的 AI 审核设置。");
+    setReplyAiLoadingState("正在读取你云端账号里的 AI 审核设置。");
 
     const me = await requestJson(`${backendBaseUrl}/api/me`);
     if (!me.ok || !me.data || !me.data.loggedIn || !me.data.viewer) {
@@ -600,5 +623,6 @@
     });
   }
 
+  setReplyAiLoadingState("正在读取你云端账号里的 AI 审核设置。");
   readSetting();
 })();
